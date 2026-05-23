@@ -99,6 +99,17 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.login-error {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
 /* App Shell */
 #app-shell {
   display: flex;
@@ -407,6 +418,16 @@ tbody tr:hover {
 .badge-info {
   background: #dbeafe;
   color: #1e40af;
+}
+
+.badge-ata {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-lta {
+  background: #dcfce7;
+  color: #166534;
 }
 
 /* Modals */
