@@ -271,33 +271,53 @@ const Disbursement = {
 
     const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-lg); border-top: 1px solid var(--color-border); padding-top: var(--spacing-lg);' });
 
-    // Self-approval block
-    if (Auth.isSelfApprover(this.getEmployeeId(d))) {
-      const blockMsg = el('p', { class: 'field-error', text: 'You cannot approve your own expense.' });
-      container.appendChild(blockMsg);
-    } else {
-      const level = this.canApprove(this.detailId);
-      if (level === 'manager') {
-        const approveBtn = el('button', { class: 'btn btn-primary', text: 'Approve (Manager)' });
-        approveBtn.addEventListener('click', () => { this.approve(this.detailId); App.handleRoute(); });
-        actions.appendChild(approveBtn);
-      } else if (level === 'accounting') {
-        const approveBtn = el('button', { class: 'btn btn-primary', text: 'Approve (Accounting)' });
-        approveBtn.addEventListener('click', () => { this.approve(this.detailId); App.handleRoute(); });
-        actions.appendChild(approveBtn);
+    const isRequester = Auth.isSelfApprover(this.getEmployeeId(d));
+    const role = Auth.user.role;
+    const dept = Auth.user.department;
+    const isManagerial = role === 'Admin' || role === 'Manager';
+    const isAccounting = dept === 'Accounting';
+
+    // 1. Initial Review Phase (Submitted -> Approved/Rejected)
+    if (d.status === 'Submitted' || d.status === 'Under Review') {
+      if (isManagerial) {
+        if (isRequester) {
+          container.appendChild(el('p', { class: 'field-error', text: 'Managers cannot approve their own expense submissions.' }));
+        } else {
+          const approveBtn = el('button', { class: 'btn btn-primary', text: 'Approve Submission' });
+          approveBtn.addEventListener('click', () => { this.approve(this.detailId); App.handleRoute(); });
+          actions.appendChild(approveBtn);
+
+          const rejectBtn = el('button', { class: 'btn btn-danger', text: 'Reject' });
+          rejectBtn.addEventListener('click', () => {
+            const reason = prompt('Enter rejection reason:');
+            if (reason) { this.reject(this.detailId, reason); App.handleRoute(); }
+          });
+          actions.appendChild(rejectBtn);
+        }
+      } else {
+        container.appendChild(el('p', { class: 'empty-state', text: 'Waiting for Admin/Manager review.' }));
       }
-      if (d.status !== 'Released' && d.status !== 'Rejected' && d.status !== 'Cancelled' && !Auth.isSelfApprover(this.getEmployeeId(d))) {
-        const rejectBtn = el('button', { class: 'btn btn-danger', text: 'Reject' });
+    }
+
+    // 2. Final Release Phase (Approved -> Released/Rejected)
+    if (d.status === 'Approved') {
+      const canRelease = (isAccounting || isManagerial) && !isRequester;
+      
+      if (canRelease) {
+        const releaseBtn = el('button', { class: 'btn btn-success', text: 'Release Payment' });
+        releaseBtn.addEventListener('click', () => { this.release(this.detailId); App.handleRoute(); });
+        actions.appendChild(releaseBtn);
+
+        const rejectBtn = el('button', { class: 'btn btn-danger', text: 'Void / Reject' });
         rejectBtn.addEventListener('click', () => {
-          const reason = prompt('Enter rejection reason:');
+          const reason = prompt('Enter reason for voiding:');
           if (reason) { this.reject(this.detailId, reason); App.handleRoute(); }
         });
         actions.appendChild(rejectBtn);
-      }
-      if (d.status === 'Approved') {
-        const releaseBtn = el('button', { class: 'btn btn-success', text: 'Release' });
-        releaseBtn.addEventListener('click', () => { this.release(this.detailId); App.handleRoute(); });
-        actions.appendChild(releaseBtn);
+      } else if (isRequester) {
+        container.appendChild(el('p', { class: 'field-error', text: 'You cannot release your own expense. Please wait for another manager or accounting staff to process it.' }));
+      } else {
+        container.appendChild(el('p', { class: 'empty-state', text: 'Waiting for Accounting release.' }));
       }
     }
 
@@ -306,38 +326,29 @@ const Disbursement = {
     return container;
   },
 
-  canApprove(id) {
-    const d = DB.getById('disbursements', id);
-    if (!d || Auth.isSelfApprover(this.getEmployeeId(d))) return false;
-    if (!Auth.can('disbursement:approve')) return false;
-    const fundSource = this.getFundSource(d);
-    if (fundSource === 'Firm Fund') {
-      if (d.status === 'Submitted') return 'manager';
-      if (d.status === 'Under Review') return 'accounting';
-    } else {
-      if (d.status === 'Submitted') return 'accounting';
-    }
-    return false;
-  },
-
   approve(id) {
-    const d = DB.getById('disbursements', id);
-    const level = this.canApprove(id);
-    if (!level) return { error: 'Not authorized' };
-    if (level === 'manager') {
-      DB.update('disbursements', id, { status: 'Under Review', managerApprovedBy: Auth.user.id });
-    } else if (level === 'accounting') {
-      DB.update('disbursements', id, { status: 'Approved', accountingApprovedBy: Auth.user.id });
-    }
+    DB.update('disbursements', id, { 
+      status: 'Approved', 
+      approvedBy: Auth.user.id,
+      approvedAt: new Date().toISOString()
+    });
     return { success: true };
   },
 
   release(id) {
-    DB.update('disbursements', id, { status: 'Released', releasedAt: new Date().toISOString() });
+    DB.update('disbursements', id, { 
+      status: 'Released', 
+      releasedBy: Auth.user.id,
+      releasedAt: new Date().toISOString() 
+    });
   },
 
   reject(id, reason) {
-    DB.update('disbursements', id, { status: 'Rejected', rejectionReason: reason });
+    DB.update('disbursements', id, { 
+      status: 'Rejected', 
+      rejectedBy: Auth.user.id,
+      rejectionReason: reason 
+    });
   },
 
   // ============================================================
