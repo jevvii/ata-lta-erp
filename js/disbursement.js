@@ -418,15 +418,27 @@ const Disbursement = {
     // By Employee
     const byEmployee = {};
     items.forEach(d => {
-      const emp = DB.getById('users', this.getEmployeeId(d))?.name || 'Unknown';
-      byEmployee[emp] = (byEmployee[emp] || 0) + d.amount;
+      const empName = DB.getById('users', this.getEmployeeId(d))?.name || 'Unknown';
+      if (!byEmployee[empName]) byEmployee[empName] = { count: 0, total: 0 };
+      byEmployee[empName].count++;
+      byEmployee[empName].total += d.amount;
     });
 
     const empTable = el('table', { class: 'data-table' });
-    empTable.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Employee' }), el('th', { text: 'Total Reimbursed' })])]));
+    empTable.appendChild(el('thead', {}, [
+      el('tr', {}, [
+        el('th', { text: 'Employee' }),
+        el('th', { text: 'Count', class: 'text-center' }),
+        el('th', { text: 'Total Reimbursed', class: 'text-center' })
+      ])
+    ]));
     const empBody = el('tbody');
-    Object.entries(byEmployee).forEach(([name, total]) => {
-      empBody.appendChild(el('tr', {}, [el('td', { text: name }), el('td', { text: formatPHP(total) })]));
+    Object.entries(byEmployee).forEach(([name, data]) => {
+      empBody.appendChild(el('tr', {}, [
+        el('td', { text: name }),
+        el('td', { text: String(data.count), class: 'text-center' }),
+        el('td', { text: formatPHP(data.total), class: 'text-center' })
+      ]));
     });
     empTable.appendChild(empBody);
     container.appendChild(el('h3', { text: 'By Employee' }));
@@ -435,28 +447,56 @@ const Disbursement = {
     // By Category
     const byCategory = {};
     items.forEach(d => {
-      byCategory[d.category] = (byCategory[d.category] || 0) + d.amount;
+      if (!byCategory[d.category]) byCategory[d.category] = { count: 0, total: 0 };
+      byCategory[d.category].count++;
+      byCategory[d.category].total += d.amount;
     });
 
     const catTable = el('table', { class: 'data-table' });
-    catTable.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Category' }), el('th', { text: 'Total' })])]));
+    catTable.appendChild(el('thead', {}, [
+      el('tr', {}, [
+        el('th', { text: 'Category' }),
+        el('th', { text: 'Count', class: 'text-center' }),
+        el('th', { text: 'Total', class: 'text-center' })
+      ])
+    ]));
     const catBody = el('tbody');
-    Object.entries(byCategory).forEach(([cat, total]) => {
-      catBody.appendChild(el('tr', {}, [el('td', { text: cat }), el('td', { text: formatPHP(total) })]));
+    Object.entries(byCategory).forEach(([cat, data]) => {
+      catBody.appendChild(el('tr', {}, [
+        el('td', { text: cat }),
+        el('td', { text: String(data.count), class: 'text-center' }),
+        el('td', { text: formatPHP(data.total), class: 'text-center' })
+      ]));
     });
     catTable.appendChild(catBody);
     container.appendChild(el('h3', { text: 'By Category' }));
     container.appendChild(catTable);
 
     // Fund split
-    const firmTotal = items.filter(d => this.getFundSource(d) === 'Firm Fund').reduce((s, d) => s + d.amount, 0);
-    const clientTotal = items.filter(d => this.getFundSource(d) === 'Client Fund').reduce((s, d) => s + d.amount, 0);
+    const firmItems = items.filter(d => this.getFundSource(d) === 'Firm Fund');
+    const clientItems = items.filter(d => this.getFundSource(d) === 'Client Fund');
+    const firmTotal = firmItems.reduce((s, d) => s + d.amount, 0);
+    const clientTotal = clientItems.reduce((s, d) => s + d.amount, 0);
 
     const fundTable = el('table', { class: 'data-table' });
-    fundTable.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Fund Source' }), el('th', { text: 'Total' })])]));
+    fundTable.appendChild(el('thead', {}, [
+      el('tr', {}, [
+        el('th', { text: 'Fund Source' }),
+        el('th', { text: 'Count', class: 'text-center' }),
+        el('th', { text: 'Total', class: 'text-center' })
+      ])
+    ]));
     const fundBody = el('tbody');
-    fundBody.appendChild(el('tr', {}, [el('td', { text: 'Firm Fund' }), el('td', { text: formatPHP(firmTotal) })]));
-    fundBody.appendChild(el('tr', {}, [el('td', { text: 'Client Fund' }), el('td', { text: formatPHP(clientTotal) })]));
+    fundBody.appendChild(el('tr', {}, [
+      el('td', { text: 'Firm Fund' }),
+      el('td', { text: String(firmItems.length), class: 'text-center' }),
+      el('td', { text: formatPHP(firmTotal), class: 'text-center' })
+    ]));
+    fundBody.appendChild(el('tr', {}, [
+      el('td', { text: 'Client Fund' }),
+      el('td', { text: String(clientItems.length), class: 'text-center' }),
+      el('td', { text: formatPHP(clientTotal), class: 'text-center' })
+    ]));
     fundTable.appendChild(fundBody);
     container.appendChild(el('h3', { text: 'By Fund Source' }));
     container.appendChild(fundTable);

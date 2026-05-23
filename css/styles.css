@@ -714,6 +714,8 @@ tbody tr:hover {
 .search-input { flex: 1; max-width: 320px; padding: 10px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); font-family: inherit; font-size: 0.875rem; background: var(--color-surface); }
 .empty-state { color: var(--color-text-muted); font-style: italic; text-align: center; padding: var(--spacing-lg); }
 
+.text-center { text-align: center !important; }
+
 /* Inline Errors / Success */
 .field-error { display: block; color: var(--color-danger); font-size: 0.75rem; margin-top: var(--spacing-xs); font-weight: 500; }
 .field-success { display: block; color: var(--color-success); font-size: 0.75rem; margin-top: var(--spacing-xs); font-weight: 500; }
