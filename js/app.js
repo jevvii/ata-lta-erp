@@ -22,6 +22,12 @@ const App = {
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app-shell').classList.remove('hidden');
     document.getElementById('user-name').textContent = Auth.user.name;
+    const avatar = document.getElementById('user-avatar');
+    if (avatar) {
+      const parts = (Auth.user.name || '').trim().split(' ').filter(Boolean);
+      const initials = parts.slice(0, 2).map(p => p[0]).join('').toUpperCase();
+      avatar.textContent = initials || 'AA';
+    }
     this.renderEntitySwitcher();
   },
 

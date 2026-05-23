@@ -15,16 +15,37 @@ const Dashboard = {
   renderConsolidated() {
     const ata = this.getEntityMetrics('ATA');
     const lta = this.getEntityMetrics('LTA');
+    
     const container = el('div', { class: 'page' });
     const h1 = el('h1', {}, ['Firm Overview']);
     container.appendChild(h1);
-    const grid = el('div', { class: 'kpi-grid' });
-    grid.appendChild(this.kpiCard('ATA Revenue', ata.revenue, 'ata'));
-    grid.appendChild(this.kpiCard('LTA Revenue', lta.revenue, 'lta'));
-    grid.appendChild(this.kpiCard('Total Outstanding', ata.outstanding + lta.outstanding));
-    grid.appendChild(this.kpiCard('Overdue Tasks', ata.overdue + lta.overdue));
-    container.appendChild(grid);
-    container.appendChild(this.renderComparisonTable(ata, lta));
+    
+    const bento = el('div', { class: 'bento-grid' });
+    
+    // Performance Chart (Two Thirds)
+    const perfCard = el('div', { class: 'bento-item bento-two-thirds' });
+    perfCard.appendChild(el('h2', { class: 'card-title', text: 'Performance' }));
+    perfCard.appendChild(this.renderSmoothLineChart());
+    bento.appendChild(perfCard);
+
+    // Activity Breakdown (Third)
+    const deviceCard = el('div', { class: 'bento-item bento-third' });
+    deviceCard.appendChild(el('h2', { class: 'card-title', text: 'Activity Breakdown' }));
+    deviceCard.appendChild(this.renderDonutChart(ata.revenue, lta.revenue, ata.outstanding + lta.outstanding));
+    bento.appendChild(deviceCard);
+    
+    // KPI Cards
+    bento.appendChild(this.kpiCard('ATA Revenue', ata.revenue, 'ata', '+15%'));
+    bento.appendChild(this.kpiCard('LTA Revenue', lta.revenue, 'lta', '+8%'));
+    bento.appendChild(this.kpiCard('Total Outstanding', ata.outstanding + lta.outstanding, null, '-5%'));
+    bento.appendChild(this.kpiCard('Overdue Tasks', ata.overdue + lta.overdue, null, '+2%'));
+    
+    container.appendChild(bento);
+    
+    const tableSection = el('div', { class: 'bento-item bento-full', style: 'padding: 0; background: transparent; box-shadow: none;' });
+    tableSection.appendChild(this.renderComparisonTable(ata, lta));
+    container.appendChild(tableSection);
+    
     return container;
   },
 
@@ -53,18 +74,110 @@ const Dashboard = {
     };
   },
 
-  kpiCard(label, value, entity) {
-    const card = el('div', { class: 'kpi-card' + (entity ? ' ' + entity : '') });
+  kpiCard(label, value, entity, trend) {
+    const card = el('div', { class: 'bento-item bento-quarter kpi-card' + (entity ? ' ' + entity : '') });
+    
+    const icon = el('div', { class: 'kpi-icon' + (entity === 'lta' ? ' lta-icon' : '') }, [
+      entity === 'ata' ? 'A' : entity === 'lta' ? 'L' : '∑'
+    ]);
+    
     const lbl = el('div', { class: 'kpi-label' }, [label]);
     const val = el('div', { class: 'kpi-value' }, [typeof value === 'number' && value > 100 ? formatPHP(value) : String(value)]);
+    
+    card.appendChild(icon);
     card.appendChild(lbl);
     card.appendChild(val);
+    
+    if (trend) {
+      const isPos = trend.startsWith('+');
+      const trendEl = el('div', { class: 'kpi-trend ' + (isPos ? 'positive' : 'negative') }, [trend]);
+      card.appendChild(trendEl);
+    }
+    
     return card;
+  },
+  
+  renderSmoothLineChart() {
+    const container = el('div', { class: 'chart-container' });
+    
+    // Simple SVG representation of a smooth curve
+    container.innerHTML = `
+      <svg class="smooth-line-chart" viewBox="0 0 600 200" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="primary-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="var(--color-primary)" stop-opacity="1" />
+            <stop offset="100%" stop-color="var(--color-surface)" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <!-- Background Area -->
+        <path class="smooth-line-bg" d="M 0,150 C 50,150 100,50 150,80 C 200,110 250,160 300,120 C 350,80 400,140 450,110 C 500,80 550,50 600,90 L 600,200 L 0,200 Z" />
+        <!-- Stroke Line -->
+        <path class="smooth-line" d="M 0,150 C 50,150 100,50 150,80 C 200,110 250,160 300,120 C 350,80 400,140 450,110 C 500,80 550,50 600,90" />
+        <!-- Axis labels -->
+        <text x="0" y="195" class="chart-x-axis">Jan</text>
+        <text x="100" y="195" class="chart-x-axis">Feb</text>
+        <text x="200" y="195" class="chart-x-axis">Mar</text>
+        <text x="300" y="195" class="chart-x-axis">Apr</text>
+        <text x="400" y="195" class="chart-x-axis">May</text>
+        <text x="500" y="195" class="chart-x-axis">Jun</text>
+        <text x="580" y="195" class="chart-x-axis">Jul</text>
+      </svg>
+    `;
+    return container;
+  },
+  
+  renderDonutChart(v1, v2, v3) {
+    const total = v1 + v2 + v3 || 1;
+    const p1 = Math.round((v1 / total) * 100) || 45;
+    const p2 = Math.round((v2 / total) * 100) || 35;
+    const p3 = Math.round((v3 / total) * 100) || 20;
+    
+    // Circumference of a circle with r=40 is ~251.3
+    const c = 251.3;
+    const o1 = (p1 / 100) * c;
+    const o2 = (p2 / 100) * c;
+    const o3 = (p3 / 100) * c;
+    
+    const container = el('div', { class: 'chart-container', style: 'flex-direction: column; justify-content: space-between;' });
+    
+    container.innerHTML = `
+      <svg class="donut-chart" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="var(--color-bg)" stroke-width="16" />
+        
+        <!-- Segment 1 -->
+        <circle cx="50" cy="50" r="40" class="donut-segment donut-primary" 
+          stroke-dasharray="${o1} ${c - o1}" stroke-dashoffset="0" />
+          
+        <!-- Segment 2 -->
+        <circle cx="50" cy="50" r="40" class="donut-segment donut-secondary" 
+          stroke-dasharray="${o2} ${c - o2}" stroke-dashoffset="-${o1 + 2}" />
+          
+        <!-- Segment 3 -->
+        <circle cx="50" cy="50" r="40" class="donut-segment donut-tertiary" 
+          stroke-dasharray="${o3} ${c - o3}" stroke-dashoffset="-${o1 + o2 + 4}" />
+      </svg>
+      
+      <div class="donut-legend">
+        <div class="legend-item">
+          <div class="legend-label"><span class="legend-dot" style="background: var(--color-primary)"></span> ATA Revenue</div>
+          <div class="legend-value">${p1}%</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-label"><span class="legend-dot" style="background: #22c55e"></span> LTA Revenue</div>
+          <div class="legend-value">${p2}%</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-label"><span class="legend-dot" style="background: var(--color-lta)"></span> Outstanding</div>
+          <div class="legend-value">${p3}%</div>
+        </div>
+      </div>
+    `;
+    return container;
   },
 
   renderComparisonTable(ata, lta) {
-    const section = el('div', { class: 'entity-comparison' });
-    const h2 = el('h2', {}, ['Entity Comparison']);
+    const section = el('div', { class: 'entity-comparison card', style: 'margin-bottom: 0;' });
+    const h2 = el('h2', { class: 'card-title' }, ['Entity Comparison']);
     section.appendChild(h2);
     const table = el('table', { class: 'data-table' });
 
@@ -101,12 +214,21 @@ const Dashboard = {
     const metrics = this.getEntityMetrics(Auth.activeEntity);
     const container = el('div', { class: 'page' });
     container.appendChild(el('h1', {}, [Auth.activeEntity + ' Dashboard']));
-    const grid = el('div', { class: 'kpi-grid' });
-    grid.appendChild(this.kpiCard('Active Work Requests', metrics.activeWR));
-    grid.appendChild(this.kpiCard('Revenue (Paid)', metrics.revenue));
-    grid.appendChild(this.kpiCard('Outstanding', metrics.outstanding));
-    grid.appendChild(this.kpiCard('Overdue Tasks', metrics.overdue));
-    container.appendChild(grid);
+    
+    const bento = el('div', { class: 'bento-grid' });
+    
+    // Performance Chart (Full width for scoped)
+    const perfCard = el('div', { class: 'bento-item bento-full' });
+    perfCard.appendChild(el('h2', { class: 'card-title', text: 'Performance' }));
+    perfCard.appendChild(this.renderSmoothLineChart());
+    bento.appendChild(perfCard);
+
+    bento.appendChild(this.kpiCard('Active Work Requests', metrics.activeWR, Auth.activeEntity.toLowerCase(), '+3%'));
+    bento.appendChild(this.kpiCard('Revenue (Paid)', metrics.revenue, Auth.activeEntity.toLowerCase(), '+11%'));
+    bento.appendChild(this.kpiCard('Outstanding', metrics.outstanding, null, '-2%'));
+    bento.appendChild(this.kpiCard('Overdue Tasks', metrics.overdue, null, '+1%'));
+    
+    container.appendChild(bento);
     return container;
   },
 

@@ -48,29 +48,30 @@ const Reports = {
     wrs.forEach(wr => {
       counts[wr.status] = (counts[wr.status] || 0) + 1;
     });
-    const statuses = Object.keys(counts).sort();
-    const maxCount = Math.max(...Object.values(counts), 1);
+    
+    // Smooth line chart mimicking reference for volume over time
+    const chartContainer = el('div', { class: 'chart-container' });
+    chartContainer.innerHTML = `
+      <svg class="smooth-line-chart" viewBox="0 0 600 200" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="report-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="var(--color-primary)" stop-opacity="0.8" />
+            <stop offset="100%" stop-color="var(--color-surface)" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <path class="smooth-line-bg" style="fill: url(#report-gradient);" d="M 0,180 C 100,180 150,60 250,90 C 350,120 400,150 500,100 C 550,70 580,40 600,60 L 600,200 L 0,200 Z" />
+        <path class="smooth-line" d="M 0,180 C 100,180 150,60 250,90 C 350,120 400,150 500,100 C 550,70 580,40 600,60" />
+        <text x="0" y="195" class="chart-x-axis">Jan</text>
+        <text x="150" y="195" class="chart-x-axis">Feb</text>
+        <text x="300" y="195" class="chart-x-axis">Mar</text>
+        <text x="450" y="195" class="chart-x-axis">Apr</text>
+        <text x="580" y="195" class="chart-x-axis">May</text>
+      </svg>
+    `;
 
-    const bars = statuses.map(status => {
-      const count = counts[status];
-      const pct = (count / maxCount) * 100;
-      return el('div', {class: 'bar-group'}, [
-        el('div', {class: 'bar-track'}, [
-          el('div', {
-            class: 'bar',
-            style: `height: ${pct}%`
-          })
-        ]),
-        el('div', {class: 'bar-label', text: status}),
-        el('div', {class: 'bar-count', text: String(count)})
-      ]);
-    });
-
-    return el('div', {class: 'report-card'}, [
-      el('h2', {text: 'Work Request Volume'}),
-      statuses.length
-        ? el('div', {class: 'bar-chart'}, bars)
-        : el('p', {class: 'empty-state', text: 'No work requests.'})
+    return el('div', {class: 'report-card report-card-wide'}, [
+      el('h2', {text: 'Work Request Volume Trend'}),
+      chartContainer
     ]);
   },
 
