@@ -237,17 +237,39 @@ const Disbursement = {
     topActions.appendChild(topBackBtn);
     container.appendChild(topActions);
 
-    container.appendChild(el('h2', { text: d.category + ' — ' + formatPHP(d.amount) }));
+    const header = el('div', { class: 'invoice-header' });
+    header.appendChild(el('h2', { text: d.category }));
+    
+    const map = {
+      'Submitted': 'badge-info',
+      'Under Review': 'badge-warning',
+      'Approved': 'badge-success',
+      'Released': 'badge-success',
+      'Rejected': 'badge-danger',
+      'Cancelled': 'badge-danger'
+    };
+    header.appendChild(el('span', { class: 'badge ' + (map[d.status] || ''), text: d.status }));
+    container.appendChild(header);
 
     const meta = el('div', { class: 'invoice-meta' });
     meta.appendChild(el('p', { text: 'Employee: ' + (emp?.name || '—') }));
-    meta.appendChild(el('p', { text: 'Description: ' + d.description }));
+    meta.appendChild(el('p', { text: 'Date Submitted: ' + formatDate(d.submittedAt) }));
     meta.appendChild(el('p', { text: 'Fund Source: ' + this.getFundSource(d) }));
-    meta.appendChild(el('p', { text: 'Status: ' + d.status }));
-    if (d.receiptFilename) meta.appendChild(el('p', { text: 'Receipt: ' + d.receiptFilename }));
     container.appendChild(meta);
 
-    const actions = el('div', { class: 'form-actions' });
+    const infoSection = el('div', { class: 'form-section', style: 'margin-bottom: var(--spacing-lg);' });
+    infoSection.appendChild(el('h3', { text: 'Expense Details' }));
+    const infoBox = el('div', { class: 'invoice-info-box' });
+    infoBox.appendChild(el('p', { text: 'Description: ' + d.description }));
+    if (d.receiptFilename) infoBox.appendChild(el('p', { text: 'Receipt: ' + d.receiptFilename }));
+    infoSection.appendChild(infoBox);
+    container.appendChild(infoSection);
+
+    const totals = el('div', { class: 'invoice-totals' });
+    totals.appendChild(el('div', { class: 'total-row total-grand' }, [el('span', { text: 'Total Amount:' }), el('span', { text: formatPHP(d.amount) })]));
+    container.appendChild(totals);
+
+    const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-lg); border-top: 1px solid var(--color-border); padding-top: var(--spacing-lg);' });
 
     // Self-approval block
     if (Auth.isSelfApprover(this.getEmployeeId(d))) {

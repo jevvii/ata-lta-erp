@@ -501,6 +501,18 @@ const Workflow = {
     taskTable.appendChild(thead);
 
     const tbody = el('tbody');
+    
+    const taskMap = {};
+    const dependentsMap = {};
+    tasks.forEach(t => taskMap[t.id] = t);
+    tasks.forEach(t => {
+      const preds = t.predecessors || t.dependencies || [];
+      preds.forEach(pid => {
+        if (!dependentsMap[pid]) dependentsMap[pid] = [];
+        dependentsMap[pid].push(t);
+      });
+    });
+
     tasks.forEach(t => {
       const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
       const tr = el('tr');
