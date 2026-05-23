@@ -1,6 +1,367 @@
+/**
+ * Disbursement & Expense Module
+ * Expense filing, fund source tagging, 2-tier vs 1-tier approval, self-approval block.
+ */
+
 const Disbursement = {
+  view: 'list', // 'list' | 'form' | 'detail' | 'report'
+  detailId: null,
+
   render() {
-    return el('div', {class: 'page'}, [el('h1', {text: 'Disbursement'})]);
+    const container = el('div', { class: 'page' });
+    container.appendChild(el('h1', { text: 'Disbursement' }));
+
+    if (this.view === 'list') container.appendChild(this.renderList());
+    else if (this.view === 'form') container.appendChild(this.renderForm());
+    else if (this.view === 'detail') container.appendChild(this.renderDetail());
+    else if (this.view === 'report') container.appendChild(this.renderReport());
+
+    return container;
   },
-  init() {}
+
+  init() {},
+
+  // ============================================================
+  // List View
+  // ============================================================
+  renderList() {
+    const entity = Auth.activeEntity;
+    const items = DB.getWhere('disbursements', d => d.entity === entity);
+
+    const actions = el('div', { class: 'actions-bar' });
+    const addBtn = el('button', { class: 'btn btn-primary', text: 'File Expense' });
+    addBtn.addEventListener('click', () => { this.view = 'form'; this.detailId = null; App.handleRoute(); });
+    actions.appendChild(addBtn);
+
+    const fundFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
+    fundFilter.appendChild(el('option', { value: '', text: 'All Funds' }));
+    ['Firm Fund', 'Client Fund'].forEach(f => fundFilter.appendChild(el('option', { value: f, text: f })));
+    fundFilter.addEventListener('change', () => this.refreshList(listContainer, fundFilter.value, statusFilter.value));
+    actions.appendChild(fundFilter);
+
+    const statusFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
+    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
+    ['Draft', 'Submitted', 'Under Review', 'Approved', 'Released', 'Rejected'].forEach(s => {
+      statusFilter.appendChild(el('option', { value: s, text: s }));
+    });
+    statusFilter.addEventListener('change', () => this.refreshList(listContainer, fundFilter.value, statusFilter.value));
+    actions.appendChild(statusFilter);
+
+    const reportBtn = el('button', { class: 'btn btn-ghost', text: 'Summary Report' });
+    reportBtn.addEventListener('click', () => { this.view = 'report'; App.handleRoute(); });
+    actions.appendChild(reportBtn);
+
+    const listContainer = el('div');
+    this.refreshList(listContainer, '', '');
+
+    const wrapper = el('div');
+    wrapper.appendChild(actions);
+    wrapper.appendChild(listContainer);
+    return wrapper;
+  },
+
+  refreshList(container, fundFilter, statusFilter) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+    const entity = Auth.activeEntity;
+    let items = DB.getWhere('disbursements', d => d.entity === entity);
+    if (fundFilter) items = items.filter(d => d.fundSource === fundFilter);
+    if (statusFilter) items = items.filter(d => d.status === statusFilter);
+
+    if (items.length === 0) {
+      container.appendChild(el('p', { text: 'No expenses found.', class: 'empty-state' }));
+      return;
+    }
+
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Employee', 'Category', 'Amount', 'Fund', 'Status', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    items.forEach(d => {
+      const emp = DB.getById('users', d.employeeId);
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: emp?.name || '—' }));
+      tr.appendChild(el('td', { text: d.category }));
+      tr.appendChild(el('td', { text: formatPHP(d.amount) }));
+      const fundBadge = el('span', { class: 'badge ' + (d.fundSource === 'Firm Fund' ? 'badge-info' : 'badge-warning'), text: d.fundSource });
+      const tdFund = el('td');
+      tdFund.appendChild(fundBadge);
+      tr.appendChild(tdFund);
+      tr.appendChild(el('td', { text: d.status }));
+      const tdAct = el('td');
+      const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
+      viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailId = d.id; App.handleRoute(); });
+      tdAct.appendChild(viewBtn);
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+  },
+
+  // ============================================================
+  // Expense Filing Form
+  // ============================================================
+  renderForm() {
+    const entity = Auth.activeEntity;
+    const container = el('div');
+    container.appendChild(el('h2', { text: 'File Expense' }));
+
+    const form = el('form', { class: 'form-stacked' });
+
+    const catGroup = el('div', { class: 'form-group' });
+    catGroup.appendChild(el('label', { text: 'Category *' }));
+    const catSel = el('select', { name: 'category', required: true });
+    ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
+      catSel.appendChild(el('option', { value: c, text: c }));
+    });
+    catGroup.appendChild(catSel);
+    form.appendChild(catGroup);
+
+    const descGroup = el('div', { class: 'form-group' });
+    descGroup.appendChild(el('label', { text: 'Description *' }));
+    descGroup.appendChild(el('input', { type: 'text', name: 'description', required: true }));
+    form.appendChild(descGroup);
+
+    const amtGroup = el('div', { class: 'form-group' });
+    amtGroup.appendChild(el('label', { text: 'Amount (₱) *' }));
+    amtGroup.appendChild(el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true }));
+    form.appendChild(amtGroup);
+
+    const receiptGroup = el('div', { class: 'form-group' });
+    receiptGroup.appendChild(el('label', { text: 'Receipt (optional)' }));
+    receiptGroup.appendChild(el('input', { type: 'file', name: 'receipt' }));
+    form.appendChild(receiptGroup);
+
+    // Fund Source
+    const fundGroup = el('div', { class: 'form-group' });
+    fundGroup.appendChild(el('label', { text: 'Fund Source *' }));
+    const fundWrap = el('div', { class: 'radio-group' });
+    ['Firm Fund', 'Client Fund'].forEach(f => {
+      const label = el('label', { class: 'radio-label' });
+      const radio = el('input', { type: 'radio', name: 'fundSource', value: f, required: true });
+      if (f === 'Firm Fund') radio.checked = true;
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(' ' + f));
+      fundWrap.appendChild(label);
+    });
+    fundGroup.appendChild(fundWrap);
+    form.appendChild(fundGroup);
+
+    // Linked invoice (only for Client Fund)
+    const invGroup = el('div', { class: 'form-group hidden', id: 'linked-invoice-group' });
+    invGroup.appendChild(el('label', { text: 'Linked Billing Invoice' }));
+    const invSel = el('select', { name: 'linkedInvoiceId' });
+    invSel.appendChild(el('option', { value: '', text: '— Select Invoice —' }));
+    DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Cancelled').forEach(inv => {
+      const client = DB.getById('clients', inv.clientId);
+      invSel.appendChild(el('option', { value: inv.id, text: inv.invoiceNumber + ' — ' + (client?.name || '—') }));
+    });
+    invGroup.appendChild(invSel);
+    form.appendChild(invGroup);
+
+    form.querySelectorAll('input[name="fundSource"]').forEach(r => {
+      r.addEventListener('change', () => {
+        const isClient = form.querySelector('input[name="fundSource"]:checked')?.value === 'Client Fund';
+        invGroup.classList.toggle('hidden', !isClient);
+      });
+    });
+
+    const btnGroup = el('div', { class: 'form-group form-actions' });
+    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Submit Expense' });
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
+    btnGroup.appendChild(saveBtn);
+    btnGroup.appendChild(cancelBtn);
+    form.appendChild(btnGroup);
+
+    form.addEventListener('submit', e => { e.preventDefault(); this.submitForm(form); });
+
+    container.appendChild(form);
+    return container;
+  },
+
+  submitForm(form) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const entity = Auth.activeEntity;
+    const receiptInput = form.querySelector('input[name="receipt"]');
+    const receiptFile = receiptInput?.files?.[0];
+
+    const record = {
+      category: data.category,
+      description: data.description.trim(),
+      amount: parseFloat(data.amount) || 0,
+      fundSource: data.fundSource,
+      linkedInvoiceId: data.linkedInvoiceId || null,
+      entity: entity,
+      employeeId: Auth.user.id,
+      status: 'Submitted',
+      submittedAt: new Date().toISOString(),
+      receiptFilename: receiptFile ? receiptFile.name : null
+    };
+
+    record.id = generateId('d');
+    DB.insert('disbursements', record);
+
+    this.view = 'list';
+    App.handleRoute();
+  },
+
+  // ============================================================
+  // Detail View (with approval actions)
+  // ============================================================
+  renderDetail() {
+    const d = DB.getById('disbursements', this.detailId);
+    if (!d) { this.view = 'list'; App.handleRoute(); return el('div'); }
+    const emp = DB.getById('users', d.employeeId);
+    const container = el('div');
+
+    container.appendChild(el('h2', { text: d.category + ' — ' + formatPHP(d.amount) }));
+
+    const meta = el('div', { class: 'invoice-meta' });
+    meta.appendChild(el('p', { text: 'Employee: ' + (emp?.name || '—') }));
+    meta.appendChild(el('p', { text: 'Description: ' + d.description }));
+    meta.appendChild(el('p', { text: 'Fund Source: ' + d.fundSource }));
+    meta.appendChild(el('p', { text: 'Status: ' + d.status }));
+    if (d.receiptFilename) meta.appendChild(el('p', { text: 'Receipt: ' + d.receiptFilename }));
+    container.appendChild(meta);
+
+    const actions = el('div', { class: 'form-actions' });
+
+    // Self-approval block
+    if (Auth.isSelfApprover(d.employeeId)) {
+      const blockMsg = el('p', { class: 'field-error', text: 'You cannot approve your own expense.' });
+      container.appendChild(blockMsg);
+    } else {
+      const level = this.canApprove(this.detailId);
+      if (level === 'manager') {
+        const approveBtn = el('button', { class: 'btn btn-primary', text: 'Approve (Manager)' });
+        approveBtn.addEventListener('click', () => { this.approve(this.detailId); App.handleRoute(); });
+        actions.appendChild(approveBtn);
+      } else if (level === 'accounting') {
+        const approveBtn = el('button', { class: 'btn btn-primary', text: 'Approve (Accounting)' });
+        approveBtn.addEventListener('click', () => { this.approve(this.detailId); App.handleRoute(); });
+        actions.appendChild(approveBtn);
+      }
+      if (d.status !== 'Released' && d.status !== 'Rejected' && d.status !== 'Cancelled' && !Auth.isSelfApprover(d.employeeId)) {
+        const rejectBtn = el('button', { class: 'btn btn-danger', text: 'Reject' });
+        rejectBtn.addEventListener('click', () => {
+          const reason = prompt('Enter rejection reason:');
+          if (reason) { this.reject(this.detailId, reason); App.handleRoute(); }
+        });
+        actions.appendChild(rejectBtn);
+      }
+      if (d.status === 'Approved') {
+        const releaseBtn = el('button', { class: 'btn btn-success', text: 'Release' });
+        releaseBtn.addEventListener('click', () => { this.release(this.detailId); App.handleRoute(); });
+        actions.appendChild(releaseBtn);
+      }
+    }
+
+    const backBtn = el('button', { class: 'btn btn-ghost', text: 'Back to List' });
+    backBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+    actions.appendChild(backBtn);
+    container.appendChild(actions);
+
+    return container;
+  },
+
+  canApprove(id) {
+    const d = DB.getById('disbursements', id);
+    if (!d || Auth.isSelfApprover(d.employeeId)) return false;
+    if (!Auth.can('disbursement:approve')) return false;
+    if (d.fundSource === 'Firm Fund') {
+      if (d.status === 'Submitted') return 'manager';
+      if (d.status === 'Under Review') return 'accounting';
+    } else {
+      if (d.status === 'Submitted') return 'accounting';
+    }
+    return false;
+  },
+
+  approve(id) {
+    const d = DB.getById('disbursements', id);
+    const level = this.canApprove(id);
+    if (!level) return { error: 'Not authorized' };
+    if (level === 'manager') {
+      DB.update('disbursements', id, { status: 'Under Review', managerApprovedBy: Auth.user.id });
+    } else if (level === 'accounting') {
+      DB.update('disbursements', id, { status: 'Approved', accountingApprovedBy: Auth.user.id });
+    }
+    return { success: true };
+  },
+
+  release(id) {
+    DB.update('disbursements', id, { status: 'Released', releasedAt: new Date().toISOString() });
+  },
+
+  reject(id, reason) {
+    DB.update('disbursements', id, { status: 'Rejected', rejectionReason: reason });
+  },
+
+  // ============================================================
+  // Reimbursement Summary Report
+  // ============================================================
+  renderReport() {
+    const entity = Auth.activeEntity;
+    const items = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Released');
+
+    const container = el('div');
+    container.appendChild(el('h2', { text: 'Reimbursement Summary' }));
+
+    // By Employee
+    const byEmployee = {};
+    items.forEach(d => {
+      const emp = DB.getById('users', d.employeeId)?.name || 'Unknown';
+      byEmployee[emp] = (byEmployee[emp] || 0) + d.amount;
+    });
+
+    const empTable = el('table', { class: 'data-table' });
+    empTable.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Employee' }), el('th', { text: 'Total Reimbursed' })])]));
+    const empBody = el('tbody');
+    Object.entries(byEmployee).forEach(([name, total]) => {
+      empBody.appendChild(el('tr', {}, [el('td', { text: name }), el('td', { text: formatPHP(total) })]));
+    });
+    empTable.appendChild(empBody);
+    container.appendChild(el('h3', { text: 'By Employee' }));
+    container.appendChild(empTable);
+
+    // By Category
+    const byCategory = {};
+    items.forEach(d => {
+      byCategory[d.category] = (byCategory[d.category] || 0) + d.amount;
+    });
+
+    const catTable = el('table', { class: 'data-table' });
+    catTable.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Category' }), el('th', { text: 'Total' })])]));
+    const catBody = el('tbody');
+    Object.entries(byCategory).forEach(([cat, total]) => {
+      catBody.appendChild(el('tr', {}, [el('td', { text: cat }), el('td', { text: formatPHP(total) })]));
+    });
+    catTable.appendChild(catBody);
+    container.appendChild(el('h3', { text: 'By Category' }));
+    container.appendChild(catTable);
+
+    // Fund split
+    const firmTotal = items.filter(d => d.fundSource === 'Firm Fund').reduce((s, d) => s + d.amount, 0);
+    const clientTotal = items.filter(d => d.fundSource === 'Client Fund').reduce((s, d) => s + d.amount, 0);
+
+    const fundTable = el('table', { class: 'data-table' });
+    fundTable.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Fund Source' }), el('th', { text: 'Total' })])]));
+    const fundBody = el('tbody');
+    fundBody.appendChild(el('tr', {}, [el('td', { text: 'Firm Fund' }), el('td', { text: formatPHP(firmTotal) })]));
+    fundBody.appendChild(el('tr', {}, [el('td', { text: 'Client Fund' }), el('td', { text: formatPHP(clientTotal) })]));
+    fundTable.appendChild(fundBody);
+    container.appendChild(el('h3', { text: 'By Fund Source' }));
+    container.appendChild(fundTable);
+
+    const backBtn = el('button', { class: 'btn btn-ghost', text: 'Back to List' });
+    backBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
+    container.appendChild(backBtn);
+
+    return container;
+  }
 };
