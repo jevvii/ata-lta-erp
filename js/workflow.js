@@ -311,7 +311,12 @@ const Workflow = {
 
     const assigneeSel = el('select', { class: 'task-assignee' });
     assigneeSel.appendChild(el('option', { value: '', text: '— Assignee —' }));
-    DB.getAll('users').forEach(u => {
+    
+    // Only show users from the same entity
+    const entity = Auth.activeEntity;
+    const staffPool = DB.getWhere('users', u => u.entities.includes(entity) || u.entities.includes(entity.toLowerCase()));
+    
+    staffPool.forEach(u => {
       const opt = el('option', { value: u.id, text: u.name });
       if (taskData && (taskData.assigneeId === u.id || taskData.assignedTo === u.id)) opt.selected = true;
       assigneeSel.appendChild(opt);
@@ -832,8 +837,8 @@ const Workflow = {
   // Retainer Templates
   // ============================================================
   renderTemplates() {
-    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
-    if (!isManagerial) {
+    const isOnlyManager = Auth.user.role === 'Manager';
+    if (!isOnlyManager) {
       this.view = 'list';
       App.handleRoute();
       return el('div');
@@ -890,8 +895,8 @@ const Workflow = {
   },
 
   renderTemplateForm() {
-    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
-    if (!isManagerial) {
+    const isOnlyManager = Auth.user.role === 'Manager';
+    if (!isOnlyManager) {
       this.view = 'list';
       App.handleRoute();
       return el('div');
