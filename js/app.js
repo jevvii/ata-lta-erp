@@ -13,7 +13,7 @@ const App = {
     this.setupNavigation();
     this.setupResponsiveMenu();
     this.setupLogout();
-    const defaultRoute = Auth.user.role === 'Admin' || Auth.user.role === 'Manager' ? '#dashboard' : '#workflow';
+    const defaultRoute = Auth.user.role === 'Admin' || Auth.user.role === 'Manager' ? '#dashboard' : '#operations';
     location.hash = defaultRoute;
     this.handleRoute();
     this.updateSidebarNotifications();
@@ -146,10 +146,10 @@ const App = {
     const moduleMap = {
       '#dashboard': Dashboard,
       '#clients': Clients,
-      '#workflow': Workflow,
+      '#operations': Workflow,
       '#billing': Billing,
       '#disbursement': Disbursement,
-      '#documents': DMS,
+      '#transmittal': Transmittal,
       '#reports': Reports,
       '#admin': Users
     };
@@ -174,6 +174,19 @@ const App = {
     document.querySelectorAll('nav a').forEach(a => {
       a.classList.toggle('active', a.getAttribute('href') === hash);
     });
+  },
+
+  getPreferredViewMode(module) {
+    const key = `erp_preferred_view_${module}`;
+    const stored = localStorage.getItem(key);
+    return stored === 'list' || stored === 'grid' || stored === 'table' || stored === 'board' ? stored : 'list';
+  },
+
+  setPreferredViewMode(module, mode) {
+    const key = `erp_preferred_view_${module}`;
+    if (mode === 'list' || mode === 'grid' || mode === 'table' || mode === 'board') {
+      localStorage.setItem(key, mode);
+    }
   }
 };
 

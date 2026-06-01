@@ -3,40 +3,66 @@
  */
 
 const Users = {
-  view: 'users', // 'users' | 'audit'
+  view: 'users', // 'users' | 'audit' | 'pending'
   editingId: null,
+  pendingDetailId: null,
 
   render() {
     const container = el('div', { class: 'page' });
     container.appendChild(el('h1', { text: 'Admin' }));
 
-    if (Auth.user.role !== 'Admin') {
-      container.appendChild(el('p', { text: 'Access denied. Only Admin users can access this panel.', class: 'empty-state' }));
-      return container;
-    }
+    const isAdmin = Auth.user.role === 'Admin';
 
     // Tabs
     const tabs = el('div', { class: 'admin-tabs' });
-    const usersTab = el('button', {
-      class: 'btn ' + (this.view === 'users' ? 'btn-primary' : 'btn-ghost'),
-      text: 'Users'
-    });
-    usersTab.addEventListener('click', () => { this.view = 'users'; this.editingId = null; App.handleRoute(); });
-    tabs.appendChild(usersTab);
+
+    if (isAdmin) {
+      const usersTab = el('button', {
+        class: 'btn ' + (this.view === 'users' ? 'btn-primary' : 'btn-ghost'),
+        text: 'Users'
+      });
+      usersTab.addEventListener('click', () => { this.view = 'users'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
+      tabs.appendChild(usersTab);
+    }
 
     const auditTab = el('button', {
       class: 'btn ' + (this.view === 'audit' ? 'btn-primary' : 'btn-ghost'),
       text: 'Audit Log'
     });
-    auditTab.addEventListener('click', () => { this.view = 'audit'; this.editingId = null; App.handleRoute(); });
+    auditTab.addEventListener('click', () => { this.view = 'audit'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
     tabs.appendChild(auditTab);
+
+    if (isAdmin) {
+      const pendingTab = el('button', {
+        class: 'btn ' + (this.view === 'pending' ? 'btn-primary' : 'btn-ghost'),
+        text: 'Pending Approvals'
+      });
+      pendingTab.addEventListener('click', () => { this.view = 'pending'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
+      tabs.appendChild(pendingTab);
+    } else {
+      const myPendingTab = el('button', {
+        class: 'btn ' + (this.view === 'myPending' ? 'btn-primary' : 'btn-ghost'),
+        text: 'My Pending Submissions'
+      });
+      myPendingTab.addEventListener('click', () => { this.view = 'myPending'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
+      tabs.appendChild(myPendingTab);
+    }
 
     container.appendChild(tabs);
 
-    if (this.view === 'users') {
+    if (this.view === 'users' && isAdmin) {
       container.appendChild(this.renderUsersSection());
-    } else {
+    } else if (this.view === 'audit') {
       container.appendChild(this.renderAuditSection());
+    } else if (this.view === 'pending' && isAdmin) {
+      container.appendChild(this.renderPendingSection());
+    } else if (this.view === 'myPending' && !isAdmin) {
+      container.appendChild(this.renderMyPendingSection());
+    } else if (!isAdmin) {
+      this.view = 'myPending';
+      container.appendChild(this.renderMyPendingSection());
+    } else {
+      container.appendChild(this.renderUsersSection());
     }
 
     return container;
@@ -94,7 +120,7 @@ const Users = {
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
     const thr = el('tr');
-    ['Name', 'Email', 'Role', 'Department', 'Entities', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    ['Name', 'Email', 'Role', 'Entities', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
     thead.appendChild(thr);
     table.appendChild(thead);
 
@@ -104,7 +130,6 @@ const Users = {
       tr.appendChild(el('td', { text: u.name }));
       tr.appendChild(el('td', { text: u.email }));
       tr.appendChild(el('td')).appendChild(this.roleBadge(u.role));
-      tr.appendChild(el('td', { text: u.department || '—' }));
       tr.appendChild(el('td', { text: (u.entities || []).join(', ') }));
       const tdAct = el('td');
       const editBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Edit' });
@@ -178,12 +203,6 @@ const Users = {
     roleGroup.appendChild(roleSel);
     roleGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
     form.appendChild(roleGroup);
-
-    // Department
-    const deptGroup = el('div', { class: 'form-group' });
-    deptGroup.appendChild(el('label', { text: 'Department' }));
-    deptGroup.appendChild(el('input', { type: 'text', name: 'department', value: user ? (user.department || '') : '' }));
-    form.appendChild(deptGroup);
 
     // Entity access
     const entityGroup = el('div', { class: 'form-group' });
@@ -270,7 +289,6 @@ const Users = {
       name: data.name.trim(),
       email: data.email.trim(),
       role: data.role,
-      department: data.department ? data.department.trim() : '',
       entities: entities,
       isActive: true
     };
@@ -321,6 +339,7 @@ const Users = {
   // ============================================================
   renderAuditSection() {
     const wrapper = el('div');
+    const isAdmin = Auth.user.role === 'Admin';
 
     // Filters
     const filters = el('div', { class: 'audit-filters' });
@@ -332,6 +351,10 @@ const Users = {
       const opt = el('option', { value: u.id, text: u.name });
       userFilter.appendChild(opt);
     });
+    if (!isAdmin) {
+      userFilter.value = Auth.user.id;
+      userFilter.disabled = true;
+    }
     filters.appendChild(userFilter);
 
     filters.appendChild(el('span', { text: 'From:', style: 'font-size: 0.875rem; color: var(--color-text-muted);' }));
@@ -348,10 +371,10 @@ const Users = {
 
     const clearBtn = el('button', { class: 'btn btn-ghost', text: 'Clear' });
     clearBtn.addEventListener('click', () => {
-      userFilter.value = '';
+      if (isAdmin) userFilter.value = '';
       dateFrom.value = '';
       dateTo.value = '';
-      this.refreshAuditLog(tableContainer, '', '', '');
+      this.refreshAuditLog(tableContainer, isAdmin ? '' : Auth.user.id, '', '');
     });
     filters.appendChild(clearBtn);
 
@@ -359,7 +382,7 @@ const Users = {
 
     const tableContainer = el('div');
     wrapper.appendChild(tableContainer);
-    this.refreshAuditLog(tableContainer, '', '', '');
+    this.refreshAuditLog(tableContainer, isAdmin ? '' : Auth.user.id, '', '');
 
     return wrapper;
   },
@@ -411,5 +434,188 @@ const Users = {
     });
     table.appendChild(tbody);
     container.appendChild(table);
+  },
+
+  // ============================================================
+  // Pending Approvals Section
+  // ============================================================
+  renderPendingSection() {
+    const wrapper = el('div');
+
+    if (this.pendingDetailId) {
+      wrapper.appendChild(this.renderPendingDetail(this.pendingDetailId));
+      return wrapper;
+    }
+
+    const pending = PendingChanges.getAllPending();
+    if (pending.length === 0) {
+      wrapper.appendChild(el('p', { text: 'No pending approvals.', class: 'empty-state' }));
+      return wrapper;
+    }
+
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Table', 'Submitted By', 'Date', 'Type', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    pending.forEach(pc => {
+      const submitter = DB.getById('users', pc.submittedBy);
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: pc.table }));
+      tr.appendChild(el('td', { text: submitter ? submitter.name : pc.submittedBy }));
+      tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
+      tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
+
+      const tdAct = el('td');
+      const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review' });
+      reviewBtn.addEventListener('click', () => {
+        this.pendingDetailId = pc.id;
+        App.handleRoute();
+      });
+      tdAct.appendChild(reviewBtn);
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+
+    return wrapper;
+  },
+
+  renderMyPendingSection() {
+    const wrapper = el('div');
+
+    if (this.pendingDetailId) {
+      wrapper.appendChild(this.renderPendingDetail(this.pendingDetailId));
+      return wrapper;
+    }
+
+    const pending = PendingChanges.getPendingForUser(Auth.user.id);
+    if (pending.length === 0) {
+      wrapper.appendChild(el('p', { text: 'No pending submissions.', class: 'empty-state' }));
+      return wrapper;
+    }
+
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Table', 'Date', 'Type', 'Status', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    pending.forEach(pc => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: pc.table }));
+      tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
+      tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
+      tr.appendChild(el('td', { text: pc.status }));
+
+      const tdAct = el('td');
+      const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review' });
+      reviewBtn.addEventListener('click', () => {
+        this.pendingDetailId = pc.id;
+        App.handleRoute();
+      });
+      tdAct.appendChild(reviewBtn);
+
+      if (pc.status === 'pending') {
+        const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
+        withdrawBtn.addEventListener('click', () => {
+          if (confirm('Withdraw this pending submission?')) {
+            PendingChanges.delete(pc.id);
+            App.handleRoute();
+          }
+        });
+        tdAct.appendChild(withdrawBtn);
+      }
+
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+
+    return wrapper;
+  },
+
+  renderPendingDetail(pendingId) {
+    const pc = PendingChanges.getById(pendingId);
+    if (!pc) {
+      this.pendingDetailId = null;
+      return el('p', { text: 'Pending change not found.', class: 'empty-state' });
+    }
+
+    const canApprove = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+    const isSubmitter = pc.submittedBy === Auth.user.id;
+
+    const wrapper = el('div');
+    const header = el('div', { class: 'form-header-bar' });
+    header.appendChild(el('h2', { text: 'Review Pending Change' }));
+
+    const backBtn = el('button', { class: 'btn btn-ghost', text: 'Back to List' });
+    backBtn.addEventListener('click', () => {
+      this.pendingDetailId = null;
+      App.handleRoute();
+    });
+    header.appendChild(backBtn);
+    wrapper.appendChild(header);
+
+    const meta = el('div', { style: 'margin-bottom:var(--spacing-md); font-size:0.875rem; color:var(--color-text-muted);' });
+    const submitter = DB.getById('users', pc.submittedBy);
+    meta.appendChild(el('strong', { text: 'Table: ' }));
+    meta.appendChild(document.createTextNode(pc.table));
+    meta.appendChild(el('span', { style: 'margin:0 12px;', text: '|' }));
+    meta.appendChild(el('strong', { text: 'Submitted By: ' }));
+    meta.appendChild(document.createTextNode(submitter ? submitter.name : pc.submittedBy));
+    meta.appendChild(el('span', { style: 'margin:0 12px;', text: '|' }));
+    meta.appendChild(el('strong', { text: 'Date: ' }));
+    meta.appendChild(document.createTextNode(formatDate(pc.submittedAt)));
+    wrapper.appendChild(meta);
+
+    const diffContainer = el('div', { class: 'card', style: 'margin-bottom:var(--spacing-lg);' });
+    PendingChanges.renderDiffTable(pc, diffContainer);
+    wrapper.appendChild(diffContainer);
+
+    const actions = el('div', { class: 'form-actions-top' });
+
+    if (canApprove) {
+      const approveBtn = el('button', { class: 'btn btn-success', text: 'Approve' });
+      approveBtn.addEventListener('click', () => {
+        if (confirm('Approve this change?')) {
+          PendingChanges.approve(pc.id);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        }
+      });
+      actions.appendChild(approveBtn);
+
+      const rejectBtn = el('button', { class: 'btn btn-danger', text: 'Reject' });
+      rejectBtn.addEventListener('click', () => {
+        const reason = prompt('Enter rejection reason:');
+        if (reason !== null) {
+          PendingChanges.reject(pc.id, reason);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        }
+      });
+      actions.appendChild(rejectBtn);
+    } else if (isSubmitter && pc.status === 'pending') {
+      const withdrawBtn = el('button', { class: 'btn btn-danger', text: 'Withdraw' });
+      withdrawBtn.addEventListener('click', () => {
+        if (confirm('Withdraw this submission?')) {
+          PendingChanges.delete(pc.id);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        }
+      });
+      actions.appendChild(withdrawBtn);
+    }
+
+    wrapper.appendChild(actions);
+    return wrapper;
   }
 };

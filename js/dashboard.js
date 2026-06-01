@@ -227,7 +227,50 @@ const Dashboard = {
     bento.appendChild(this.kpiCard('Revenue (Paid)', metrics.revenue, Auth.activeEntity.toLowerCase(), '+11%'));
     bento.appendChild(this.kpiCard('Outstanding', metrics.outstanding, null, '-2%'));
     bento.appendChild(this.kpiCard('Overdue Tasks', metrics.overdue, null, '+1%'));
-    
+
+    // Upcoming Disbursements widget
+    const disburseCard = el('div', { class: 'bento-item bento-half' });
+    disburseCard.appendChild(el('h2', { class: 'card-title', text: 'Upcoming Disbursements' }));
+    const upcoming = DB.getWhere('disbursements', d => {
+      return d.entity === Auth.activeEntity && ['Submitted', 'Under Review', 'Approved'].includes(d.status);
+    });
+    if (upcoming.length === 0) {
+      disburseCard.appendChild(el('p', { class: 'empty-state', text: 'No upcoming disbursements.' }));
+    } else {
+      const ul = el('ul', { style: 'margin:0;padding:0;list-style:none;' });
+      upcoming.slice(0, 5).forEach(d => {
+        const li = el('li', { style: 'padding:8px 0;border-bottom:1px solid var(--color-border);font-size:0.875rem;' });
+        li.appendChild(document.createTextNode(d.description + ' — ' + formatPHP(d.amount)));
+        ul.appendChild(li);
+      });
+      disburseCard.appendChild(ul);
+    }
+    bento.appendChild(disburseCard);
+
+    // Work Requests Due This Week widget
+    const dueCard = el('div', { class: 'bento-item bento-half' });
+    dueCard.appendChild(el('h2', { class: 'card-title', text: 'Work Requests Due This Week' }));
+    const now = new Date();
+    const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+    const dueWrs = DB.getWhere('workRequests', wr => {
+      if (wr.entity !== Auth.activeEntity) return false;
+      if (!wr.dueDate) return false;
+      const due = new Date(wr.dueDate);
+      return due >= now && due <= weekEnd && wr.status !== 'Completed' && wr.status !== 'Cancelled';
+    });
+    if (dueWrs.length === 0) {
+      dueCard.appendChild(el('p', { class: 'empty-state', text: 'No work requests due this week.' }));
+    } else {
+      const ul = el('ul', { style: 'margin:0;padding:0;list-style:none;' });
+      dueWrs.slice(0, 5).forEach(wr => {
+        const li = el('li', { style: 'padding:8px 0;border-bottom:1px solid var(--color-border);font-size:0.875rem;' });
+        li.appendChild(document.createTextNode(wr.title + ' — Due ' + formatDate(wr.dueDate)));
+        ul.appendChild(li);
+      });
+      dueCard.appendChild(ul);
+    }
+    bento.appendChild(dueCard);
+
     container.appendChild(bento);
     return container;
   },

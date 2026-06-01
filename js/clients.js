@@ -11,14 +11,14 @@ const Clients = {
     container.appendChild(el('h1', { text: 'Clients' }));
 
     const actions = el('div', { class: 'actions-bar' });
-    
-    if (Auth.user.role === 'Admin') {
+
+    if (Auth.can('clients:edit')) {
       const addBtn = el('button', { class: 'btn btn-primary', text: 'Add Client' });
       addBtn.addEventListener('click', () => this.showForm());
       actions.appendChild(addBtn);
     }
 
-    const search = el('input', { type: 'text', placeholder: 'Search by name or TIN...', class: 'search-input' });
+    const search = el('input', { type: 'text', placeholder: 'Search by taxpayer or TIN...', class: 'search-input' });
     search.addEventListener('input', debounce(() => this.renderList(listContainer, search.value.trim()), 200));
     actions.appendChild(search);
     container.appendChild(actions);
@@ -45,10 +45,31 @@ const Clients = {
     if (query) {
       const q = query.toLowerCase();
       clients = clients.filter(c =>
-        c.name.toLowerCase().includes(q) ||
-        c.tin.toLowerCase().includes(q)
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.tradeName || '').toLowerCase().includes(q) ||
+        (c.tin || '').toLowerCase().includes(q)
       );
     }
+
+    // Staff visibility filter
+    const role = Auth.user.role;
+    if (role === 'Staff') {
+      const userId = Auth.user.id;
+      const tasks = DB.getAll('tasks');
+      const workRequests = DB.getAll('workRequests');
+      // Find clients where user is assigned to any task
+      const assignedClientIds = new Set();
+      tasks.forEach(t => {
+        if (t.assigneeId === userId) {
+          const wr = workRequests.find(w => w.id === t.workRequestId);
+          if (wr) assignedClientIds.add(wr.clientId);
+        }
+      });
+      clients = clients.filter(c => c.contactUserId === userId || assignedClientIds.has(c.id));
+    } else if (role === 'Viewer') {
+      // Viewer can see all clients in entity (existing behavior)
+    }
+
     return clients;
   },
 
@@ -64,7 +85,7 @@ const Clients = {
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
     const headerRow = el('tr');
-    ['Name', 'TIN', 'Contact', 'Entity', 'Retainer', 'Actions'].forEach(h => {
+    ['Taxpayer', 'TIN', 'Point of Contact', 'Trade Name', 'Address', 'Entity', 'Retainer', 'Actions'].forEach(h => {
       headerRow.appendChild(el('th', { text: h }));
     });
     thead.appendChild(headerRow);
@@ -72,19 +93,24 @@ const Clients = {
 
     const tbody = el('tbody');
     clients.forEach(c => {
+      const pocUser = DB.getById('users', c.contactUserId);
       const row = el('tr');
       row.appendChild(el('td', { text: c.name }));
       row.appendChild(el('td', { text: c.tin }));
-      row.appendChild(el('td', { text: c.contactPerson || c.contact || '—' }));
+      row.appendChild(el('td', { text: pocUser?.name || c.contactPerson || '—' }));
+      row.appendChild(el('td', { text: c.tradeName || '—' }));
+      row.appendChild(el('td', { text: c.address || '—' }));
       const badge = el('span', { class: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), text: c.entity });
       const tdEntity = el('td');
       tdEntity.appendChild(badge);
       row.appendChild(tdEntity);
       row.appendChild(el('td', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }));
       const actions = el('td');
-      const editBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Edit' });
-      editBtn.addEventListener('click', () => this.showForm(c.id));
-      actions.appendChild(editBtn);
+      if (Auth.can('clients:edit')) {
+        const editBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Edit' });
+        editBtn.addEventListener('click', () => this.showForm(c.id));
+        actions.appendChild(editBtn);
+      }
       row.appendChild(actions);
       tbody.appendChild(row);
     });
@@ -104,34 +130,86 @@ const Clients = {
     const client = clientId ? DB.getById('clients', clientId) : null;
 
     this.clearNode(container);
-    container.appendChild(el('h2', { text: clientId ? 'Edit Client' : 'Add Client' }));
+
+    // Form header bar
+    const headerBar = el('div', { class: 'form-header-bar' });
+    headerBar.appendChild(el('h2', { text: clientId ? 'Edit Client' : 'Add Client' }));
+    const headerActions = el('div', { class: 'form-actions-top' });
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => this.showList());
+    headerActions.appendChild(cancelBtn);
+    headerBar.appendChild(headerActions);
+    container.appendChild(headerBar);
 
     const form = el('form', { class: 'form-stacked' });
-    const fields = [
-      { label: 'Name', name: 'name', type: 'text', required: true },
-      { label: 'TIN', name: 'tin', type: 'text', required: true, placeholder: 'XXX-XXX-XXX-XXXX' },
-      { label: 'Business Address', name: 'address', type: 'text' },
-      { label: 'Contact Person', name: 'contactPerson', type: 'text' },
-      { label: 'Phone', name: 'phone', type: 'text' },
-      { label: 'Email', name: 'email', type: 'email' },
-    ];
 
-    fields.forEach(f => {
-      const group = el('div', { class: 'form-group' });
-      group.appendChild(el('label', { text: f.label + (f.required ? ' *' : '') }));
-      const input = el('input', {
-        type: f.type,
-        name: f.name,
-        value: client ? (client[f.name] || '') : '',
-        required: f.required,
-        placeholder: f.placeholder || ''
-      });
-      group.appendChild(input);
-      const error = el('span', { class: 'field-error hidden', text: '' });
-      error.dataset.for = f.name;
-      group.appendChild(error);
-      form.appendChild(group);
+    // Taxpayer name
+    const nameGroup = el('div', { class: 'form-group' });
+    nameGroup.appendChild(el('label', { text: 'Taxpayer *' }));
+    const nameInput = el('input', { type: 'text', name: 'name', required: true, value: client ? (client.name || '') : '' });
+    nameGroup.appendChild(nameInput);
+    form.appendChild(nameGroup);
+
+    // TIN
+    const tinGroup = el('div', { class: 'form-group' });
+    tinGroup.appendChild(el('label', { text: 'TIN *' }));
+    const tinInput = el('input', { type: 'text', name: 'tin', required: true, placeholder: 'XXX-XXX-XXX-XXXX', value: client ? (client.tin || '') : '' });
+    tinGroup.appendChild(tinInput);
+    form.appendChild(tinGroup);
+
+    // Trade Name
+    const tradeGroup = el('div', { class: 'form-group' });
+    tradeGroup.appendChild(el('label', { text: 'Trade Name' }));
+    const tradeInput = el('input', { type: 'text', name: 'tradeName', value: client ? (client.tradeName || '') : '' });
+    tradeGroup.appendChild(tradeInput);
+    form.appendChild(tradeGroup);
+
+    // Business Address
+    const addrGroup = el('div', { class: 'form-group' });
+    addrGroup.appendChild(el('label', { text: 'Business Address' }));
+    const addrInput = el('input', { type: 'text', name: 'address', value: client ? (client.address || '') : '' });
+    addrGroup.appendChild(addrInput);
+    form.appendChild(addrGroup);
+
+    // Point of Contact (entity-scoped staff dropdown)
+    const pocGroup = el('div', { class: 'form-group' });
+    pocGroup.appendChild(el('label', { text: 'Point of Contact' }));
+    const pocSel = el('select', { name: 'contactUserId', class: 'form-select' });
+    pocSel.appendChild(el('option', { value: '', text: '— Select Staff —' }));
+    const entityUsers = DB.getWhere('users', u => {
+      const userEntities = (u.entities || []).map(e => e.toUpperCase());
+      return ['Admin', 'Manager', 'Staff'].includes(u.role) && userEntities.includes(Auth.activeEntity);
     });
+    entityUsers.forEach(u => {
+      pocSel.appendChild(el('option', { value: u.id, text: u.name + ' (' + u.role + ')' }));
+    });
+    if (client && client.contactUserId) pocSel.value = client.contactUserId;
+    pocGroup.appendChild(pocSel);
+    form.appendChild(pocGroup);
+
+    // Contact Details (multi-entry)
+    const cdSection = el('div', { class: 'form-section' });
+    cdSection.appendChild(el('h3', { text: 'Contact Details' }));
+    const cdContainer = el('div', { id: 'contact-details-container' });
+    const contactDetails = client && Array.isArray(client.contactDetails) ? client.contactDetails : [];
+    contactDetails.forEach((cd, idx) => this.addContactDetailRow(cdContainer, cd, idx));
+    cdSection.appendChild(cdContainer);
+    const addCdBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Contact Detail' });
+    addCdBtn.addEventListener('click', () => this.addContactDetailRow(cdContainer, null, cdContainer.childElementCount));
+    cdSection.appendChild(addCdBtn);
+    form.appendChild(cdSection);
+
+    // Related Companies (multi-entry)
+    const rcSection = el('div', { class: 'form-section' });
+    rcSection.appendChild(el('h3', { text: 'Related Companies' }));
+    const rcContainer = el('div', { id: 'related-companies-container' });
+    const relatedCompanies = client && Array.isArray(client.relatedCompanies) ? client.relatedCompanies : [];
+    relatedCompanies.forEach((rc, idx) => this.addRelatedCompanyRow(rcContainer, rc, idx));
+    rcSection.appendChild(rcContainer);
+    const addRcBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Related Company' });
+    addRcBtn.addEventListener('click', () => this.addRelatedCompanyRow(rcContainer, null, rcContainer.childElementCount));
+    rcSection.appendChild(addRcBtn);
+    form.appendChild(rcSection);
 
     // Entity radio
     const entityGroup = el('div', { class: 'form-group' });
@@ -139,16 +217,13 @@ const Clients = {
     const radioWrap = el('div', { class: 'radio-group' });
     ['ATA', 'LTA'].forEach(e => {
       const label = el('label', { class: 'radio-label' });
-      const radio = el('input', { type: 'radio', name: 'entity', value: e });
+      const radio = el('input', { type: 'radio', name: 'entity', value: e, required: true });
       if (client ? client.entity === e : Auth.activeEntity === e) radio.checked = true;
       label.appendChild(radio);
       label.appendChild(document.createTextNode(' ' + e));
       radioWrap.appendChild(label);
     });
     entityGroup.appendChild(radioWrap);
-    const entityError = el('span', { class: 'field-error hidden', text: '' });
-    entityError.dataset.for = 'entity';
-    entityGroup.appendChild(entityError);
     form.appendChild(entityGroup);
 
     // Retainer checkbox
@@ -162,11 +237,8 @@ const Clients = {
     form.appendChild(retainerGroup);
 
     const btnGroup = el('div', { class: 'form-group form-actions' });
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Client' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => this.showList());
+    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: clientId ? 'Save Changes' : 'Save Client' });
     btnGroup.appendChild(saveBtn);
-    btnGroup.appendChild(cancelBtn);
     form.appendChild(btnGroup);
 
     form.addEventListener('submit', (e) => {
@@ -175,6 +247,47 @@ const Clients = {
     });
 
     container.appendChild(form);
+  },
+
+  addContactDetailRow(container, data, idx) {
+    const row = el('div', { class: 'multi-entry-row' });
+    const typeSel = el('select', { class: 'form-select', name: 'cd-type-' + idx, style: 'flex: 0 0 120px;' });
+    ['mobile', 'landline', 'email'].forEach(t => {
+      typeSel.appendChild(el('option', { value: t, text: t.charAt(0).toUpperCase() + t.slice(1) }));
+    });
+    if (data && data.type) typeSel.value = data.type;
+    const valueInput = el('input', { type: 'text', placeholder: 'Value', name: 'cd-value-' + idx, value: data ? (data.value || '') : '' });
+    const labelInput = el('input', { type: 'text', placeholder: 'Label (e.g. Work, Home)', name: 'cd-label-' + idx, value: data ? (data.label || '') : '' });
+    const removeBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Remove' });
+    removeBtn.addEventListener('click', () => row.remove());
+    row.appendChild(typeSel);
+    row.appendChild(valueInput);
+    row.appendChild(labelInput);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  },
+
+  addRelatedCompanyRow(container, data, idx) {
+    const row = el('div', { class: 'multi-entry-row' });
+    const entity = Auth.activeEntity;
+    const clientSel = el('select', { class: 'form-select', name: 'rc-client-' + idx });
+    clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
+    DB.getWhere('clients', c => c.entity === entity).forEach(c => {
+      if (this.editingId && c.id === this.editingId) return; // skip self
+      clientSel.appendChild(el('option', { value: c.id, text: c.name }));
+    });
+    if (data && data.clientId) clientSel.value = data.clientId;
+    const relSel = el('select', { class: 'form-select', name: 'rc-relation-' + idx, style: 'flex: 0 0 160px;' });
+    ['Parent', 'Subsidiary', 'Sister Company', 'Affiliate'].forEach(r => {
+      relSel.appendChild(el('option', { value: r, text: r }));
+    });
+    if (data && data.relationType) relSel.value = data.relationType;
+    const removeBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Remove' });
+    removeBtn.addEventListener('click', () => row.remove());
+    row.appendChild(clientSel);
+    row.appendChild(relSel);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
   },
 
   showList() {
@@ -190,52 +303,76 @@ const Clients = {
   },
 
   submitForm(form) {
+    if (!validateRequiredFields(form)) return;
+
     const data = Object.fromEntries(new FormData(form).entries());
-    const errors = [];
 
-    // Clear previous errors
-    form.querySelectorAll('.field-error').forEach(e => { e.classList.add('hidden'); e.textContent = ''; });
-
-    if (!data.name || data.name.trim().length < 2) {
-      errors.push({ field: 'name', msg: 'Name is required (min 2 characters).' });
-    }
     if (!data.tin || !/^\d{3}-\d{3}-\d{3}-\d{4}$/.test(data.tin)) {
-      errors.push({ field: 'tin', msg: 'TIN must be in format XXX-XXX-XXX-XXXX.' });
+      const tinField = form.querySelector('[name="tin"]');
+      showFieldError(tinField, 'TIN must be in format XXX-XXX-XXX-XXXX.');
+      return;
     }
-    const emailVal = form.querySelector('[name="email"]').value.trim();
-    if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
-      errors.push({ field: 'email', msg: 'Please enter a valid email address.' });
-    }
+
     const entityRadio = form.querySelector('input[name="entity"]:checked');
     if (!entityRadio) {
-      errors.push({ field: 'entity', msg: 'Entity is required.' });
+      showFieldError(form.querySelector('input[name="entity"]'), 'Entity is required.');
+      return;
     }
 
-    if (errors.length > 0) {
-      errors.forEach(err => {
-        const elErr = form.querySelector('.field-error[data-for="' + err.field + '"]');
-        if (elErr) { elErr.textContent = err.msg; elErr.classList.remove('hidden'); }
+    // Collect contact details
+    const contactDetails = [];
+    const cdContainer = document.getElementById('contact-details-container');
+    if (cdContainer) {
+      cdContainer.querySelectorAll('.multi-entry-row').forEach(row => {
+        const type = row.querySelector('select[name^="cd-type-"]')?.value;
+        const value = row.querySelector('input[name^="cd-value-"]')?.value.trim();
+        const label = row.querySelector('input[name^="cd-label-"]')?.value.trim();
+        if (type && value) {
+          contactDetails.push({ type, value, label: label || '' });
+        }
       });
-      return;
+    }
+
+    // Collect related companies
+    const relatedCompanies = [];
+    const rcContainer = document.getElementById('related-companies-container');
+    if (rcContainer) {
+      rcContainer.querySelectorAll('.multi-entry-row').forEach(row => {
+        const clientId = row.querySelector('select[name^="rc-client-"]')?.value;
+        const relationType = row.querySelector('select[name^="rc-relation-"]')?.value;
+        if (clientId && relationType) {
+          relatedCompanies.push({ clientId, relationType });
+        }
+      });
     }
 
     const record = {
       name: data.name.trim(),
       tin: data.tin.trim(),
       address: data.address ? data.address.trim() : '',
-      contactPerson: data.contactPerson ? data.contactPerson.trim() : '',
-      phone: data.phone ? data.phone.trim() : '',
-      email: emailVal,
+      tradeName: data.tradeName ? data.tradeName.trim() : '',
+      contactUserId: data.contactUserId || '',
       entity: entityRadio.value,
-      retainer: !!form.querySelector('input[name="retainer"]:checked')
+      retainer: !!form.querySelector('input[name="retainer"]:checked'),
+      contactDetails,
+      relatedCompanies
     };
 
     if (this.editingId) {
-      DB.update('clients', this.editingId, record);
+      record.id = this.editingId;
+      const old = DB.getById('clients', this.editingId);
+      if (old) {
+        record.createdAt = old.createdAt;
+        // Preserve legacy fields no longer in form
+        record.contactPerson = old.contactPerson || '';
+        record.phone = old.phone || '';
+        record.email = old.email || '';
+      }
+      PendingChanges.submit('clients', record, false);
     } else {
       record.id = generateId('c');
       record.createdAt = new Date().toISOString();
-      DB.insert('clients', record);
+      PendingChanges.submit('clients', record, true);
     }
 
     this.showList();

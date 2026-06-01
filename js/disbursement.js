@@ -1,11 +1,12 @@
 /**
  * Disbursement & Expense Module
- * Expense filing, fund source tagging, 2-tier vs 1-tier approval, self-approval block.
+ * Expense filing, fund source tagging, 1-tier approval, templates, print voucher.
  */
 
 const Disbursement = {
-  view: 'list', // 'list' | 'form' | 'detail' | 'report'
+  view: 'list', // 'list' | 'form' | 'detail' | 'report' | 'templates'
   detailId: null,
+  listViewMode: 'table', // 'table' | 'board' | 'list'
 
   render() {
     const container = el('div', { class: 'page' });
@@ -15,6 +16,7 @@ const Disbursement = {
     else if (this.view === 'form') container.appendChild(this.renderForm());
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'report') container.appendChild(this.renderReport());
+    else if (this.view === 'templates') container.appendChild(this.renderTemplates());
 
     return container;
   },
@@ -31,70 +33,144 @@ const Disbursement = {
     return item.employeeId || item.requestedBy;
   },
 
+  getViewMode() {
+    const key = 'erp_preferred_view_disbursement';
+    const stored = localStorage.getItem(key);
+    return stored === 'table' || stored === 'board' || stored === 'list' ? stored : 'table';
+  },
+
+  setViewMode(mode) {
+    const key = 'erp_preferred_view_disbursement';
+    if (mode === 'table' || mode === 'board' || mode === 'list') {
+      localStorage.setItem(key, mode);
+    }
+  },
+
   // ============================================================
   // List View
   // ============================================================
   renderList() {
     const entity = Auth.activeEntity;
+    this.listViewMode = this.getViewMode();
 
     const actions = el('div', { class: 'actions-bar' });
     const addBtn = el('button', { class: 'btn btn-primary', text: 'File Expense' });
     addBtn.addEventListener('click', () => { this.view = 'form'; this.detailId = null; App.handleRoute(); });
     actions.appendChild(addBtn);
 
+    const templatesBtn = el('button', { class: 'btn btn-ghost', text: 'Templates' });
+    templatesBtn.addEventListener('click', () => { this.view = 'templates'; App.handleRoute(); });
+    actions.appendChild(templatesBtn);
+
+    const reportBtn = el('button', { class: 'btn btn-ghost', text: 'Summary Report' });
+    reportBtn.addEventListener('click', () => { this.view = 'report'; App.handleRoute(); });
+    actions.appendChild(reportBtn);
+
+    // View mode toggle
+    const viewToggle = el('div', { class: 'view-mode-toggle' });
+    [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
+      const btn = el('button', { text: label });
+      if (this.listViewMode === mode) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        this.setViewMode(mode);
+        this.listViewMode = mode;
+        this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
+      });
+      viewToggle.appendChild(btn);
+    });
+    actions.appendChild(viewToggle);
+
+    const wrapper = el('div');
+    wrapper.appendChild(actions);
+
+    // Filters bar
+    const filtersBar = el('div', { class: 'filters-bar' });
+
+    const wrFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
+    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
+    DB.getWhere('workRequests', wr => wr.entity === entity).forEach(wr => {
+      const client = DB.getById('clients', wr.clientId);
+      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title + ' — ' + (client?.name || '—') }));
+    });
+    filtersBar.appendChild(wrFilter);
+
+    const clientFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
+    clientFilter.appendChild(el('option', { value: '', text: 'All Clients' }));
+    DB.getWhere('clients', c => c.entity === entity).forEach(c => {
+      clientFilter.appendChild(el('option', { value: c.id, text: c.name }));
+    });
+    filtersBar.appendChild(clientFilter);
+
+    const empFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
+    empFilter.appendChild(el('option', { value: '', text: 'All Employees' }));
+    DB.getWhere('users', u => ['Admin', 'Manager', 'Staff'].includes(u.role)).forEach(u => {
+      empFilter.appendChild(el('option', { value: u.id, text: u.name }));
+    });
+    filtersBar.appendChild(empFilter);
+
     const fundFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
     fundFilter.appendChild(el('option', { value: '', text: 'All Funds' }));
     ['Firm Fund', 'Client Fund'].forEach(f => fundFilter.appendChild(el('option', { value: f, text: f })));
-    actions.appendChild(fundFilter);
+    filtersBar.appendChild(fundFilter);
 
     const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
     statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
     ['Draft', 'Submitted', 'Under Review', 'Approved', 'Released', 'Rejected'].forEach(s => {
       statusFilter.appendChild(el('option', { value: s, text: s }));
     });
-    actions.appendChild(statusFilter);
+    filtersBar.appendChild(statusFilter);
 
-    // Month/Year Filters
-    const monthFilter = el('select', { class: 'form-select', style: 'max-width:120px' });
-    monthFilter.appendChild(el('option', { value: '', text: 'All Months' }));
-    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].forEach((m, i) => {
-      monthFilter.appendChild(el('option', { value: String(i), text: m }));
-    });
-    actions.appendChild(monthFilter);
+    const dateFrom = el('input', { type: 'date', class: 'form-select', style: 'max-width:140px' });
+    const dateTo = el('input', { type: 'date', class: 'form-select', style: 'max-width:140px' });
+    filtersBar.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+    filtersBar.appendChild(dateFrom);
+    filtersBar.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+    filtersBar.appendChild(dateTo);
 
-    const years = [...new Set(DB.getAll('disbursements').map(d => new Date(d.submittedAt || Date.now()).getFullYear()))].sort((a,b) => b-a);
-    const yearFilter = el('select', { class: 'form-select', style: 'max-width:110px' });
-    yearFilter.appendChild(el('option', { value: '', text: 'All Years' }));
-    years.forEach(y => yearFilter.appendChild(el('option', { value: String(y), text: String(y) })));
-    actions.appendChild(yearFilter);
-
-    const updateFilters = () => this.refreshList(listContainer, fundFilter.value, statusFilter.value, monthFilter.value, yearFilter.value);
-    [fundFilter, statusFilter, monthFilter, yearFilter].forEach(f => f.addEventListener('change', updateFilters));
-
-    const reportBtn = el('button', { class: 'btn btn-ghost', text: 'Summary Report' });
-    reportBtn.addEventListener('click', () => { this.view = 'report'; App.handleRoute(); });
-    actions.appendChild(reportBtn);
+    wrapper.appendChild(filtersBar);
 
     const listContainer = el('div');
-    this.refreshList(listContainer, '', '', '', '');
-
-    const wrapper = el('div');
-    wrapper.appendChild(actions);
     wrapper.appendChild(listContainer);
+
+    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
+    [wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', updateFilters));
+    // Also re-render on view mode change
+
+    this.refreshList(listContainer, '', '', '', '', '', '', '');
+
     return wrapper;
   },
 
-  refreshList(container, fundFilter, statusFilter, monthFilter, yearFilter) {
+  refreshList(container, wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
     let items = DB.getWhere('disbursements', d => d.entity === entity);
-    
+
+    if (wrFilter) {
+      items = items.filter(d => d.linkedWorkRequestId === wrFilter);
+    }
+    if (clientFilter) {
+      items = items.filter(d => {
+        if (!d.linkedWorkRequestId) return false;
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        return wr && wr.clientId === clientFilter;
+      });
+    }
+    if (empFilter) {
+      items = items.filter(d => this.getEmployeeId(d) === empFilter);
+    }
     if (fundFilter) items = items.filter(d => this.getFundSource(d) === fundFilter);
     if (statusFilter) items = items.filter(d => d.status === statusFilter);
-    if (monthFilter) items = items.filter(d => new Date(d.submittedAt).getMonth() === parseInt(monthFilter));
-    if (yearFilter) items = items.filter(d => new Date(d.submittedAt).getFullYear() === parseInt(yearFilter));
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom).getTime();
+      items = items.filter(d => new Date(d.submittedAt).getTime() >= fromDate);
+    }
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      items = items.filter(d => new Date(d.submittedAt).getTime() <= toDate.getTime());
+    }
 
-    // Default Sort: Latest first
     items.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
     if (items.length === 0) {
@@ -102,6 +178,16 @@ const Disbursement = {
       return;
     }
 
+    if (this.listViewMode === 'table') {
+      this.renderTableView(container, items);
+    } else if (this.listViewMode === 'board') {
+      this.renderBoardView(container, items);
+    } else {
+      this.renderCompactListView(container, items);
+    }
+  },
+
+  renderTableView(container, items) {
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
     const thr = el('tr');
@@ -134,39 +220,107 @@ const Disbursement = {
     container.appendChild(table);
   },
 
+  renderBoardView(container, items) {
+    const statuses = ['Draft', 'Submitted', 'Under Review', 'Approved', 'Released', 'Rejected'];
+    const board = el('div', { class: 'board-view' });
+    statuses.forEach(status => {
+      const col = el('div', { class: 'board-column' });
+      col.appendChild(el('div', { class: 'board-column-header', text: status }));
+      const statusItems = items.filter(d => d.status === status);
+      statusItems.forEach(d => {
+        const emp = DB.getById('users', this.getEmployeeId(d));
+        const card = el('div', { class: 'board-card' });
+        card.appendChild(el('div', { class: 'board-card-title', text: d.category + ' — ' + formatPHP(d.amount) }));
+        card.appendChild(el('div', { class: 'board-card-meta', text: (emp?.name || '—') + ' • ' + formatDate(d.submittedAt) }));
+        card.addEventListener('click', () => { this.view = 'detail'; this.detailId = d.id; App.handleRoute(); });
+        col.appendChild(card);
+      });
+      board.appendChild(col);
+    });
+    container.appendChild(board);
+  },
+
+  renderCompactListView(container, items) {
+    const list = el('div', { class: 'list-view' });
+    items.forEach(d => {
+      const emp = DB.getById('users', this.getEmployeeId(d));
+      const item = el('div', { class: 'list-item' });
+      const left = el('div');
+      left.appendChild(el('div', { class: 'list-item-title', text: d.category + ' — ' + formatPHP(d.amount) }));
+      left.appendChild(el('div', { class: 'list-item-meta', text: (emp?.name || '—') + ' • ' + this.getFundSource(d) + ' • ' + formatDate(d.submittedAt) }));
+      item.appendChild(left);
+      const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
+      viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailId = d.id; App.handleRoute(); });
+      item.appendChild(viewBtn);
+      list.appendChild(item);
+    });
+    container.appendChild(list);
+  },
+
   // ============================================================
   // Expense Filing Form
   // ============================================================
   renderForm() {
     const entity = Auth.activeEntity;
+    const isNew = !this.detailId;
+    const existing = this.detailId ? DB.getById('disbursements', this.detailId) : null;
+
     const container = el('div');
-    container.appendChild(el('h2', { text: 'File Expense' }));
+
+    // Form header bar
+    const headerBar = el('div', { class: 'form-header-bar' });
+    headerBar.appendChild(el('h2', { text: isNew ? 'File Expense' : 'Edit Expense' }));
+    const headerActions = el('div', { class: 'form-actions-top' });
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+    headerActions.appendChild(cancelBtn);
+    headerBar.appendChild(headerActions);
+    container.appendChild(headerBar);
 
     const form = el('form', { class: 'form-stacked' });
 
     const catGroup = el('div', { class: 'form-group' });
     catGroup.appendChild(el('label', { text: 'Category *' }));
-    const catSel = el('select', { name: 'category', required: true });
+    const catSel = el('select', { name: 'category', required: true, class: 'form-select' });
     ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
-      catSel.appendChild(el('option', { value: c, text: c }));
+      const opt = el('option', { value: c, text: c });
+      if (existing && existing.category === c) opt.selected = true;
+      catSel.appendChild(opt);
     });
     catGroup.appendChild(catSel);
     form.appendChild(catGroup);
 
     const descGroup = el('div', { class: 'form-group' });
     descGroup.appendChild(el('label', { text: 'Description *' }));
-    descGroup.appendChild(el('input', { type: 'text', name: 'description', required: true }));
+    descGroup.appendChild(el('input', { type: 'text', name: 'description', required: true, value: existing ? (existing.description || '') : '' }));
     form.appendChild(descGroup);
 
     const amtGroup = el('div', { class: 'form-group' });
     amtGroup.appendChild(el('label', { text: 'Amount (₱) *' }));
-    amtGroup.appendChild(el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true }));
+    amtGroup.appendChild(el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true, value: existing ? String(existing.amount) : '' }));
     form.appendChild(amtGroup);
 
     const receiptGroup = el('div', { class: 'form-group' });
     receiptGroup.appendChild(el('label', { text: 'Receipt (optional)' }));
     receiptGroup.appendChild(el('input', { type: 'file', name: 'receipt' }));
+    if (existing && existing.receiptFilename) {
+      receiptGroup.appendChild(el('p', { text: 'Current: ' + existing.receiptFilename, style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+    }
     form.appendChild(receiptGroup);
+
+    // Linked Work Request
+    const wrGroup = el('div', { class: 'form-group' });
+    wrGroup.appendChild(el('label', { text: 'Linked Work Request' }));
+    const wrSel = el('select', { name: 'linkedWorkRequestId', class: 'form-select' });
+    wrSel.appendChild(el('option', { value: '', text: '— None —' }));
+    DB.getWhere('workRequests', wr => wr.entity === entity).forEach(wr => {
+      const client = DB.getById('clients', wr.clientId);
+      const opt = el('option', { value: wr.id, text: wr.title + ' — ' + (client?.name || '—') });
+      if (existing && existing.linkedWorkRequestId === wr.id) opt.selected = true;
+      wrSel.appendChild(opt);
+    });
+    wrGroup.appendChild(wrSel);
+    form.appendChild(wrGroup);
 
     // Fund Source
     const fundGroup = el('div', { class: 'form-group' });
@@ -175,7 +329,7 @@ const Disbursement = {
     ['Firm Fund', 'Client Fund'].forEach(f => {
       const label = el('label', { class: 'radio-label' });
       const radio = el('input', { type: 'radio', name: 'fundSource', value: f, required: true });
-      if (f === 'Firm Fund') radio.checked = true;
+      if (existing ? existing.fundSource === f : f === 'Firm Fund') radio.checked = true;
       label.appendChild(radio);
       label.appendChild(document.createTextNode(' ' + f));
       fundWrap.appendChild(label);
@@ -186,11 +340,13 @@ const Disbursement = {
     // Linked invoice (only for Client Fund)
     const invGroup = el('div', { class: 'form-group hidden', id: 'linked-invoice-group' });
     invGroup.appendChild(el('label', { text: 'Linked Billing Invoice' }));
-    const invSel = el('select', { name: 'linkedInvoiceId' });
+    const invSel = el('select', { name: 'linkedInvoiceId', class: 'form-select' });
     invSel.appendChild(el('option', { value: '', text: '— Select Invoice —' }));
     DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Cancelled').forEach(inv => {
       const client = DB.getById('clients', inv.clientId);
-      invSel.appendChild(el('option', { value: inv.id, text: inv.invoiceNumber + ' — ' + (client?.name || '—') }));
+      const opt = el('option', { value: inv.id, text: inv.invoiceNumber + ' — ' + (client?.name || '—') });
+      if (existing && existing.linkedInvoiceId === inv.id) opt.selected = true;
+      invSel.appendChild(opt);
     });
     invGroup.appendChild(invSel);
     form.appendChild(invGroup);
@@ -201,13 +357,13 @@ const Disbursement = {
         invGroup.classList.toggle('hidden', !isClient);
       });
     });
+    // Trigger initial state
+    const initialClientFund = existing && existing.fundSource === 'Client Fund';
+    if (initialClientFund) invGroup.classList.remove('hidden');
 
     const btnGroup = el('div', { class: 'form-group form-actions' });
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Submit Expense' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
+    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: isNew ? 'Submit Expense' : 'Save Changes' });
     btnGroup.appendChild(saveBtn);
-    btnGroup.appendChild(cancelBtn);
     form.appendChild(btnGroup);
 
     form.addEventListener('submit', e => { e.preventDefault(); this.submitForm(form); });
@@ -217,10 +373,13 @@ const Disbursement = {
   },
 
   submitForm(form) {
+    if (!validateRequiredFields(form)) return;
+
     const data = Object.fromEntries(new FormData(form).entries());
     const entity = Auth.activeEntity;
     const receiptInput = form.querySelector('input[name="receipt"]');
     const receiptFile = receiptInput?.files?.[0];
+    const isNew = !this.detailId;
 
     const record = {
       category: data.category,
@@ -228,17 +387,45 @@ const Disbursement = {
       amount: parseFloat(data.amount) || 0,
       fundSource: data.fundSource,
       linkedInvoiceId: data.linkedInvoiceId || null,
+      linkedWorkRequestId: data.linkedWorkRequestId || null,
       entity: entity,
       employeeId: Auth.user.id,
+      requestedBy: Auth.user.id,
       status: 'Submitted',
       submittedAt: new Date().toISOString(),
-      receiptFilename: receiptFile ? receiptFile.name : null
+      receiptFilename: receiptFile ? receiptFile.name : (isNew ? null : (DB.getById('disbursements', this.detailId)?.receiptFilename || null))
     };
 
-    record.id = generateId('d');
-    DB.insert('disbursements', record);
+    if (!isNew) {
+      record.id = this.detailId;
+      const old = DB.getById('disbursements', this.detailId);
+      if (old) {
+        record.createdAt = old.createdAt;
+        record.status = old.status; // preserve status on edit
+        record.submittedAt = old.submittedAt;
+        record.requestedBy = old.requestedBy || Auth.user.id; // preserve original requester
+        record.paymentHandledBy = old.paymentHandledBy || '';
+        record.paymentDetails = old.paymentDetails || { method: '', reference: '', bank: '', date: '', processedBy: '' };
+      }
+    } else {
+      record.id = generateId('d');
+      record.createdAt = new Date().toISOString();
+    }
+
+    // If linked to a WR, update WR's linkedDisbursementIds
+    if (record.linkedWorkRequestId) {
+      const wr = DB.getById('workRequests', record.linkedWorkRequestId);
+      if (wr) {
+        const linkedIds = new Set(wr.linkedDisbursementIds || []);
+        linkedIds.add(record.id);
+        DB.update('workRequests', wr.id, { linkedDisbursementIds: Array.from(linkedIds) });
+      }
+    }
+
+    PendingChanges.submit('disbursements', record, isNew);
 
     this.view = 'list';
+    this.detailId = null;
     App.handleRoute();
   },
 
@@ -250,17 +437,23 @@ const Disbursement = {
     if (!d) { this.view = 'list'; App.handleRoute(); return el('div'); }
     const emp = DB.getById('users', this.getEmployeeId(d));
     const container = el('div', { class: 'invoice-detail' });
-    
+
     // Top actions bar
     const topActions = el('div', { class: 'actions-bar', style: 'margin-bottom: var(--spacing-lg);' });
     const topBackBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
     topBackBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
     topActions.appendChild(topBackBtn);
+
+    // Print button
+    const printBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Print Voucher' });
+    printBtn.addEventListener('click', () => this.openPrintVoucher(d));
+    topActions.appendChild(printBtn);
+
     container.appendChild(topActions);
 
     const header = el('div', { class: 'invoice-header' });
     header.appendChild(el('h2', { text: d.category }));
-    
+
     const map = {
       'Submitted': 'badge-info',
       'Under Review': 'badge-warning',
@@ -276,6 +469,10 @@ const Disbursement = {
     meta.appendChild(el('p', { text: 'Employee: ' + (emp?.name || '—') }));
     meta.appendChild(el('p', { text: 'Date Submitted: ' + formatDate(d.submittedAt) }));
     meta.appendChild(el('p', { text: 'Fund Source: ' + this.getFundSource(d) }));
+    if (d.linkedWorkRequestId) {
+      const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+      if (wr) meta.appendChild(el('p', { text: 'Work Request: ' + wr.title }));
+    }
     container.appendChild(meta);
 
     const infoSection = el('div', { class: 'form-section', style: 'margin-bottom: var(--spacing-lg);' });
@@ -290,20 +487,35 @@ const Disbursement = {
     totals.appendChild(el('div', { class: 'total-row total-grand' }, [el('span', { text: 'Total Amount:' }), el('span', { text: formatPHP(d.amount) })]));
     container.appendChild(totals);
 
+    // Payment details (shown if released)
+    if (d.status === 'Released' && d.paymentDetails) {
+      const paySection = el('div', { class: 'form-section', style: 'margin-bottom: var(--spacing-lg);' });
+      paySection.appendChild(el('h3', { text: 'Payment Details' }));
+      const payBox = el('div', { class: 'invoice-info-box' });
+      const pd = d.paymentDetails;
+      const handler = DB.getById('users', d.paymentHandledBy);
+      payBox.appendChild(el('p', { text: 'Method: ' + (pd.method || '—') }));
+      payBox.appendChild(el('p', { text: 'Reference: ' + (pd.reference || '—') }));
+      payBox.appendChild(el('p', { text: 'Bank: ' + (pd.bank || '—') }));
+      payBox.appendChild(el('p', { text: 'Date: ' + (pd.date ? formatDate(pd.date) : '—') }));
+      payBox.appendChild(el('p', { text: 'Handled By: ' + (handler?.name || '—') }));
+      paySection.appendChild(payBox);
+      container.appendChild(paySection);
+    }
+
     const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-lg); border-top: 1px solid var(--color-border); padding-top: var(--spacing-lg);' });
 
     const isRequester = Auth.isSelfApprover(this.getEmployeeId(d));
     const isAdmin = Auth.user.role === 'Admin';
-    const fundSource = this.getFundSource(d);
 
-    // 1-Tier Admin Approval Chain (Across all Fund Sources)
+    // 1-Tier Admin Approval Chain
     if (d.status === 'Submitted' || d.status === 'Under Review' || d.status === 'Approved') {
       if (isAdmin) {
         if (isRequester) {
           container.appendChild(el('p', { class: 'field-error', text: 'You cannot approve/release your own expense submission. Please wait for another Admin to process it.' }));
         } else {
           const releaseBtn = el('button', { class: 'btn btn-success', text: 'Approve & Release' });
-          releaseBtn.addEventListener('click', () => { this.release(this.detailId); App.handleRoute(); });
+          releaseBtn.addEventListener('click', () => { this.showReleaseDialog(d.id); });
           actions.appendChild(releaseBtn);
 
           const rejectBtn = el('button', { class: 'btn btn-danger', text: 'Reject' });
@@ -323,29 +535,250 @@ const Disbursement = {
     return container;
   },
 
+  showReleaseDialog(id) {
+    const d = DB.getById('disbursements', id);
+    if (!d) return;
+
+    // Build modal for payment details
+    const overlay = el('div', { class: 'modal-overlay' });
+    const modal = el('div', { class: 'modal' });
+    const modalHeader = el('div', { class: 'modal-header' });
+    modalHeader.appendChild(el('h3', { class: 'modal-title', text: 'Release Payment' }));
+    const closeBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '×' });
+    closeBtn.addEventListener('click', () => overlay.remove());
+    modalHeader.appendChild(closeBtn);
+    modal.appendChild(modalHeader);
+
+    const modalBody = el('div', { class: 'modal-body' });
+    const form = el('form', { class: 'form-stacked' });
+
+    const methodGroup = el('div', { class: 'form-group' });
+    methodGroup.appendChild(el('label', { text: 'Payment Method *' }));
+    const methodSel = el('select', { name: 'method', required: true, class: 'form-select' });
+    ['Cash', 'Check', 'Bank Transfer', 'GCash', 'Other'].forEach(m => methodSel.appendChild(el('option', { value: m, text: m })));
+    methodGroup.appendChild(methodSel);
+    form.appendChild(methodGroup);
+
+    const refGroup = el('div', { class: 'form-group' });
+    refGroup.appendChild(el('label', { text: 'Reference Number' }));
+    refGroup.appendChild(el('input', { type: 'text', name: 'reference' }));
+    form.appendChild(refGroup);
+
+    const bankGroup = el('div', { class: 'form-group' });
+    bankGroup.appendChild(el('label', { text: 'Bank' }));
+    bankGroup.appendChild(el('input', { type: 'text', name: 'bank' }));
+    form.appendChild(bankGroup);
+
+    const dateGroup = el('div', { class: 'form-group' });
+    dateGroup.appendChild(el('label', { text: 'Payment Date *' }));
+    dateGroup.appendChild(el('input', { type: 'date', name: 'date', required: true, value: new Date().toISOString().slice(0, 10) }));
+    form.appendChild(dateGroup);
+
+    const handlerGroup = el('div', { class: 'form-group' });
+    handlerGroup.appendChild(el('label', { text: 'Payment Handled By *' }));
+    const handlerSel = el('select', { name: 'paymentHandledBy', required: true, class: 'form-select' });
+    handlerSel.appendChild(el('option', { value: '', text: '— Select User —' }));
+    DB.getWhere('users', u => ['Admin', 'Manager', 'Staff'].includes(u.role)).forEach(u => {
+      handlerSel.appendChild(el('option', { value: u.id, text: u.name + ' (' + u.role + ')' }));
+    });
+    handlerGroup.appendChild(handlerSel);
+    form.appendChild(handlerGroup);
+
+    const submitBtn = el('button', { type: 'submit', class: 'btn btn-success', text: 'Confirm Release' });
+    form.appendChild(submitBtn);
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!validateRequiredFields(form)) return;
+      const fd = new FormData(form);
+      this.release(id, {
+        method: fd.get('method'),
+        reference: fd.get('reference') || '',
+        bank: fd.get('bank') || '',
+        date: fd.get('date'),
+        processedBy: Auth.user.id
+      }, fd.get('paymentHandledBy'));
+      overlay.remove();
+      App.handleRoute();
+    });
+
+    modalBody.appendChild(form);
+    modal.appendChild(modalBody);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  },
+
   approve(id) {
-    DB.update('disbursements', id, { 
-      status: 'Approved', 
+    DB.update('disbursements', id, {
+      status: 'Approved',
       approvedBy: Auth.user.id,
       approvedAt: new Date().toISOString()
     });
     return { success: true };
   },
 
-  release(id) {
-    DB.update('disbursements', id, { 
-      status: 'Released', 
+  release(id, paymentDetails, paymentHandledBy) {
+    DB.update('disbursements', id, {
+      status: 'Released',
       releasedBy: Auth.user.id,
-      releasedAt: new Date().toISOString() 
+      releasedAt: new Date().toISOString(),
+      paymentHandledBy: paymentHandledBy || Auth.user.id,
+      paymentDetails: paymentDetails || { method: '', reference: '', bank: '', date: '', processedBy: Auth.user.id }
     });
   },
 
   reject(id, reason) {
-    DB.update('disbursements', id, { 
-      status: 'Rejected', 
+    DB.update('disbursements', id, {
+      status: 'Rejected',
       rejectedBy: Auth.user.id,
-      rejectionReason: reason 
+      rejectionReason: reason
     });
+  },
+
+  // ============================================================
+  // Print Voucher
+  // ============================================================
+  openPrintVoucher(d) {
+    const emp = DB.getById('users', this.getEmployeeId(d));
+    const win = window.open('', '_blank');
+    if (!win) return;
+
+    const doc = win.document;
+    const meta = doc.createElement('meta');
+    meta.setAttribute('charset', 'UTF-8');
+    doc.head.appendChild(meta);
+    const title = doc.createElement('title');
+    title.textContent = 'Payment Voucher';
+    doc.head.appendChild(title);
+
+    const style = doc.createElement('style');
+    style.textContent = 'body { font-family: Arial, sans-serif; margin: 24px; color: #333; } h2 { margin: 0 0 16px 0; font-size: 1.25rem; } table { width: 100%; border-collapse: collapse; margin-top: 12px; } th, td { text-align: left; padding: 8px 0; border-bottom: 1px solid #ddd; } .label { color: #666; font-size: 0.875rem; } .value { font-weight: 600; } .total { font-size: 1.125rem; font-weight: 700; color: #000; }';
+    doc.head.appendChild(style);
+
+    const body = doc.body;
+    const h2 = doc.createElement('h2');
+    h2.textContent = 'Payment Voucher';
+    body.appendChild(h2);
+
+    const table = doc.createElement('table');
+    const rows = [
+      { label: 'Voucher No', value: d.id },
+      { label: 'Date', value: formatDate(d.submittedAt) },
+      { label: 'Payee', value: emp?.name || '—' },
+      { label: 'Category', value: d.category },
+      { label: 'Description', value: d.description },
+      { label: 'Fund Source', value: this.getFundSource(d) },
+      { label: 'Amount', value: formatPHP(d.amount), isTotal: true }
+    ];
+    if (d.paymentDetails && d.paymentDetails.method) {
+      rows.push({ label: 'Payment Method', value: d.paymentDetails.method });
+      rows.push({ label: 'Reference', value: d.paymentDetails.reference || '—' });
+      rows.push({ label: 'Bank', value: d.paymentDetails.bank || '—' });
+      rows.push({ label: 'Payment Date', value: d.paymentDetails.date ? formatDate(d.paymentDetails.date) : '—' });
+    }
+    rows.forEach(r => {
+      const tr = doc.createElement('tr');
+      const tdLabel = doc.createElement('td');
+      tdLabel.className = 'label';
+      tdLabel.textContent = r.label;
+      const tdValue = doc.createElement('td');
+      tdValue.className = r.isTotal ? 'value total' : 'value';
+      tdValue.textContent = r.value;
+      tr.appendChild(tdLabel);
+      tr.appendChild(tdValue);
+      table.appendChild(tr);
+    });
+    body.appendChild(table);
+
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  },
+
+  // ============================================================
+  // Templates View
+  // ============================================================
+  renderTemplates() {
+    const entity = Auth.activeEntity;
+    const templates = DB.getWhere('disbursementTemplates', t => t.entity === entity);
+
+    const container = el('div');
+
+    const topActions = el('div', { class: 'actions-bar', style: 'margin-bottom: var(--spacing-lg);' });
+    const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
+    backBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
+    topActions.appendChild(backBtn);
+    container.appendChild(topActions);
+
+    container.appendChild(el('h2', { text: 'Disbursement Templates', style: 'margin-bottom: var(--spacing-lg);' }));
+
+    if (templates.length === 0) {
+      container.appendChild(el('p', { text: 'No templates found.', class: 'empty-state' }));
+      return container;
+    }
+
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Name', 'Category', 'Amount', 'Fund Source', 'Schedule', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    templates.forEach(t => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: t.name }));
+      tr.appendChild(el('td', { text: t.category }));
+      tr.appendChild(el('td', { text: formatPHP(t.amount) }));
+      tr.appendChild(el('td', { text: t.fundSource }));
+      tr.appendChild(el('td', { text: t.schedule || '—' }));
+      const tdAct = el('td');
+      const genBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Next Period' });
+      genBtn.addEventListener('click', () => this.generateFromTemplate(t));
+      tdAct.appendChild(genBtn);
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    return container;
+  },
+
+  generateFromTemplate(template) {
+    const record = {
+      id: generateId('d'),
+      category: template.category,
+      description: template.description || template.name,
+      amount: template.amount,
+      fundSource: template.fundSource,
+      linkedInvoiceId: template.linkedInvoiceId || null,
+      linkedWorkRequestId: template.linkedWorkRequestId || null,
+      entity: template.entity,
+      employeeId: Auth.user.id,
+      requestedBy: Auth.user.id,
+      status: 'Submitted',
+      submittedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      receiptFilename: null,
+      paymentHandledBy: '',
+      paymentDetails: { method: '', reference: '', bank: '', date: '', processedBy: '' }
+    };
+
+    DB.insert('disbursements', record);
+
+    // Link to WR if applicable
+    if (record.linkedWorkRequestId) {
+      const wr = DB.getById('workRequests', record.linkedWorkRequestId);
+      if (wr) {
+        const linkedIds = new Set(wr.linkedDisbursementIds || []);
+        linkedIds.add(record.id);
+        DB.update('workRequests', wr.id, { linkedDisbursementIds: Array.from(linkedIds) });
+      }
+    }
+
+    alert('Disbursement generated from template: ' + template.name);
+    this.view = 'list';
+    App.handleRoute();
   },
 
   // ============================================================
@@ -356,7 +789,7 @@ const Disbursement = {
     const items = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Released');
 
     const container = el('div', { class: 'page' });
-    
+
     // Top actions bar
     const topActions = el('div', { class: 'actions-bar', style: 'margin-bottom: var(--spacing-lg);' });
     const topBackBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });

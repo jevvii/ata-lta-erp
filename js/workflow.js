@@ -12,7 +12,7 @@ const Workflow = {
 
   render() {
     const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Workflow' }));
+    container.appendChild(el('h1', { text: 'Operations' }));
 
     if (this.view === 'list') {
       container.appendChild(this.renderList());
@@ -36,115 +36,179 @@ const Workflow = {
   // ============================================================
   renderList() {
     const entity = Auth.activeEntity;
-    const workRequests = DB.getWhere('workRequests', r => r.entity === entity);
     const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
 
-    const actions = el('div', { class: 'actions-bar' });
-    
+    const wrapper = el('div');
+
+    // Header bar
+    const headerBar = el('div', { class: 'form-header-bar' });
+    headerBar.appendChild(el('h2', { text: 'Work Requests' }));
+    const topActions = el('div', { class: 'form-actions-top' });
     if (isManagerial) {
       const addBtn = el('button', { class: 'btn btn-primary', text: 'Add Work Request' });
       addBtn.addEventListener('click', () => { this.view = 'form'; this.editingId = null; App.handleRoute(); });
-      actions.appendChild(addBtn);
-
+      topActions.appendChild(addBtn);
       const templateBtn = el('button', { class: 'btn btn-ghost', text: 'Retainer Templates' });
       templateBtn.addEventListener('click', () => { this.view = 'templates'; this.templateEditingId = null; App.handleRoute(); });
-      actions.appendChild(templateBtn);
+      topActions.appendChild(templateBtn);
     }
+    headerBar.appendChild(topActions);
+    wrapper.appendChild(headerBar);
 
-    const statusFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
+    // Filters
+    const filters = el('div', { class: 'filters-bar' });
+    const priorityFilter = el('select', { class: 'form-select' });
+    priorityFilter.appendChild(el('option', { value: '', text: 'All Priorities' }));
+    ['Urgent', 'Priority', 'Low Priority'].forEach(p => priorityFilter.appendChild(el('option', { value: p, text: p })));
+    filters.appendChild(priorityFilter);
+
+    const empFilter = el('select', { class: 'form-select' });
+    empFilter.appendChild(el('option', { value: '', text: 'All Employees' }));
+    DB.getWhere('users', u => u.entities?.map(e => e.toUpperCase()).includes(entity)).forEach(u => {
+      empFilter.appendChild(el('option', { value: u.id, text: u.name }));
+    });
+    filters.appendChild(empFilter);
+
+    const clientFilter = el('select', { class: 'form-select' });
+    clientFilter.appendChild(el('option', { value: '', text: 'All Clients' }));
+    DB.getWhere('clients', c => c.entity === entity).forEach(c => {
+      clientFilter.appendChild(el('option', { value: c.id, text: c.name }));
+    });
+    filters.appendChild(clientFilter);
+
+    const dateFrom = el('input', { type: 'date', class: 'form-select' });
+    const dateTo = el('input', { type: 'date', class: 'form-select' });
+    filters.appendChild(el('span', { text: 'Due From', style: 'font-size:0.875rem;color:var(--color-text-muted);' }));
+    filters.appendChild(dateFrom);
+    filters.appendChild(el('span', { text: 'Due To', style: 'font-size:0.875rem;color:var(--color-text-muted);' }));
+    filters.appendChild(dateTo);
+
+    const statusFilter = el('select', { class: 'form-select' });
     statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
     ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed', 'Cancelled'].forEach(s => {
       statusFilter.appendChild(el('option', { value: s, text: s }));
     });
-    statusFilter.addEventListener('change', () => this.refreshList(grid, statusFilter.value));
-    actions.appendChild(statusFilter);
+    filters.appendChild(statusFilter);
+    wrapper.appendChild(filters);
 
-    const grid = el('div', { class: 'card-grid' });
-    this.refreshList(grid, '');
+    // View mode toggle
+    const viewMode = App.getPreferredViewMode('operations') || 'table';
+    const vmToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom:var(--spacing-md);' });
+    const vmTable = el('button', { text: 'Table', class: viewMode === 'table' ? 'active' : '' });
+    const vmBoard = el('button', { text: 'Board', class: viewMode === 'board' ? 'active' : '' });
+    const vmList = el('button', { text: 'List', class: viewMode === 'list' ? 'active' : '' });
+    vmTable.addEventListener('click', () => { App.setPreferredViewMode('operations', 'table'); App.handleRoute(); });
+    vmBoard.addEventListener('click', () => { App.setPreferredViewMode('operations', 'board'); App.handleRoute(); });
+    vmList.addEventListener('click', () => { App.setPreferredViewMode('operations', 'list'); App.handleRoute(); });
+    vmToggle.appendChild(vmTable);
+    vmToggle.appendChild(vmBoard);
+    vmToggle.appendChild(vmList);
+    wrapper.appendChild(vmToggle);
 
-    const wrapper = el('div');
-    wrapper.appendChild(actions);
-    wrapper.appendChild(grid);
+    const contentContainer = el('div');
+    wrapper.appendChild(contentContainer);
+
+    const refresh = () => {
+      while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
+      let wrs = DB.getWhere('workRequests', r => r.entity === entity);
+      if (!isManagerial) {
+        const myTasks = DB.getWhere('tasks', t => t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id);
+        const myWrIds = new Set(myTasks.map(t => t.workRequestId));
+        wrs = wrs.filter(r => myWrIds.has(r.id) || r.assignedTo === Auth.user.id);
+      }
+      if (priorityFilter.value) wrs = wrs.filter(r => r.priority === priorityFilter.value);
+      if (empFilter.value) wrs = wrs.filter(r => r.assignedTo === empFilter.value);
+      if (clientFilter.value) wrs = wrs.filter(r => r.clientId === clientFilter.value);
+      if (dateFrom.value) wrs = wrs.filter(r => r.dueDate && r.dueDate >= dateFrom.value);
+      if (dateTo.value) wrs = wrs.filter(r => r.dueDate && r.dueDate <= dateTo.value);
+      if (statusFilter.value) wrs = wrs.filter(r => r.status === statusFilter.value);
+
+      if (viewMode === 'table') this.refreshTable(contentContainer, wrs);
+      else if (viewMode === 'board') this.refreshBoard(contentContainer, wrs);
+      else this.refreshListCompact(contentContainer, wrs);
+    };
+
+    [priorityFilter, empFilter, clientFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', refresh));
+    refresh();
+
     return wrapper;
   },
 
-  refreshList(grid, statusFilter) {
-    while (grid.firstChild) grid.removeChild(grid.firstChild);
-    const entity = Auth.activeEntity;
-    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
-
-    let wrs = DB.getWhere('workRequests', r => r.entity === entity);
-
-    if (!isManagerial) {
-      // Find tasks assigned to this user
-      const myTasks = DB.getWhere('tasks', t => t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id);
-      const myWrIds = new Set(myTasks.map(t => t.workRequestId));
-      
-      // Filter WRs to those where the user is assigned a task, OR assigned the entire WR
-      wrs = wrs.filter(r => myWrIds.has(r.id) || r.assignedTo === Auth.user.id);
-    }
-
-    if (statusFilter) wrs = wrs.filter(r => r.status === statusFilter);
-
+  refreshTable(container, wrs) {
     if (wrs.length === 0) {
-      grid.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
+      container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
       return;
     }
-
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Title', 'Client', 'Priority', 'Status', 'Due', 'Assignee', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
+    const tbody = el('tbody');
     wrs.forEach(wr => {
       const client = DB.getById('clients', wr.clientId);
       const assignedUser = DB.getById('users', wr.assignedTo);
-      const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
-      const completed = tasks.filter(t => t.status === 'Completed').length;
-      const total = tasks.length || 1;
-      const pct = Math.round((completed / total) * 100);
-
-      const card = el('div', { class: 'card wr-card' });
-      const header = el('div', { class: 'card-header' });
-      const title = el('h3', { class: 'card-title', text: wr.title });
-      const statusBadge = this.statusBadge(wr.status);
-      header.appendChild(title);
-      header.appendChild(statusBadge);
-      card.appendChild(header);
-
-      const meta = el('div', { class: 'wr-meta' });
-      meta.appendChild(el('span', { text: 'Client: ' + (client?.name || '—') }));
-      meta.appendChild(el('span', { text: 'Priority: ' + (wr.priority || 'Normal') }));
-      meta.appendChild(el('span', { text: 'Due: ' + (wr.dueDate ? formatDate(wr.dueDate) : '—') }));
-      
-      const assigneeSpan = el('span', { class: 'assignee-chip', style: 'margin-top: 4px;' });
-      assigneeSpan.appendChild(document.createTextNode('Assignee: '));
-      if (assignedUser) {
-        const av = el('div', { class: 'avatar-sm' });
-        av.style.backgroundImage = `url('${assignedUser.avatarUrl || ''}')`;
-        assigneeSpan.appendChild(av);
-        assigneeSpan.appendChild(document.createTextNode(assignedUser.name));
-      } else {
-        assigneeSpan.appendChild(document.createTextNode('Unassigned'));
-      }
-      meta.appendChild(assigneeSpan);
-      
-      card.appendChild(meta);
-
-      const progressWrap = el('div', { class: 'progress-wrap' });
-      const progress = el('div', { class: 'progress' });
-      const bar = el('div', { class: 'progress-bar' });
-      bar.style.width = pct + '%';
-      progress.appendChild(bar);
-      progressWrap.appendChild(el('span', { text: completed + '/' + total + ' tasks', class: 'progress-label' }));
-      progressWrap.appendChild(progress);
-      card.appendChild(progressWrap);
-
-      card.appendChild(this.renderProgressBar(wr.status));
-
-      const cardActions = el('div', { class: 'card-actions' });
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: wr.title }));
+      tr.appendChild(el('td', { text: client?.name || '—' }));
+      tr.appendChild(el('td', { text: wr.priority || '—' }));
+      tr.appendChild(el('td')).appendChild(this.statusBadge(wr.status));
+      tr.appendChild(el('td', { text: wr.dueDate ? formatDate(wr.dueDate) : '—' }));
+      tr.appendChild(el('td', { text: assignedUser?.name || '—' }));
+      const tdAct = el('td');
       const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
       viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
-      cardActions.appendChild(viewBtn);
-      card.appendChild(cardActions);
-
-      grid.appendChild(card);
+      tdAct.appendChild(viewBtn);
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
     });
+    table.appendChild(tbody);
+    container.appendChild(table);
+  },
+
+  refreshBoard(container, wrs) {
+    if (wrs.length === 0) {
+      container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
+      return;
+    }
+    const board = el('div', { class: 'board-view' });
+    const statuses = ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed', 'Cancelled'];
+    statuses.forEach(st => {
+      const col = el('div', { class: 'board-column' });
+      col.appendChild(el('div', { class: 'board-column-header', text: st }));
+      const colWrs = wrs.filter(wr => wr.status === st);
+      colWrs.forEach(wr => {
+        const client = DB.getById('clients', wr.clientId);
+        const card = el('div', { class: 'board-card' });
+        card.appendChild(el('div', { class: 'board-card-title', text: wr.title }));
+        card.appendChild(el('div', { class: 'board-card-meta', text: (client?.name || '—') + ' | Due: ' + (wr.dueDate ? formatDate(wr.dueDate) : '—') }));
+        card.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
+        col.appendChild(card);
+      });
+      board.appendChild(col);
+    });
+    container.appendChild(board);
+  },
+
+  refreshListCompact(container, wrs) {
+    if (wrs.length === 0) {
+      container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
+      return;
+    }
+    const list = el('div', { class: 'list-view' });
+    wrs.forEach(wr => {
+      const client = DB.getById('clients', wr.clientId);
+      const row = el('div', { class: 'list-item' });
+      row.appendChild(el('div', {}, [
+        el('div', { class: 'list-item-title', text: wr.title }),
+        el('div', { class: 'list-item-meta', text: (client?.name || '—') + ' | Due: ' + (wr.dueDate ? formatDate(wr.dueDate) : '—') })
+      ]));
+      row.appendChild(this.statusBadge(wr.status));
+      row.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
+      list.appendChild(row);
+    });
+    container.appendChild(list);
   },
 
   statusBadge(status) {
@@ -188,14 +252,24 @@ const Workflow = {
     const entity = Auth.activeEntity;
     const wr = this.editingId ? DB.getById('workRequests', this.editingId) : null;
     const container = el('div');
-    container.appendChild(el('h2', { text: wr ? 'Edit Work Request' : 'Add Work Request' }));
 
-    const form = el('form', { class: 'form-stacked' });
+    // Header bar
+    const headerBar = el('div', { class: 'form-header-bar' });
+    headerBar.appendChild(el('h2', { text: wr ? 'Edit Work Request' : 'Add Work Request' }));
+    const topActions = el('div', { class: 'form-actions-top' });
+    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Work Request', form: 'wr-form' });
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => { this.view = 'list'; this.editingId = null; App.handleRoute(); });
+    topActions.appendChild(saveBtn);
+    topActions.appendChild(cancelBtn);
+    headerBar.appendChild(topActions);
+    container.appendChild(headerBar);
+
+    const form = el('form', { id: 'wr-form', class: 'form-stacked' });
 
     const fields = [
       { label: 'Title', name: 'title', type: 'text', required: true },
       { label: 'Description', name: 'description', type: 'text' },
-      { label: 'Priority', name: 'priority', type: 'text' },
       { label: 'Due Date', name: 'dueDate', type: 'date' },
     ];
     fields.forEach(f => {
@@ -209,6 +283,24 @@ const Workflow = {
       group.appendChild(input);
       form.appendChild(group);
     });
+
+    // Priority dropdown
+    const priorityGroup = el('div', { class: 'form-group' });
+    priorityGroup.appendChild(el('label', { text: 'Priority' }));
+    const prioritySel = el('select', { name: 'priority' });
+    ['Urgent', 'Priority', 'Low Priority'].forEach(p => {
+      const opt = el('option', { value: p, text: p });
+      if (wr && wr.priority === p) opt.selected = true;
+      prioritySel.appendChild(opt);
+    });
+    // Fallback selection if existing priority doesn't match
+    if (wr && wr.priority && !['Urgent','Priority','Low Priority'].includes(wr.priority)) {
+      const fallbackOpt = el('option', { value: wr.priority, text: wr.priority });
+      fallbackOpt.selected = true;
+      prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
+    }
+    priorityGroup.appendChild(prioritySel);
+    form.appendChild(priorityGroup);
 
     // Client dropdown
     const clientGroup = el('div', { class: 'form-group' });
@@ -284,14 +376,6 @@ const Workflow = {
       this.addTaskRow(tasksList);
     }
     this.updatePredecessorOptions(tasksList);
-
-    const btnGroup = el('div', { class: 'form-group form-actions' });
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Work Request' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { this.view = 'list'; this.editingId = null; App.handleRoute(); });
-    btnGroup.appendChild(saveBtn);
-    btnGroup.appendChild(cancelBtn);
-    form.appendChild(btnGroup);
 
     form.addEventListener('submit', e => { e.preventDefault(); this.submitForm(form); });
 
@@ -383,6 +467,7 @@ const Workflow = {
   },
 
   submitForm(form) {
+    if (!validateRequiredFields(form)) return;
     const data = Object.fromEntries(new FormData(form).entries());
     const entity = Auth.activeEntity;
 
@@ -391,7 +476,7 @@ const Workflow = {
       title: data.title.trim(),
       description: data.description?.trim() || '',
       clientId: data.clientId,
-      priority: data.priority?.trim() || 'Normal',
+      priority: data.priority?.trim() || 'Priority',
       dueDate: data.dueDate || '',
       entity: entity,
       status: this.editingId ? (DB.getById('workRequests', this.editingId)?.status || 'Draft') : 'Draft',
@@ -449,22 +534,41 @@ const Workflow = {
       };
     });
 
-    if (this.editingId) {
-      DB.update('workRequests', this.editingId, record);
-      const existing = DB.getWhere('tasks', t => t.workRequestId === this.editingId);
-      existing.forEach(t => DB.delete('tasks', t.id));
-      taskRecords.forEach(t => {
-        t.workRequestId = this.editingId;
-        DB.insert('tasks', t);
-      });
-    } else {
+    const isNew = !this.editingId;
+    if (isNew) {
       record.id = recordId;
       record.createdAt = now;
-      DB.insert('workRequests', record);
-      taskRecords.forEach(t => {
-        t.workRequestId = record.id;
-        DB.insert('tasks', t);
-      });
+      record.linkedInvoiceId = null;
+      record.linkedDisbursementIds = [];
+      record.linkedTransmittalIds = [];
+    } else {
+      record.id = this.editingId;
+      const existingWr = DB.getById('workRequests', this.editingId);
+      record.linkedInvoiceId = existingWr?.linkedInvoiceId || null;
+      record.linkedDisbursementIds = existingWr?.linkedDisbursementIds || [];
+      record.linkedTransmittalIds = existingWr?.linkedTransmittalIds || [];
+    }
+
+    const result = PendingChanges.submit('workRequests', record, isNew);
+
+    // Tasks are always saved directly (they're child records, not structural mutations per se)
+    if (result.approved) {
+      if (isNew) {
+        taskRecords.forEach(t => {
+          t.workRequestId = record.id;
+          DB.insert('tasks', t);
+        });
+      } else {
+        const existing = DB.getWhere('tasks', t => t.workRequestId === this.editingId);
+        existing.forEach(t => DB.delete('tasks', t.id));
+        taskRecords.forEach(t => {
+          t.workRequestId = this.editingId;
+          DB.insert('tasks', t);
+        });
+      }
+    } else {
+      // When pending, tasks aren't saved yet. In a real system they'd be staged too.
+      // For this prototype, we just let the WR be pending and tasks will be created on approval.
     }
 
     if (data.isRetainer) {
@@ -513,13 +617,16 @@ const Workflow = {
     const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
 
     const container = el('div', { class: 'invoice-detail wide' });
-    
-    // Top actions bar
-    const topActions = el('div', { class: 'actions-bar', style: 'margin-bottom: var(--spacing-lg);' });
+
+    // Header bar
+    const headerBar = el('div', { class: 'form-header-bar', style: 'margin-bottom: var(--spacing-lg);' });
+    headerBar.appendChild(el('h2', { text: wr.title }));
+    const topActions = el('div', { class: 'form-actions-top' });
     const topBackBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
     topBackBtn.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
     topActions.appendChild(topBackBtn);
-    container.appendChild(topActions);
+    headerBar.appendChild(topActions);
+    container.appendChild(headerBar);
 
     container.appendChild(el('h2', { text: wr.title }));
 
@@ -638,6 +745,53 @@ const Workflow = {
     taskTable.appendChild(tbody);
     container.appendChild(taskTable);
 
+    // Related Records Panel
+    const related = el('div', { class: 'related-records' });
+    related.appendChild(el('h3', { text: 'Related Records' }));
+    let hasRelated = false;
+    if (wr.linkedInvoiceId) {
+      const inv = DB.getById('invoices', wr.linkedInvoiceId);
+      if (inv) {
+        hasRelated = true;
+        const item = el('div', { class: 'related-record-item' });
+        item.appendChild(el('span', { text: 'Invoice: ' + inv.invoiceNumber }));
+        const linkBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
+        linkBtn.addEventListener('click', () => { Billing.view = 'detail'; Billing.detailId = inv.id; location.hash = '#billing'; });
+        item.appendChild(linkBtn);
+        related.appendChild(item);
+      }
+    }
+    if (wr.linkedDisbursementIds?.length) {
+      wr.linkedDisbursementIds.forEach(did => {
+        const d = DB.getById('disbursements', did);
+        if (d) {
+          hasRelated = true;
+          const item = el('div', { class: 'related-record-item' });
+          item.appendChild(el('span', { text: 'Disbursement: ' + d.description + ' (' + formatPHP(d.amount) + ')' }));
+          const linkBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
+          linkBtn.addEventListener('click', () => { Disbursement.view = 'detail'; Disbursement.detailId = d.id; location.hash = '#disbursement'; });
+          item.appendChild(linkBtn);
+          related.appendChild(item);
+        }
+      });
+    }
+    if (wr.linkedTransmittalIds?.length) {
+      wr.linkedTransmittalIds.forEach(tid => {
+        const tr = DB.getById('transmittals', tid);
+        if (tr) {
+          hasRelated = true;
+          const item = el('div', { class: 'related-record-item' });
+          item.appendChild(el('span', { text: 'Transmittal: ' + tr.trackingNumber }));
+          const linkBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
+          linkBtn.addEventListener('click', () => { Transmittal.view = 'detail'; Transmittal.detailId = tr.id; location.hash = '#transmittal'; });
+          item.appendChild(linkBtn);
+          related.appendChild(item);
+        }
+      });
+    }
+    if (!hasRelated) related.appendChild(el('p', { class: 'empty-state', text: 'No related records linked.' }));
+    container.appendChild(related);
+
     if (tasks.length > 0) {
       if (!this.selectedTaskId || !tasks.find(t => t.id === this.selectedTaskId)) {
         this.selectedTaskId = tasks[0].id;
@@ -678,6 +832,8 @@ const Workflow = {
       logTable.appendChild(el('thead', {}, [
         el('tr', {}, [
           el('th', { text: 'Date' }),
+          el('th', { text: 'Start' }),
+          el('th', { text: 'End' }),
           el('th', { text: 'Hours' }),
           el('th', { text: 'User' }),
           el('th', { text: 'Note' })
@@ -688,6 +844,8 @@ const Workflow = {
         const user = DB.getById('users', l.userId);
         logBody.appendChild(el('tr', {}, [
           el('td', { text: formatDate(l.date) }),
+          el('td', { text: l.startTime || '—' }),
+          el('td', { text: l.endTime || '—' }),
           el('td', { text: String(l.hours) }),
           el('td', { text: user?.name || l.userId }),
           el('td', { text: l.note || '—' })
@@ -699,12 +857,16 @@ const Workflow = {
 
     const logForm = el('form', { class: 'form-stacked' });
     logForm.appendChild(el('div', { class: 'form-group' }, [
-      el('label', { text: 'Hours *' }),
-      el('input', { type: 'number', name: 'logHours', min: 0.25, step: 0.25, required: true })
-    ]));
-    logForm.appendChild(el('div', { class: 'form-group' }, [
       el('label', { text: 'Date *' }),
       el('input', { type: 'date', name: 'logDate', value: new Date().toISOString().slice(0, 10), required: true })
+    ]));
+    logForm.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Start Time *' }),
+      el('input', { type: 'time', name: 'logStart', required: true })
+    ]));
+    logForm.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'End Time *' }),
+      el('input', { type: 'time', name: 'logEnd', required: true })
     ]));
     logForm.appendChild(el('div', { class: 'form-group' }, [
       el('label', { text: 'Note' }),
@@ -715,10 +877,22 @@ const Workflow = {
     logForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(logForm);
+      const start = fd.get('logStart');
+      const end = fd.get('logEnd');
+      const [sh, sm] = start.split(':').map(Number);
+      const [eh, em] = end.split(':').map(Number);
+      if (eh < sh || (eh === sh && em <= sm)) {
+        alert('End time must be after start time.');
+        return;
+      }
+      const rawHours = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+      const hours = Math.round(rawHours * 4) / 4;
       const entry = {
         userId: Auth.user.id,
-        hours: parseFloat(fd.get('logHours')) || 0,
+        startTime: start,
+        endTime: end,
         date: fd.get('logDate'),
+        hours,
         note: fd.get('logNote') || ''
       };
       const updatedLogs = [...(task.timeLogs || []), entry];
@@ -726,6 +900,53 @@ const Workflow = {
       App.handleRoute();
     });
     section.appendChild(logForm);
+
+    // Task Documents
+    section.appendChild(el('h4', { text: 'Task Documents' }));
+    const docs = task.taskDocuments || [];
+    if (docs.length === 0) {
+      section.appendChild(el('p', { class: 'empty-state', text: 'No documents uploaded.' }));
+    } else {
+      const docList = el('div');
+      docs.forEach(d => {
+        const uploader = DB.getById('users', d.uploaderId);
+        docList.appendChild(el('div', { class: 'card', style: 'margin-bottom:var(--spacing-sm);' }, [
+          el('div', { class: 'kpi-label', text: (d.filename || 'Untitled') + ' • ' + formatDate(d.uploadDate) + ' • ' + (uploader?.name || '—') }),
+          el('div', { text: d.description || '' })
+        ]));
+      });
+      section.appendChild(docList);
+    }
+    const docForm = el('form', { class: 'form-stacked' });
+    docForm.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Select File' }),
+      el('input', { type: 'file', name: 'taskDocFile', required: true })
+    ]));
+    docForm.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Description' }),
+      el('input', { type: 'text', name: 'taskDocDesc' })
+    ]));
+    const docBtn = el('button', { type: 'submit', class: 'btn btn-success', text: 'Upload Document' });
+    docForm.appendChild(docBtn);
+    docForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fileInput = docForm.querySelector('input[name="taskDocFile"]');
+      const descInput = docForm.querySelector('input[name="taskDocDesc"]');
+      const file = fileInput.files[0];
+      if (!file) return;
+      const entry = {
+        filename: file.name,
+        size: file.size,
+        type: file.type,
+        uploadDate: new Date().toISOString().slice(0, 10),
+        uploaderId: Auth.user.id,
+        description: descInput.value || ''
+      };
+      const updatedDocs = [...(task.taskDocuments || []), entry];
+      DB.update('tasks', task.id, { taskDocuments: updatedDocs, updatedAt: new Date().toISOString() });
+      App.handleRoute();
+    });
+    section.appendChild(docForm);
 
     // Comments
     section.appendChild(el('h4', { text: 'Comments' }));
