@@ -225,19 +225,64 @@ const Transmittal = {
   },
 
   renderBoardView(container, items) {
+    if (items.length === 0) {
+      container.appendChild(el('p', { text: 'No transmittals found.', class: 'empty-state' }));
+      return;
+    }
+    const board = el('div', { class: 'board-v2' });
     const statuses = ['Draft', 'Sent', 'Acknowledged'];
-    const board = el('div', { class: 'board-view' });
-    statuses.forEach(status => {
-      const col = el('div', { class: 'board-column' });
-      col.appendChild(el('div', { class: 'board-column-header', text: status }));
-      const statusItems = items.filter(t => t.status === status);
-      statusItems.forEach(t => {
-        const card = el('div', { class: 'board-card' });
-        card.appendChild(el('div', { class: 'board-card-title', text: t.trackingNumber }));
-        card.appendChild(el('div', { class: 'board-card-meta', text: this.getClientName(t.clientId) + ' • ' + String((t.items || []).length) + ' items' }));
+    const statusColors = {
+      'Draft': '#94a3b8',
+      'Sent': '#3b82f6',
+      'Acknowledged': '#10b981'
+    };
+
+    statuses.forEach(st => {
+      const colColor = statusColors[st] || '#cbd5e1';
+      const col = el('div', { class: 'board-column-v2' });
+      col.style.borderTop = `4px solid ${colColor}`;
+      
+      const header = el('div', { class: 'board-column-header-v2' });
+      header.appendChild(el('div', { class: 'board-column-title', text: st }));
+      col.appendChild(header);
+
+      const colItems = items.filter(t => t.status === st);
+      const cardContainer = el('div', { class: 'board-cards-scroll' });
+
+      colItems.forEach(t => {
+        const clientName = this.getClientName(t.clientId);
+        const itemCount = (t.items || []).length;
+
+        const card = el('div', { class: 'board-card-v2' });
+        card.style.borderLeftColor = colColor;
         card.addEventListener('click', () => { this.view = 'detail'; this.detailId = t.id; App.handleRoute(); });
-        col.appendChild(card);
+
+        // Top: Status path and Date
+        const topRow = el('div', { class: 'card-v2-top' });
+        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${t.status} >` }));
+        const date = t.sentAt || t.createdAt;
+        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(date) }));
+        card.appendChild(topRow);
+
+        // Title Row
+        const titleRow = el('div', { class: 'card-v2-title-row' });
+        titleRow.appendChild(el('div', { class: 'card-v2-title', text: t.trackingNumber }));
+        card.appendChild(titleRow);
+
+        // Subtitle: Client and Item Count
+        card.appendChild(el('div', { text: `${clientName} • ${itemCount} items`, style: 'font-size:0.875rem;color:#64748b;margin-bottom:12px;' }));
+
+        // Meta: Details
+        const metaRow = el('div', { class: 'card-v2-meta' });
+        const wr = DB.getById('workRequests', t.workRequestId);
+        if (wr) {
+          metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: wr.title, style: 'font-weight:600;color:#1e293b;font-size:0.75rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }));
+        }
+        card.appendChild(metaRow);
+
+        cardContainer.appendChild(card);
       });
+      col.appendChild(cardContainer);
       board.appendChild(col);
     });
     container.appendChild(board);
