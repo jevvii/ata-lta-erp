@@ -2282,3 +2282,46 @@ tbody tr:hover {
   font-size: 0.75rem;
   border-radius: 4px;
 }
+
+/* Dynamic Route Button */
+.btn-route-dynamic.btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+}
+
+/* Modal Message Wrappers */
+.modal-message-wrapper {
+  padding: var(--spacing-md) 0;
+}
+
+.modal-message-wrapper.type-danger .modal-text {
+  color: var(--color-danger);
+  border-left: 4px solid var(--color-danger);
+  padding-left: var(--spacing-md);
+}
+
+.modal-message-wrapper.type-warning .modal-text {
+  color: var(--color-warning);
+  border-left: 4px solid var(--color-warning);
+  padding-left: var(--spacing-md);
+}
+
+.modal-message-wrapper.type-success .modal-text {
+  color: var(--color-success);
+  border-left: 4px solid var(--color-success);
+  padding-left: var(--spacing-md);
+}
+
+.modal-text {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}

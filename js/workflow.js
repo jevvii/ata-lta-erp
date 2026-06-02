@@ -84,17 +84,17 @@ const Workflow = {
   transitionWorkRequest(wrId) {
     const status = this.getPhaseTransitionStatus(wrId);
     if (!status || !status.canTransition) {
-      alert('Cannot transition phase:\n- ' + (status?.missing.join('\n- ') || 'Requirements not met'));
+      this.showMessage('Routing Error', 'Cannot transition phase:\n- ' + (status?.missing.join('\n- ') || 'Requirements not met'), 'danger');
       return;
     }
 
-    if (confirm(`Transition Work Request to ${status.nextPhase}?`)) {
+    this.showConfirm('Confirm Routing', `Are you sure you want to transition this Work Request to ${status.nextPhase}?`, () => {
       DB.update('workRequests', wrId, { 
         status: status.nextPhase,
         updatedAt: new Date().toISOString()
       });
       App.handleRoute();
-    }
+    }, 'success');
   },
 
   /**
@@ -121,6 +121,39 @@ const Workflow = {
     return overlay;
   },
 
+  showMessage(title, message, type = 'info') {
+    const wrapper = el('div', { class: `modal-message-wrapper type-${type}` });
+    wrapper.appendChild(el('p', { text: message, class: 'modal-text' }));
+    
+    const footer = el('div', { class: 'modal-footer', style: 'margin-top: var(--spacing-lg);' });
+    const okBtn = el('button', { class: 'btn btn-primary', text: 'OK' });
+    footer.appendChild(okBtn);
+    wrapper.appendChild(footer);
+
+    const overlay = this.showModal(title, wrapper);
+    okBtn.addEventListener('click', () => overlay.remove());
+  },
+
+  showConfirm(title, message, onConfirm, type = 'warning') {
+    const wrapper = el('div', { class: `modal-message-wrapper type-${type}` });
+    wrapper.appendChild(el('p', { text: message, class: 'modal-text' }));
+    
+    const footer = el('div', { class: 'modal-footer', style: 'margin-top: var(--spacing-lg); display: flex; gap: var(--spacing-sm); justify-content: flex-end;' });
+    const cancelBtn = el('button', { class: 'btn btn-ghost', text: 'Cancel' });
+    const confirmBtn = el('button', { class: `btn ${type === 'danger' ? 'btn-danger' : 'btn-primary'}`, text: 'Confirm' });
+    
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    wrapper.appendChild(footer);
+
+    const overlay = this.showModal(title, wrapper);
+    cancelBtn.addEventListener('click', () => overlay.remove());
+    confirmBtn.addEventListener('click', () => {
+      overlay.remove();
+      if (onConfirm) onConfirm();
+    });
+  },
+
   render() {
     const container = el('div', { class: 'page' });
     
@@ -138,14 +171,6 @@ const Workflow = {
       
       const actions = el('div', { class: 'title-bar-actions' });
       if (isManagerial && wr) {
-        const transitionStatus = this.getPhaseTransitionStatus(wr.id);
-        if (transitionStatus && transitionStatus.nextPhase && transitionStatus.nextPhase !== 'Cancelled') {
-          const routeBtn = el('button', { class: 'btn btn-success btn-sm', text: `Route to ${transitionStatus.nextPhase}`, style: 'margin-right: var(--spacing-sm);' });
-          if (!transitionStatus.canTransition) routeBtn.classList.add('btn-disabled');
-          routeBtn.addEventListener('click', () => { this.transitionWorkRequest(wr.id); });
-          actions.appendChild(routeBtn);
-        }
-
         const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
         addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
         actions.appendChild(addBtn);
@@ -683,7 +708,7 @@ const Workflow = {
 
   loadTemplateTasks(templateId, container) {
     if (!templateId) {
-      alert('Please select a retainer template first.');
+      this.showMessage('Error', 'Please select a retainer template first.', 'danger');
       return;
     }
     const template = DB.getById('retainerTemplates', templateId);
@@ -731,7 +756,7 @@ const Workflow = {
       predecessors: t.predecessorKey ? [t.predecessorKey] : []
     }));
     if (this.detectCycle(cycleCheck)) {
-      alert('Task dependencies contain a cycle. Please fix before saving.');
+      this.showMessage('Dependency Error', 'Task dependencies contain a cycle. Please fix before saving.', 'danger');
       return;
     }
 
@@ -894,6 +919,24 @@ const Workflow = {
       const groupHeader = el('div', { class: 'task-group-header' });
       groupHeader.appendChild(el('span', { text: groupName }));
       groupHeader.appendChild(el('span', { class: 'task-group-count', text: ` — ${groupTasks.length} tasks` }));
+
+      // Moved Route Button here
+      if (isManagerial && wr) {
+        const ts = this.getPhaseTransitionStatus(wr.id);
+        if (ts && ts.nextPhase && ts.nextPhase !== 'Cancelled') {
+          const routeBtn = el('button', { 
+            class: `btn btn-sm btn-route-dynamic ${ts.canTransition ? 'btn-success' : 'btn-ghost btn-disabled'}`, 
+            text: `Route to ${ts.nextPhase}`,
+            style: 'margin-left: auto;' 
+          });
+          routeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.transitionWorkRequest(wr.id);
+          });
+          groupHeader.appendChild(routeBtn);
+        }
+      }
+
       groupEl.appendChild(groupHeader);
 
       const table = el('table', { class: 'task-table-v2' });
@@ -959,12 +1002,29 @@ const Workflow = {
         statusSel.style.color = sColors[t.status] || '#1e293b';
 
         statusSel.addEventListener('change', () => {
-          const res = this.updateTaskStatus(t.id, statusSel.value);
-          if (res.error) {
-            alert(res.error);
-            statusSel.value = t.status;
+          const newStatus = statusSel.value;
+          if (newStatus === 'Completed' || newStatus === 'Cancelled') {
+            this.showConfirm('Confirm Status Change', 
+              `Are you sure you want to mark this task as "${newStatus}"? This may affect dependencies and routing.`, 
+              () => {
+                const res = this.updateTaskStatus(t.id, newStatus);
+                if (res.error) {
+                  this.showMessage('Error', res.error, 'danger');
+                  statusSel.value = t.status;
+                } else {
+                  App.handleRoute();
+                }
+              }, 
+              newStatus === 'Cancelled' ? 'danger' : 'warning'
+            );
           } else {
-            App.handleRoute();
+            const res = this.updateTaskStatus(t.id, newStatus);
+            if (res.error) {
+              this.showMessage('Error', res.error, 'danger');
+              statusSel.value = t.status;
+            } else {
+              App.handleRoute();
+            }
           }
         });
 
@@ -1347,7 +1407,7 @@ const Workflow = {
       const [sh, sm] = start.split(':').map(Number);
       const [eh, em] = end.split(':').map(Number);
       if (eh < sh || (eh === sh && em <= sm)) {
-        alert('End time must be after start time.');
+        this.showMessage('Routing Error', 'End time must be after start time.', 'danger');
         return;
       }
       const hours = Math.round(((eh * 60 + em) - (sh * 60 + sm)) / 60 * 4) / 4;
@@ -1363,7 +1423,7 @@ const Workflow = {
       // Guard: prevent double time log for the same day
       const alreadyLogged = (task.timeLogs || []).some(l => l.date === entry.date && l.userId === Auth.user.id);
       if (alreadyLogged) {
-        alert('You have already logged time for this task today.');
+        this.showMessage('Warning', 'You have already logged time for this task today.', 'warning');
         return;
       }
 
@@ -1848,7 +1908,7 @@ const Workflow = {
       predecessors: t.predecessorKey ? [t.predecessorKey] : []
     }));
     if (this.detectCycle(cycleCheck)) {
-      alert('Template tasks contain a cycle. Please fix before saving.');
+      this.showMessage('Dependency Error', 'Template tasks contain a cycle. Please fix before saving.', 'danger');
       return;
     }
 
