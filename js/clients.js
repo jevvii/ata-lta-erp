@@ -8,7 +8,25 @@ const Clients = {
 
   render() {
     const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Clients' }));
+    
+    if (this.editingId) {
+      const c = DB.getById('clients', this.editingId);
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'breadcrumb-h1' });
+      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Clients' });
+      baseLink.addEventListener('click', () => { this.editingId = null; App.handleRoute(); });
+      h1.appendChild(baseLink);
+      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+      h1.appendChild(document.createTextNode(c?.name || 'New Client'));
+      titleBar.appendChild(h1);
+      
+      const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
+      backBtn.addEventListener('click', () => { this.editingId = null; App.handleRoute(); });
+      titleBar.appendChild(backBtn);
+      container.appendChild(titleBar);
+    } else {
+      container.appendChild(el('h1', { text: 'Clients' }));
+    }
 
     const actions = el('div', { class: 'actions-bar' });
 

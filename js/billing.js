@@ -10,7 +10,25 @@ const Billing = {
 
   render() {
     const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Billing' }));
+    
+    if (this.view === 'detail' && this.detailId) {
+      const inv = DB.getById('invoices', this.detailId);
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'breadcrumb-h1' });
+      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Billing' });
+      baseLink.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+      h1.appendChild(baseLink);
+      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+      h1.appendChild(document.createTextNode(inv?.invoiceNumber || 'Detail'));
+      titleBar.appendChild(h1);
+      
+      const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to Invoices' });
+      backBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+      titleBar.appendChild(backBtn);
+      container.appendChild(titleBar);
+    } else {
+      container.appendChild(el('h1', { text: 'Billing' }));
+    }
 
     if (this.view === 'list') container.appendChild(this.renderList());
     else if (this.view === 'form') container.appendChild(this.renderForm());
@@ -182,23 +200,69 @@ const Billing = {
       container.appendChild(el('p', { text: 'No invoices found.', class: 'empty-state' }));
       return;
     }
-    const board = el('div', { class: 'board-view' });
+    const board = el('div', { class: 'board-v2' });
     const statuses = ['Draft', 'Sent', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
+    const statusColors = {
+      'Draft': '#94a3b8',
+      'Sent': '#3b82f6',
+      'Partially Paid': '#f59e0b',
+      'Paid': '#10b981',
+      'Overdue': '#ef4444',
+      'Cancelled': '#64748b'
+    };
+
     statuses.forEach(st => {
-      const col = el('div', { class: 'board-column' });
-      col.appendChild(el('div', { class: 'board-column-header', text: st }));
+      const colColor = statusColors[st] || '#cbd5e1';
+      const col = el('div', { class: 'board-column-v2' });
+      col.style.borderTop = `4px solid ${colColor}`;
+      
+      const header = el('div', { class: 'board-column-header-v2' });
+      header.appendChild(el('div', { class: 'board-column-title', text: st }));
+      col.appendChild(header);
+
       const colInvs = invoices.filter(inv => inv.status === st);
+      const cardContainer = el('div', { class: 'board-cards-scroll' });
+
       colInvs.forEach(inv => {
         const client = DB.getById('clients', inv.clientId);
         const paid = this.getPaidAmount(inv);
         const balance = inv.total - paid;
-        const card = el('div', { class: 'board-card' });
-        card.appendChild(el('div', { class: 'board-card-title', text: inv.invoiceNumber }));
-        card.appendChild(el('div', { class: 'board-card-meta', text: (client?.name || '—') + ' | Total: ' + formatPHP(inv.total) }));
-        card.appendChild(el('div', { class: 'board-card-meta', text: 'Paid: ' + formatPHP(paid) + ' | Bal: ' + formatPHP(balance), style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+        const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
+
+        const card = el('div', { class: 'board-card-v2' });
+        card.style.borderLeftColor = colColor;
         card.addEventListener('click', () => { this.view = 'detail'; this.detailId = inv.id; App.handleRoute(); });
-        col.appendChild(card);
+
+        // Top: Info path and Issue Date
+        const topRow = el('div', { class: 'card-v2-top' });
+        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${inv.status} >` }));
+        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(inv.issueDate) }));
+        card.appendChild(topRow);
+
+        // Title Row
+        const titleRow = el('div', { class: 'card-v2-title-row' });
+        titleRow.appendChild(el('div', { class: 'card-v2-title', text: inv.invoiceNumber }));
+        card.appendChild(titleRow);
+
+        // Client info
+        card.appendChild(el('div', { text: client?.name || '—', style: 'font-size:0.875rem;color:#64748b;margin-bottom:12px;' }));
+
+        // Meta: Progress and Financials
+        const metaRow = el('div', { class: 'card-v2-meta' });
+        const metaLeft = el('div', { class: 'card-v2-meta-left' });
+        
+        const progBar = el('div', { class: 'card-v2-progress' });
+        progBar.appendChild(el('div', { class: 'card-v2-progress-fill', style: `width: ${progress}%; background-color: ${colColor};` }));
+        metaLeft.appendChild(progBar);
+        metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${progress}%` }));
+        metaRow.appendChild(metaLeft);
+
+        metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(inv.total), style: 'font-weight:700;color:#1e293b;' }));
+        card.appendChild(metaRow);
+
+        cardContainer.appendChild(card);
       });
+      col.appendChild(cardContainer);
       board.appendChild(col);
     });
     container.appendChild(board);

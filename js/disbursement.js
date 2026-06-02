@@ -10,7 +10,25 @@ const Disbursement = {
 
   render() {
     const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Disbursement' }));
+    
+    if (this.view === 'detail' && this.detailId) {
+      const d = DB.getById('disbursements', this.detailId);
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'breadcrumb-h1' });
+      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Disbursement' });
+      baseLink.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+      h1.appendChild(baseLink);
+      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+      h1.appendChild(document.createTextNode(d?.description || 'Detail'));
+      titleBar.appendChild(h1);
+      
+      const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
+      backBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+      titleBar.appendChild(backBtn);
+      container.appendChild(titleBar);
+    } else {
+      container.appendChild(el('h1', { text: 'Disbursement' }));
+    }
 
     if (this.view === 'list') container.appendChild(this.renderList());
     else if (this.view === 'form') container.appendChild(this.renderForm());
@@ -33,25 +51,12 @@ const Disbursement = {
     return item.employeeId || item.requestedBy;
   },
 
-  getViewMode() {
-    const key = 'erp_preferred_view_disbursement';
-    const stored = localStorage.getItem(key);
-    return stored === 'table' || stored === 'board' || stored === 'list' ? stored : 'table';
-  },
-
-  setViewMode(mode) {
-    const key = 'erp_preferred_view_disbursement';
-    if (mode === 'table' || mode === 'board' || mode === 'list') {
-      localStorage.setItem(key, mode);
-    }
-  },
-
   // ============================================================
   // List View
   // ============================================================
   renderList() {
     const entity = Auth.activeEntity;
-    this.listViewMode = this.getViewMode();
+    const viewMode = App.getPreferredViewMode('disbursement');
 
     const actions = el('div', { class: 'actions-bar' });
     const addBtn = el('button', { class: 'btn btn-primary', text: 'File Expense' });
@@ -116,14 +121,12 @@ const Disbursement = {
     wrapper.appendChild(filtersBar);
 
     // View mode toggle
-    const viewToggle = el('div', { class: 'view-mode-toggle' });
+    const viewToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom: var(--spacing-md);' });
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { text: label });
-      if (this.listViewMode === mode) btn.classList.add('active');
+      const btn = el('button', { text: label, class: viewMode === mode ? 'active' : '' });
       btn.addEventListener('click', () => {
-        this.setViewMode(mode);
-        this.listViewMode = mode;
-        this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
+        App.setPreferredViewMode('disbursement', mode);
+        App.handleRoute();
       });
       viewToggle.appendChild(btn);
     });
@@ -132,23 +135,20 @@ const Disbursement = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
-    [wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', updateFilters));
-    // Also re-render on view mode change
+    const refresh = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value, viewMode);
+    [wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', refresh));
 
-    this.refreshList(listContainer, '', '', '', '', '', '', '');
+    refresh();
 
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo) {
+  refreshList(container, wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo, viewMode) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
     let items = DB.getWhere('disbursements', d => d.entity === entity);
 
-    if (wrFilter) {
-      items = items.filter(d => d.linkedWorkRequestId === wrFilter);
-    }
+    if (wrFilter) items = items.filter(d => d.linkedWorkRequestId === wrFilter);
     if (clientFilter) {
       items = items.filter(d => {
         if (!d.linkedWorkRequestId) return false;
@@ -156,9 +156,7 @@ const Disbursement = {
         return wr && wr.clientId === clientFilter;
       });
     }
-    if (empFilter) {
-      items = items.filter(d => this.getEmployeeId(d) === empFilter);
-    }
+    if (empFilter) items = items.filter(d => this.getEmployeeId(d) === empFilter);
     if (fundFilter) items = items.filter(d => this.getFundSource(d) === fundFilter);
     if (statusFilter) items = items.filter(d => d.status === statusFilter);
     if (dateFrom) {
@@ -178,9 +176,9 @@ const Disbursement = {
       return;
     }
 
-    if (this.listViewMode === 'table') {
+    if (viewMode === 'table') {
       this.renderTableView(container, items);
-    } else if (this.listViewMode === 'board') {
+    } else if (viewMode === 'board') {
       this.renderBoardView(container, items);
     } else {
       this.renderCompactListView(container, items);
@@ -223,24 +221,62 @@ const Disbursement = {
   },
 
   renderBoardView(container, items) {
+    if (items.length === 0) {
+      container.appendChild(el('p', { text: 'No expenses found.', class: 'empty-state' }));
+      return;
+    }
+    const board = el('div', { class: 'board-v2' });
     const statuses = ['Draft', 'Submitted', 'Under Review', 'Approved', 'Released', 'Rejected'];
-    const board = el('div', { class: 'board-view' });
-    statuses.forEach(status => {
-      const col = el('div', { class: 'board-column' });
-      col.appendChild(el('div', { class: 'board-column-header', text: status }));
-      const statusItems = items.filter(d => d.status === status);
-      statusItems.forEach(d => {
+    const statusColors = {
+      'Draft': '#94a3b8',
+      'Submitted': '#3b82f6',
+      'Under Review': '#f59e0b',
+      'Approved': '#10b981',
+      'Released': '#6366f1',
+      'Rejected': '#ef4444'
+    };
+
+    statuses.forEach(st => {
+      const colColor = statusColors[st] || '#cbd5e1';
+      const col = el('div', { class: 'board-column-v2' });
+      col.style.borderTop = `4px solid ${colColor}`;
+      
+      const header = el('div', { class: 'board-column-header-v2' });
+      header.appendChild(el('div', { class: 'board-column-title', text: st }));
+      col.appendChild(header);
+
+      const colItems = items.filter(d => d.status === st);
+      const cardContainer = el('div', { class: 'board-cards-scroll' });
+
+      colItems.forEach(d => {
         const emp = DB.getById('users', this.getEmployeeId(d));
-        const card = el('div', { class: 'board-card' });
-        card.appendChild(el('div', { class: 'board-card-title', text: d.category + ' — ' + formatPHP(d.amount) }));
-        let metaText = (emp?.name || '—') + ' • ' + formatDate(d.submittedAt);
-        if (d.status === 'Released' && d.paymentDetails?.method) {
-          metaText += ' • ' + d.paymentDetails.method;
-        }
-        card.appendChild(el('div', { class: 'board-card-meta', text: metaText }));
+        const card = el('div', { class: 'board-card-v2' });
+        card.style.borderLeftColor = colColor;
         card.addEventListener('click', () => { this.view = 'detail'; this.detailId = d.id; App.handleRoute(); });
-        col.appendChild(card);
+
+        // Top: Status path and Date
+        const topRow = el('div', { class: 'card-v2-top' });
+        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${d.status} >` }));
+        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(d.submittedAt) }));
+        card.appendChild(topRow);
+
+        // Title Row
+        const titleRow = el('div', { class: 'card-v2-title-row' });
+        titleRow.appendChild(el('div', { class: 'card-v2-title', text: d.category }));
+        card.appendChild(titleRow);
+
+        // Subtitle: Employee and Fund
+        const source = this.getFundSource(d);
+        card.appendChild(el('div', { text: `${emp?.name || '—'} • ${source}`, style: 'font-size:0.875rem;color:#64748b;margin-bottom:12px;' }));
+
+        // Meta: Financials
+        const metaRow = el('div', { class: 'card-v2-meta' });
+        metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(d.amount), style: 'font-weight:700;color:#1e293b;font-size:1.125rem;' }));
+        card.appendChild(metaRow);
+
+        cardContainer.appendChild(card);
       });
+      col.appendChild(cardContainer);
       board.appendChild(col);
     });
     container.appendChild(board);

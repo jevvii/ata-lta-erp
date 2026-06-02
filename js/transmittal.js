@@ -11,7 +11,25 @@ const Transmittal = {
   render() {
     this.listViewMode = App.getPreferredViewMode('transmittals');
     const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Transmittal' }));
+    
+    if (this.view === 'detail' && this.detailId) {
+      const t = DB.getById('transmittals', this.detailId);
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'breadcrumb-h1' });
+      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Transmittal' });
+      baseLink.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+      h1.appendChild(baseLink);
+      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+      h1.appendChild(document.createTextNode(t?.trackingNumber || 'Detail'));
+      titleBar.appendChild(h1);
+      
+      const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
+      backBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
+      titleBar.appendChild(backBtn);
+      container.appendChild(titleBar);
+    } else {
+      container.appendChild(el('h1', { text: 'Transmittal' }));
+    }
 
     if (this.view === 'list') container.appendChild(this.renderList());
     else if (this.view === 'form') container.appendChild(this.renderForm());
@@ -103,14 +121,12 @@ const Transmittal = {
     wrapper.appendChild(filtersBar);
 
     // View mode toggle
-    const viewToggle = el('div', { class: 'view-mode-toggle' });
+    const viewToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom:var(--spacing-md);' });
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { text: label });
-      if (this.listViewMode === mode) btn.classList.add('active');
+      const btn = el('button', { text: label, class: this.listViewMode === mode ? 'active' : '' });
       btn.addEventListener('click', () => {
         App.setPreferredViewMode('transmittals', mode);
-        this.listViewMode = mode;
-        this.refreshList(listContainer, wrFilter.value, clientFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
+        App.handleRoute();
       });
       viewToggle.appendChild(btn);
     });
@@ -122,7 +138,7 @@ const Transmittal = {
     const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
     [wrFilter, clientFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', updateFilters));
 
-    this.refreshList(listContainer, '', '', '', '', '');
+    this.refreshList(listContainer, wrFilter.value, clientFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
     return wrapper;
   },
 

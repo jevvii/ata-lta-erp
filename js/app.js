@@ -155,6 +155,7 @@ const App = {
     };
     const module = moduleMap[hash];
     const content = document.getElementById('content');
+
     if (module && module.render) {
       content.innerHTML = '';
       const rendered = module.render();
@@ -179,12 +180,16 @@ const App = {
   getPreferredViewMode(module) {
     const key = `erp_preferred_view_${module}`;
     const stored = localStorage.getItem(key);
-    return stored === 'list' || stored === 'table' || stored === 'board' ? stored : 'list';
+    if (module === 'operations' || module === 'billing' || module === 'disbursement') {
+      if (!stored || stored === 'card') return 'board';
+    }
+    if (stored === 'list' || stored === 'table' || stored === 'board') return stored;
+    return 'list';
   },
 
   setPreferredViewMode(module, mode) {
     const key = `erp_preferred_view_${module}`;
-    if (mode === 'list' || mode === 'grid' || mode === 'table' || mode === 'board') {
+    if (mode === 'list' || mode === 'table' || mode === 'board') {
       localStorage.setItem(key, mode);
     }
   }

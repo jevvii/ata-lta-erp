@@ -36,7 +36,33 @@ const Workflow = {
 
   render() {
     const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Operations' }));
+    
+    if (this.view === 'detail' && this.detailWrId) {
+      const wr = DB.getById('workRequests', this.detailWrId);
+      const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'breadcrumb-h1' });
+      const opLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Operations' });
+      opLink.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
+      h1.appendChild(opLink);
+      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+      h1.appendChild(document.createTextNode(wr?.title || 'Detail'));
+      titleBar.appendChild(h1);
+      
+      const actions = el('div', { class: 'title-bar-actions' });
+      if (isManagerial && wr) {
+        const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
+        addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
+        actions.appendChild(addBtn);
+      }
+      const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
+      backBtn.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
+      actions.appendChild(backBtn);
+      titleBar.appendChild(actions);
+      container.appendChild(titleBar);
+    } else {
+      container.appendChild(el('h1', { text: 'Operations' }));
+    }
 
     if (this.view === 'list') {
       container.appendChild(this.renderList());
@@ -116,7 +142,7 @@ const Workflow = {
     wrapper.appendChild(filters);
 
     // View mode toggle
-    const viewMode = App.getPreferredViewMode('operations') || 'table';
+    const viewMode = App.getPreferredViewMode('operations');
     const vmToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom:var(--spacing-md);' });
     const vmTable = el('button', { text: 'Table', class: viewMode === 'table' ? 'active' : '' });
     const vmBoard = el('button', { text: 'Board', class: viewMode === 'board' ? 'active' : '' });
@@ -196,20 +222,96 @@ const Workflow = {
       container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
       return;
     }
-    const board = el('div', { class: 'board-view' });
+    const board = el('div', { class: 'board-v2' });
     const statuses = ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed', 'Cancelled'];
+    const statusColors = {
+      'Draft': '#94a3b8',
+      'Pre-processing': '#3b82f6',
+      'Processing': '#f59e0b',
+      'Billing': '#a855f7',
+      'Disbursement': '#6366f1',
+      'Completed': '#10b981',
+      'Cancelled': '#ef4444'
+    };
+
     statuses.forEach(st => {
-      const col = el('div', { class: 'board-column' });
-      col.appendChild(el('div', { class: 'board-column-header', text: st }));
+      const colColor = statusColors[st] || '#cbd5e1';
+      const col = el('div', { class: 'board-column-v2' });
+      col.style.borderTop = `4px solid ${colColor}`;
+      
+      const header = el('div', { class: 'board-column-header-v2' });
+      header.appendChild(el('div', { class: 'board-column-title', text: st }));
+      col.appendChild(header);
+
       const colWrs = wrs.filter(wr => wr.status === st);
+      const cardContainer = el('div', { class: 'board-cards-scroll' });
+
       colWrs.forEach(wr => {
-        const client = DB.getById('clients', wr.clientId);
-        const card = el('div', { class: 'board-card' });
-        card.appendChild(el('div', { class: 'board-card-title', text: wr.title }));
-        card.appendChild(el('div', { class: 'board-card-meta', text: (client?.name || '—') + ' | Due: ' + (wr.dueDate ? formatDate(wr.dueDate) : '—') }));
+        const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
+        const completedTasks = tasks.filter(t => t.status === 'Completed').length;
+        const totalTasks = tasks.length;
+        const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        
+        const allComments = tasks.reduce((acc, t) => acc + (t.comments?.length || 0), 0);
+        const allDocs = tasks.reduce((acc, t) => acc + (t.taskDocuments?.length || 0), 0);
+
+        const assigneeIds = [...new Set(tasks.map(t => t.assigneeId || t.assignedTo).filter(Boolean))];
+        const assignees = assigneeIds.map(id => DB.getById('users', id)).filter(Boolean);
+
+        const card = el('div', { class: 'board-card-v2' });
+        card.style.borderLeftColor = colColor;
         card.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
-        col.appendChild(card);
+
+        // Top: Priority path and Due Date
+        const topRow = el('div', { class: 'card-v2-top' });
+        const categoryPath = el('span', { class: 'card-v2-category', text: `${wr.priority} >` });
+        topRow.appendChild(categoryPath);
+        if (wr.dueDate) {
+          topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(wr.dueDate) }));
+        }
+        card.appendChild(topRow);
+
+        // Middle: Title and Checkbox placeholder
+        const titleRow = el('div', { class: 'card-v2-title-row' });
+        const checkbox = el('div', { class: 'card-v2-checkbox' });
+        if (wr.status === 'Completed') checkbox.classList.add('checked');
+        titleRow.appendChild(checkbox);
+        titleRow.appendChild(el('div', { class: 'card-v2-title', text: wr.title }));
+        card.appendChild(titleRow);
+
+        // Metadata: Progress, Doc count, Comment count, Avatars
+        const metaRow = el('div', { class: 'card-v2-meta' });
+        const metaLeft = el('div', { class: 'card-v2-meta-left' });
+        
+        if (totalTasks > 0) {
+          const progBar = el('div', { class: 'card-v2-progress' });
+          progBar.appendChild(el('div', { class: 'card-v2-progress-fill', style: `width: ${progress}%; background-color: ${colColor};` }));
+          metaLeft.appendChild(progBar);
+          metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${progress}%` }));
+        }
+
+        if (allDocs > 0) {
+          metaLeft.appendChild(el('span', { class: 'card-v2-meta-icon', text: `📎 ${allDocs}` }));
+        }
+        if (allComments > 0) {
+          metaLeft.appendChild(el('span', { class: 'card-v2-meta-icon', text: `💬 ${allComments}` }));
+        }
+        metaRow.appendChild(metaLeft);
+
+        const avatars = el('div', { class: 'card-v2-avatars' });
+        assignees.slice(0, 3).forEach(u => {
+          const av = el('div', { class: 'avatar-xs' });
+          if (u.avatarUrl) av.style.backgroundImage = `url('${u.avatarUrl}')`;
+          avatars.appendChild(av);
+        });
+        metaRow.appendChild(avatars);
+        card.appendChild(metaRow);
+
+        cardContainer.appendChild(card);
       });
+
+      col.appendChild(cardContainer);
+      
       board.appendChild(col);
     });
     container.appendChild(board);
@@ -627,9 +729,6 @@ const Workflow = {
     App.handleRoute();
   },
 
-  // ============================================================
-  // Detail View
-  // ============================================================
   renderDetail() {
     const wr = DB.getById('workRequests', this.detailWrId);
     if (!wr) {
@@ -639,406 +738,408 @@ const Workflow = {
     }
     const client = DB.getById('clients', wr.clientId);
     const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
+    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
 
-    const container = el('div', { class: 'invoice-detail wide' });
+    const container = el('div', { class: 'project-detail-v2' });
 
-    // Header bar
-    const headerBar = el('div', { class: 'form-header-bar', style: 'margin-bottom: var(--spacing-lg);' });
-    headerBar.appendChild(el('h2', { text: wr.title }));
-    const topActions = el('div', { class: 'form-actions-top' });
-    const topBackBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
-    topBackBtn.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
-    topActions.appendChild(topBackBtn);
-    headerBar.appendChild(topActions);
-    container.appendChild(headerBar);
-
-    container.appendChild(el('h2', { text: wr.title }));
-
-    const meta = el('div', { class: 'wr-meta' });
-    meta.appendChild(el('span', { text: 'Client: ' + (client?.name || '—') }));
-    meta.appendChild(el('span', { text: 'Status: ' + wr.status }));
-    meta.appendChild(el('span', { text: 'Priority: ' + (wr.priority || 'Normal') }));
-    container.appendChild(meta);
-
-    container.appendChild(this.renderProgressBar(wr.status));
-
-    const tasksHeader = el('div', { class: 'section-header' });
-    tasksHeader.appendChild(el('h3', { text: 'Tasks' }));
-    container.appendChild(tasksHeader);
-
-    const taskTable = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Task', 'Assignee', 'Dependencies', 'Status', 'Due', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    taskTable.appendChild(thead);
-
-    const tbody = el('tbody');
+    // Beautified Sub-Header
+    const subHeader = el('div', { class: 'detail-sub-header-v2' });
     
-    const taskMap = {};
-    const dependentsMap = {};
-    tasks.forEach(t => taskMap[t.id] = t);
-    tasks.forEach(t => {
-      const preds = t.predecessors || t.dependencies || [];
-      preds.forEach(pid => {
-        if (!dependentsMap[pid]) dependentsMap[pid] = [];
-        dependentsMap[pid].push(t);
-      });
+    const infoItems = [
+      { label: 'Client', value: client?.name || '—' },
+      { label: 'Status', value: wr.status },
+      { label: 'Priority', value: wr.priority || 'Normal' }
+    ];
+
+    infoItems.forEach(item => {
+      const div = el('div', { class: 'detail-info-item' });
+      div.appendChild(el('span', { class: 'detail-info-label', text: item.label }));
+      div.appendChild(el('span', { class: 'detail-info-value', text: item.value }));
+      subHeader.appendChild(div);
+    });
+    container.appendChild(subHeader);
+
+    // Modern Centered Progress Indicator
+    container.appendChild(this.renderModernProgressBar(wr.status));
+
+    // Task List (Grouped table design)
+    const listWrapper = el('div', { class: 'task-list-v2' });
+    
+    // Default Sorting: Priority > Due Date > Completed at bottom
+    const sortedTasks = [...tasks].sort((a, b) => {
+      const aComp = a.status === 'Completed' ? 1 : 0;
+      const bComp = b.status === 'Completed' ? 1 : 0;
+      if (aComp !== bComp) return aComp - bComp;
+
+      const pMap = { 'Urgent': 3, 'Priority': 2, 'Low Priority': 1, 'Normal': 0 };
+      const aP = pMap[a.priority] || 0;
+      const bP = pMap[b.priority] || 0;
+      if (aP !== bP) return bP - aP;
+
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
     });
 
-    tasks.forEach(t => {
-      const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
-      const isAssignee = (t.assigneeId || t.assignedTo) === Auth.user?.id;
-      const isDocStaff = Auth.user?.name?.toLowerCase().includes('documentation') ||
-                         Auth.user?.email?.toLowerCase().startsWith('docs@');
-      const sameEntity = wr.entity?.toUpperCase() === Auth.activeEntity;
-      const canAddTimeLog = isAssignee;
-      const canAddDocument = isAssignee || (isDocStaff && sameEntity);
+    const isDocStaff = Auth.user?.name?.toLowerCase().includes('documentation') ||
+                       Auth.user?.email?.toLowerCase().startsWith('docs@');
 
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.title }));
+    const groups = { 'General Tasks': sortedTasks };
+    for (const [groupName, groupTasks] of Object.entries(groups)) {
+      const groupEl = el('div', { class: 'task-group-v2' });
+      const groupHeader = el('div', { class: 'task-group-header' });
+      groupHeader.appendChild(el('span', { text: groupName }));
+      groupHeader.appendChild(el('span', { class: 'task-group-count', text: ` — ${groupTasks.length} tasks` }));
+      groupEl.appendChild(groupHeader);
 
-      const assigneeTd = el('td');
-      const assigneeWrap = el('div', { class: 'assignee-chip' });
-      if (assignee && assignee.avatarUrl) {
-          const av = el('div', { class: 'avatar-sm' });
-          av.style.backgroundImage = `url('${assignee.avatarUrl}')`;
-          assigneeWrap.appendChild(av);
-      }
-      assigneeWrap.appendChild(document.createTextNode(assignee?.name || '—'));
-      assigneeTd.appendChild(assigneeWrap);
-      tr.appendChild(assigneeTd);
-
-      const depTd = el('td');
-      const preds = t.predecessors || t.dependencies || [];
-      const predWrap = el('div', { class: 'dependency-list' });
-      predWrap.appendChild(el('div', { class: 'dependency-label', text: 'Predecessors' }));
-      if (preds.length === 0) {
-        predWrap.appendChild(el('div', { class: 'dependency-item predecessor-completed', text: 'None' }));
-      } else {
-        preds.forEach(pid => {
-          const predTask = taskMap[pid];
-          const status = predTask?.status || 'Pending';
-          const cls = status === 'Completed'
-            ? 'predecessor-completed'
-            : status === 'Cancelled'
-              ? 'predecessor-cancelled'
-              : 'predecessor-pending';
-          predWrap.appendChild(el('div', { class: 'dependency-item ' + cls, text: predTask?.title || pid }));
-        });
-      }
-      depTd.appendChild(predWrap);
-
-      const dependents = dependentsMap[t.id] || [];
-      const depWrap = el('div', { class: 'dependency-list' });
-      depWrap.appendChild(el('div', { class: 'dependency-label', text: 'Dependents' }));
-      if (dependents.length === 0) {
-        depWrap.appendChild(el('div', { class: 'dependency-item predecessor-completed', text: 'None' }));
-      } else {
-        dependents.forEach(dep => {
-          depWrap.appendChild(el('div', { class: 'dependency-item', text: dep.title }));
-        });
-      }
-      depTd.appendChild(depWrap);
-      tr.appendChild(depTd);
-
-      tr.appendChild(el('td', { text: t.status }));
-      tr.appendChild(el('td', { text: t.dueDate ? formatDate(t.dueDate) : '—' }));
-      const tdAct = el('td');
-
-      const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
-      const isMyTask = (t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id);
-      const canUpdate = !isManagerial && isMyTask; // Admins/Managers can't update, Staff can only update their own.
-
-      const statusSel = el('select', { class: 'task-status-sel' });
-      const validStatuses = this.getValidNextStatuses(t);
-      ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'].forEach(s => {
-        const opt = el('option', { value: s, text: s });
-        if (s === t.status) opt.selected = true;
-        if (!validStatuses.includes(s) || !canUpdate) opt.disabled = true;
-        statusSel.appendChild(opt);
+      const table = el('table', { class: 'task-table-v2' });
+      const thead = el('thead');
+      const thr = el('tr');
+      ['Task', 'Assigned To', 'Due Date', 'Progress Status', 'Priority', 'Est. Amount', 'Hours'].forEach(h => {
+        thr.appendChild(el('th', { text: h }));
       });
-      statusSel.disabled = !canUpdate;
-      
-      statusSel.addEventListener('change', () => {
-        const res = this.updateTaskStatus(t.id, statusSel.value);
-        if (res.error) {
-          alert(res.error);
-          statusSel.value = t.status;
-        } else {
-          App.handleRoute();
-        }
-      });
-      tdAct.appendChild(statusSel);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+      thead.appendChild(thr);
+      table.appendChild(thead);
 
-      // Expandable inline row: documents, time logs today, comments (accordion)
-      const expandTr = el('tr', { class: 'task-expand' });
-      const expandTd = el('td', { colspan: 6 });
-      const expandInner = el('div', { class: 'task-expand-inner' });
+      const tbody = el('tbody');
+      let totalAmount = 0;
+      let totalHours = 0;
 
-      const buildAccordionPanel = (title, contentEl, initiallyOpen = true) => {
-        const panel = el('div', { class: 'accordion-panel' + (initiallyOpen ? '' : ' collapsed') });
-        const header = el('div', { class: 'accordion-header', text: title });
-        header.addEventListener('click', () => panel.classList.toggle('collapsed'));
-        const body = el('div', { class: 'accordion-content' });
-        body.appendChild(contentEl);
-        panel.appendChild(header);
-        panel.appendChild(body);
-        return panel;
-      };
+      groupTasks.forEach(t => {
+        const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
+        const tr = el('tr', { class: 'task-row-v2' });
+        
+        // Totals calculation
+        const hours = (t.timeLogs || []).reduce((acc, l) => acc + (l.hours || 0), 0);
+        totalHours += hours;
+        totalAmount += 1200; // Mock amount per task
 
-      // ── Attached Documents ──
-      const docs = t.taskDocuments || [];
-      const docsContent = el('div');
-      if (docs.length === 0) {
-        docsContent.appendChild(el('p', { class: 'empty-state', text: 'No documents attached.' }));
-      } else {
-        const docList = el('div');
-        docs.forEach(d => {
-          const uploader = DB.getById('users', d.uploaderId);
-          const docRow = el('div', { style: 'margin-bottom:var(--spacing-sm);' });
-          let docText = (d.filename || 'Untitled') + ' • ' + formatDate(d.uploadDate) + ' • ' + (uploader?.name || '—');
-          docRow.appendChild(el('span', { text: docText }));
-          if (d.dmsId) {
-            const dmsLink = el('a', { text: 'View in DMS', href: 'javascript:void(0)', style: 'margin-left:var(--spacing-sm);' });
-            dmsLink.addEventListener('click', () => {
-              location.hash = '#dms';
-              DMS.view = 'detail';
-              DMS.detailId = d.dmsId;
-              App.handleRoute();
-            });
-            docRow.appendChild(dmsLink);
+        // Task Title Cell (With collapsible indicator)
+        const tdTitle = el('td');
+        const titleWrap = el('div', { class: 'task-v2-title-cell' });
+        titleWrap.appendChild(el('span', { class: 'task-v2-row-caret', text: '›' }));
+        titleWrap.appendChild(el('div', { class: 'task-v2-title' + (t.status === 'Completed' ? ' completed' : ''), text: t.title }));
+        tdTitle.appendChild(titleWrap);
+        tr.appendChild(tdTitle);
+
+        // Assigned To
+        const tdAssignee = el('td');
+        const av = el('div', { class: 'avatar-xs' });
+        if (assignee?.avatarUrl) av.style.backgroundImage = `url('${assignee.avatarUrl}')`;
+        tdAssignee.appendChild(av);
+        tr.appendChild(tdAssignee);
+
+        // Due Date
+        tr.appendChild(el('td', { text: t.dueDate ? formatDate(t.dueDate) : '—' }));
+
+        // Progress Status (Dropdown with Left Arrow)
+        const tdStatus = el('td');
+        const statusWrapper = el('div', { class: 'status-dropdown-wrapper-v2' });
+        const statusSel = el('select', { class: 'form-select status-dropdown-v2' });
+        statusSel.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
+
+        const flow = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
+        flow.forEach(s => {
+          const opt = el('option', { value: s, text: s });
+          if (s === t.status) opt.selected = true;
+          if (s === 'Completed' && t.status !== 'For Review' && t.status !== 'Completed') {
+              opt.disabled = true;
           }
-          docList.appendChild(docRow);
+          statusSel.appendChild(opt);
         });
-        docsContent.appendChild(docList);
-      }
-      if (canAddDocument) {
-        const addDocBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Document', style: 'margin-top:var(--spacing-sm);' });
-        addDocBtn.addEventListener('click', () => {
-          const form = el('form', { class: 'form-stacked' });
-          form.appendChild(el('div', { class: 'form-group' }, [
-            el('label', { text: 'Select File *' }),
-            el('input', { type: 'file', name: 'taskDocFile', required: true })
-          ]));
-          form.appendChild(el('div', { class: 'form-group' }, [
-            el('label', { text: 'Description' }),
-            el('input', { type: 'text', name: 'taskDocDesc' })
-          ]));
-          const submitBtn = el('button', { type: 'submit', class: 'btn btn-success', text: 'Upload Document' });
-          form.appendChild(submitBtn);
-          const overlay = this.showModal('Add Document', form, null);
-          form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const fileInput = form.querySelector('input[name="taskDocFile"]');
-            const descInput = form.querySelector('input[name="taskDocDesc"]');
-            const file = fileInput.files[0];
-            if (!file) return;
-            const entry = {
-              filename: file.name,
-              size: file.size,
-              type: file.type,
-              uploadDate: new Date().toISOString().slice(0, 10),
-              uploaderId: Auth.user.id,
-              description: descInput.value || ''
-            };
-            const updatedDocs = [...(t.taskDocuments || []), entry];
-            DB.update('tasks', t.id, { taskDocuments: updatedDocs, updatedAt: new Date().toISOString() });
-            overlay.remove();
+
+        const sColors = { 'Completed': '#10b981', 'In Progress': '#f59e0b', 'Draft': '#94a3b8', 'For Review': '#a855f7', 'Assigned': '#3b82f6', 'Cancelled': '#ef4444' };
+        statusSel.style.color = sColors[t.status] || '#1e293b';
+
+        statusSel.addEventListener('change', () => {
+          const res = this.updateTaskStatus(t.id, statusSel.value);
+          if (res.error) {
+            alert(res.error);
+            statusSel.value = t.status;
+          } else {
             App.handleRoute();
-          });
+          }
         });
-        docsContent.appendChild(addDocBtn);
-      }
-      expandInner.appendChild(buildAccordionPanel('Attached Documents', docsContent, true));
 
-      // ── Time Log Today ──
-      const today = new Date().toISOString().slice(0, 10);
-      const todayLogs = (t.timeLogs || []).filter(l => l.date === today);
-      const logsContent = el('div');
-      if (todayLogs.length === 0) {
-        logsContent.appendChild(el('p', { class: 'empty-state', text: "No time logged today — you've got this!" }));
-      } else {
-        const logTable = el('table', { class: 'data-table' });
-        logTable.appendChild(el('thead', {}, [
-          el('tr', {}, [
-            el('th', { text: 'Start' }),
-            el('th', { text: 'End' }),
-            el('th', { text: 'Hours' }),
-            el('th', { text: 'Note' })
-          ])
-        ]));
-        const logBody = el('tbody');
-        todayLogs.forEach(l => {
-          logBody.appendChild(el('tr', {}, [
-            el('td', { text: l.startTime || '—' }),
-            el('td', { text: l.endTime || '—' }),
-            el('td', { text: String(l.hours) }),
-            el('td', { text: l.note || '—' })
-          ]));
-        });
-        logTable.appendChild(logBody);
-        logsContent.appendChild(logTable);
-      }
-      if (canAddTimeLog) {
-        const addLogBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Time Log', style: 'margin-top:var(--spacing-sm);' });
-        addLogBtn.addEventListener('click', () => {
-          const form = el('form', { class: 'form-stacked' });
-          form.appendChild(el('div', { class: 'form-group' }, [
-            el('label', { text: 'Date *' }),
-            el('input', { type: 'date', name: 'logDate', value: today, required: true })
-          ]));
-          form.appendChild(el('div', { class: 'form-group' }, [
-            el('label', { text: 'Start Time *' }),
-            el('input', { type: 'time', name: 'logStart', required: true })
-          ]));
-          form.appendChild(el('div', { class: 'form-group' }, [
-            el('label', { text: 'End Time *' }),
-            el('input', { type: 'time', name: 'logEnd', required: true })
-          ]));
-          form.appendChild(el('div', { class: 'form-group' }, [
-            el('label', { text: 'Note' }),
-            el('input', { type: 'text', name: 'logNote' })
-          ]));
-          const submitBtn = el('button', { type: 'submit', class: 'btn btn-success', text: 'Add Time Log' });
-          form.appendChild(submitBtn);
-          const overlay = this.showModal('Add Time Log', form, null);
-          form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const fd = new FormData(form);
-            const start = fd.get('logStart');
-            const end = fd.get('logEnd');
-            const [sh, sm] = start.split(':').map(Number);
-            const [eh, em] = end.split(':').map(Number);
-            if (eh < sh || (eh === sh && em <= sm)) {
-              alert('End time must be after start time.');
-              return;
-            }
-            const rawHours = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
-            const hours = Math.round(rawHours * 4) / 4;
-            const entry = {
-              userId: Auth.user.id,
-              startTime: start,
-              endTime: end,
-              date: fd.get('logDate'),
-              hours,
-              note: fd.get('logNote') || ''
-            };
-            const updatedLogs = [...(t.timeLogs || []), entry];
-            DB.update('tasks', t.id, { timeLogs: updatedLogs, updatedAt: new Date().toISOString() });
-            overlay.remove();
-            App.handleRoute();
-          });
-        });
-        logsContent.appendChild(addLogBtn);
-      }
-      expandInner.appendChild(buildAccordionPanel('Time Log Today', logsContent, false));
+        statusWrapper.appendChild(statusSel);
+        tdStatus.appendChild(statusWrapper);
+        tr.appendChild(tdStatus);
 
-      // ── Comments ──
-      const comments = t.comments || [];
-      const commentsContent = el('div');
-      if (comments.length === 0) {
-        commentsContent.appendChild(el('p', { class: 'empty-state', text: 'No comments yet.' }));
-      } else {
-        const commentList = el('div');
-        comments.forEach(c => {
-          const user = DB.getById('users', c.userId);
-          commentList.appendChild(el('div', { class: 'card', style: 'margin-bottom: var(--spacing-sm);' }, [
-            el('div', { class: 'kpi-label', text: (user?.name || c.userId) + ' • ' + formatDate(c.date) }),
-            el('div', { text: c.comment })
-          ]));
-        });
-        commentsContent.appendChild(commentList);
-      }
-      if (Auth.user.role === 'Admin') {
-        const commentForm = el('form', { class: 'form-stacked' });
-        commentForm.appendChild(el('div', { class: 'form-group' }, [
-          el('label', { text: 'Add Comment' }),
-          el('textarea', { name: 'commentText', rows: 2, required: true })
-        ]));
-        const commentBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-sm', text: 'Post Comment' });
-        commentForm.appendChild(commentBtn);
-        commentForm.addEventListener('submit', (e) => {
-          e.preventDefault();
-          const fd = new FormData(commentForm);
-          const entry = {
-            userId: Auth.user.id,
-            date: new Date().toISOString(),
-            comment: fd.get('commentText').trim()
-          };
-          if (!entry.comment) return;
-          const updatedComments = [...(t.comments || []), entry];
-          DB.update('tasks', t.id, { comments: updatedComments, updatedAt: new Date().toISOString() });
-          App.handleRoute();
-        });
-        commentsContent.appendChild(commentForm);
-      }
-      expandInner.appendChild(buildAccordionPanel('Comments', commentsContent, false));
+        // Priority
+        const tdPriority = el('td');
+        const pColors = { 'Urgent': '#ef4444', 'Priority': '#f59e0b', 'Low Priority': '#10b981', 'Normal': '#94a3b8' };
+        const pText = t.priority === 'Urgent' ? '● Critical' : t.priority === 'Priority' ? '↑ High' : t.priority || 'Normal';
+        tdPriority.appendChild(el('span', { class: 'priority-badge-v2', style: `color:${pColors[t.priority] || '#94a3b8'}`, text: pText }));
+        tr.appendChild(tdPriority);
 
-      expandTd.appendChild(expandInner);
-      expandTr.appendChild(expandTd);
-      tbody.appendChild(expandTr);
-    });
-    taskTable.appendChild(tbody);
-    container.appendChild(taskTable);
+        // Financials (Aligned)
+        tr.appendChild(el('td', { text: formatPHP(1200) }));
 
-    // Related Records Panel
-    const related = el('div', { class: 'related-records' });
-    related.appendChild(el('h3', { text: 'Related Records' }));
-    let hasRelated = false;
-    if (wr.linkedInvoiceId) {
-      const inv = DB.getById('invoices', wr.linkedInvoiceId);
-      if (inv) {
-        hasRelated = true;
-        const item = el('div', { class: 'related-record-item' });
-        item.appendChild(el('span', { text: 'Invoice: ' + inv.invoiceNumber }));
-        const linkBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
-        linkBtn.addEventListener('click', () => { Billing.view = 'detail'; Billing.detailId = inv.id; location.hash = '#billing'; });
-        item.appendChild(linkBtn);
-        related.appendChild(item);
-      }
-    }
-    if (wr.linkedDisbursementIds?.length) {
-      wr.linkedDisbursementIds.forEach(did => {
-        const d = DB.getById('disbursements', did);
-        if (d) {
-          hasRelated = true;
-          const item = el('div', { class: 'related-record-item' });
-          item.appendChild(el('span', { text: 'Disbursement: ' + d.description + ' (' + formatPHP(d.amount) + ')' }));
-          const linkBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
-          linkBtn.addEventListener('click', () => { Disbursement.view = 'detail'; Disbursement.detailId = d.id; location.hash = '#disbursement'; });
-          item.appendChild(linkBtn);
-          related.appendChild(item);
+        // Hours (Aligned)
+        tr.appendChild(el('td', { text: hours > 0 ? `${hours}h` : '—' }));
+
+        tbody.appendChild(tr);
+
+        // Accordion Details Row
+        const detailsTr = el('tr', { class: 'task-details-row hidden' });
+        const detailsTd = el('td', { colspan: 7 });
+        const detailsContainer = el('div', { class: 'task-details-container' });
+        
+        const detailsGrid = el('div', { class: 'task-details-grid' });
+        
+        // Attached Documents Section
+        const docsSection = el('div', { class: 'task-details-col' });
+        const docsHeader = el('div', { class: 'details-section-title' });
+        docsHeader.appendChild(el('span', { text: 'Attached Documents' }));
+        if (isDocStaff) {
+          const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload Scanned' });
+          addDocBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddDocumentModal(t.id); });
+          docsHeader.appendChild(addDocBtn);
         }
-      });
-    }
-    if (wr.linkedTransmittalIds?.length) {
-      wr.linkedTransmittalIds.forEach(tid => {
-        const tr = DB.getById('transmittals', tid);
-        if (tr) {
-          hasRelated = true;
-          const item = el('div', { class: 'related-record-item' });
-          item.appendChild(el('span', { text: 'Transmittal: ' + tr.trackingNumber }));
-          const linkBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
-          linkBtn.addEventListener('click', () => { Transmittal.view = 'detail'; Transmittal.detailId = tr.id; location.hash = '#transmittal'; });
-          item.appendChild(linkBtn);
-          related.appendChild(item);
-        }
-      });
-    }
-    if (!hasRelated) related.appendChild(el('p', { class: 'empty-state', text: 'No related records linked.' }));
-    container.appendChild(related);
+        docsSection.appendChild(docsHeader);
 
-    if (tasks.length > 0) {
-      if (!this.selectedTaskId || !tasks.find(t => t.id === this.selectedTaskId)) {
-        this.selectedTaskId = tasks[0].id;
-      }
-      container.appendChild(this.renderTaskActivity(tasks));
+        const docsList = el('div', { class: 'details-content-list' });
+        if ((t.taskDocuments || []).length === 0) {
+          docsList.appendChild(el('div', { class: 'empty-state', text: 'No documents attached.' }));
+        } else {
+          t.taskDocuments.forEach(d => {
+            const item = el('div', { class: 'detail-item-v2' });
+            item.appendChild(el('span', { text: d.filename }));
+            item.appendChild(el('span', { class: 'kpi-label', text: formatDate(d.uploadDate) }));
+            docsList.appendChild(item);
+          });
+        }
+        docsSection.appendChild(docsList);
+        detailsGrid.appendChild(docsSection);
+
+        // Time Log Today Section
+        const timeSection = el('div', { class: 'task-details-col' });
+        const timeHeader = el('div', { class: 'details-section-title' });
+        timeHeader.appendChild(el('span', { text: 'Time Log Today' }));
+        if ((t.assigneeId || t.assignedTo) === Auth.user.id) {
+          const addTimeBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Add Log' });
+          addTimeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddTimeLogModal(t.id); });
+          timeHeader.appendChild(addTimeBtn);
+        }
+        timeSection.appendChild(timeHeader);
+
+        const timeList = el('div', { class: 'details-content-list' });
+        const today = new Date().toISOString().slice(0, 10);
+        const todayLogs = (t.timeLogs || []).filter(l => l.date === today);
+        if (todayLogs.length === 0) {
+          timeList.appendChild(el('div', { class: 'empty-state', text: 'No logs for today.' }));
+        } else {
+          todayLogs.forEach(l => {
+            const logDate = new Date(l.date);
+            const dateStr = logDate.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', weekday: 'short' });
+            const item = el('div', { class: 'detail-item-v2' });
+            item.appendChild(el('span', { text: `${dateStr} • ${l.startTime} - ${l.endTime}` }));
+            item.appendChild(el('span', { class: 'kpi-label', text: `${l.hours}h` }));
+            timeList.appendChild(item);
+          });
+        }
+        timeSection.appendChild(timeList);
+        detailsGrid.appendChild(timeSection);
+
+        detailsContainer.appendChild(detailsGrid);
+        detailsTd.appendChild(detailsContainer);
+        detailsTr.appendChild(detailsTd);
+        tbody.appendChild(detailsTr);
+
+        tr.addEventListener('click', () => {
+          tr.classList.toggle('expanded');
+          detailsTr.classList.toggle('hidden');
+        });
+      });
+      table.appendChild(tbody);
+
+      // Aligned Footer Totals
+      const tfoot = el('tfoot');
+      const footTr = el('tr');
+      for(let i=0; i<5; i++) footTr.appendChild(el('td')); // Empty placeholders
+      footTr.appendChild(el('td', { text: formatPHP(totalAmount) }));
+      footTr.appendChild(el('td', { text: `${totalHours} hrs` }));
+      tfoot.appendChild(footTr);
+      table.appendChild(tfoot);
+
+      groupEl.appendChild(table);
+      listWrapper.appendChild(groupEl);
     }
+    
+    container.appendChild(listWrapper);
 
     return container;
+  },
+
+  showAddDocumentModal(taskId) {
+    const form = el('form', { class: 'form-stacked' });
+    form.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Select File *' }),
+      el('input', { type: 'file', name: 'docFile', required: true })
+    ]));
+    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Upload' });
+    form.appendChild(submitBtn);
+
+    const overlay = this.showModal('Upload Document', form, null);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const file = form.querySelector('input[name="docFile"]').files[0];
+      if (!file) return;
+      const entry = {
+        filename: file.name,
+        uploadDate: new Date().toISOString().slice(0, 10),
+        uploaderId: Auth.user.id
+      };
+      const task = DB.getById('tasks', taskId);
+      const updatedDocs = [...(task.taskDocuments || []), entry];
+      DB.update('tasks', taskId, { taskDocuments: updatedDocs, updatedAt: new Date().toISOString() });
+      overlay.remove();
+      App.handleRoute();
+    });
+  },
+
+  showAddTimeLogModal(taskId) {
+    const form = el('form', { class: 'form-stacked' });
+    form.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Start Time *' }),
+      el('input', { type: 'time', name: 'start', required: true })
+    ]));
+    form.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'End Time *' }),
+      el('input', { type: 'time', name: 'end', required: true })
+    ]));
+    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Log' });
+    form.appendChild(submitBtn);
+
+    const overlay = this.showModal('Add Time Log Today', form, null);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const start = fd.get('start');
+      const end = fd.get('end');
+      const [sh, sm] = start.split(':').map(Number);
+      const [eh, em] = end.split(':').map(Number);
+      if (eh < sh || (eh === sh && em <= sm)) {
+        alert('End time must be after start time.');
+        return;
+      }
+      const hours = Math.round(((eh * 60 + em) - (sh * 60 + sm)) / 60 * 4) / 4;
+      const entry = {
+        userId: Auth.user.id,
+        startTime: start,
+        endTime: end,
+        date: new Date().toISOString().slice(0, 10),
+        hours
+      };
+      const task = DB.getById('tasks', taskId);
+      
+      // Guard: prevent double time log for the same day
+      const alreadyLogged = (task.timeLogs || []).some(l => l.date === entry.date && l.userId === Auth.user.id);
+      if (alreadyLogged) {
+        alert('You have already logged time for this task today.');
+        return;
+      }
+
+      const updatedLogs = [...(task.timeLogs || []), entry];
+      DB.update('tasks', taskId, { timeLogs: updatedLogs, updatedAt: new Date().toISOString() });
+      overlay.remove();
+      App.handleRoute();
+    });
+  },
+
+  showAddTaskModal(wrId, onAdded) {
+    const form = el('form', { class: 'form-stacked' });
+    form.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Task Title *' }),
+      el('input', { type: 'text', name: 'title', required: true })
+    ]));
+    
+    const assigneeGroup = el('div', { class: 'form-group' });
+    assigneeGroup.appendChild(el('label', { text: 'Assignee' }));
+    const assigneeSel = el('select', { name: 'assigneeId' });
+    assigneeSel.appendChild(el('option', { value: '', text: '— Select Assignee —' }));
+    DB.getAll('users').forEach(u => {
+      assigneeSel.appendChild(el('option', { value: u.id, text: u.name }));
+    });
+    assigneeGroup.appendChild(assigneeSel);
+    form.appendChild(assigneeGroup);
+
+    form.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Due Date' }),
+      el('input', { type: 'date', name: 'dueDate' })
+    ]));
+
+    const priorityGroup = el('div', { class: 'form-group' });
+    priorityGroup.appendChild(el('label', { text: 'Priority' }));
+    const prioritySel = el('select', { name: 'priority' });
+    ['Normal', 'Low Priority', 'Priority', 'Urgent'].forEach(p => {
+      prioritySel.appendChild(el('option', { value: p, text: p }));
+    });
+    priorityGroup.appendChild(prioritySel);
+    form.appendChild(priorityGroup);
+
+    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Add Task' });
+    form.appendChild(submitBtn);
+
+    const overlay = this.showModal('Add New Task', form, null);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!validateRequiredFields(form)) return;
+      const data = Object.fromEntries(new FormData(form).entries());
+      const newTask = {
+        id: generateId('t'),
+        workRequestId: wrId,
+        title: data.title.trim(),
+        assigneeId: data.assigneeId || null,
+        status: 'Draft',
+        priority: data.priority || 'Normal',
+        dueDate: data.dueDate || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        predecessors: [],
+        timeLogs: [],
+        taskDocuments: [],
+        comments: []
+      };
+      DB.insert('tasks', newTask);
+      overlay.remove();
+      if (onAdded) onAdded();
+    });
+  },
+
+  renderModernProgressBar(status) {
+    const stages = ['Work Request', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Documentation'];
+    const map = { 'Draft': 0, 'Pre-processing': 1, 'Processing': 2, 'Billing': 3, 'Disbursement': 4, 'Completed': 5, 'Cancelled': 5 };
+    const current = map[status] ?? 0;
+    
+    const wrapper = el('div', { class: 'modern-progress-wrapper' });
+    const track = el('div', { class: 'modern-progress-track' });
+    
+    // Calculate fill width
+    const fillPercent = (current / (stages.length - 1)) * 100;
+    const fill = el('div', { class: 'modern-progress-fill', style: `width: ${fillPercent}%` });
+    track.appendChild(fill);
+    
+    stages.forEach((s, i) => {
+      const step = el('div', { class: 'modern-progress-step' });
+      const dot = el('div', { class: 'modern-progress-dot' });
+      if (i <= current) dot.classList.add('completed');
+      if (i === current) dot.classList.add('active');
+      
+      const label = el('div', { class: 'modern-progress-label', text: s });
+      if (i === current) label.classList.add('active');
+      
+      step.appendChild(dot);
+      step.appendChild(label);
+      
+      // Position the step evenly
+      step.style.left = `${(i / (stages.length - 1)) * 100}%`;
+      track.appendChild(step);
+    });
+    
+    wrapper.appendChild(track);
+    return wrapper;
   },
 
   renderTaskActivity(tasks) {
