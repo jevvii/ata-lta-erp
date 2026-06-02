@@ -106,6 +106,13 @@ const Transmittal = {
     });
     filtersBar.appendChild(clientFilter);
 
+    const empFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
+    empFilter.appendChild(el('option', { value: '', text: 'All Employees' }));
+    DB.getWhere('users', u => u.entities?.map(e => e.toUpperCase()).includes(entity)).forEach(u => {
+      empFilter.appendChild(el('option', { value: u.id, text: u.name }));
+    });
+    filtersBar.appendChild(empFilter);
+
     const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
     statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
     ['Draft', 'Sent', 'Acknowledged'].forEach(s => statusFilter.appendChild(el('option', { value: s, text: s })));
@@ -135,14 +142,14 @@ const Transmittal = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
-    [wrFilter, clientFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', updateFilters));
+    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
+    [wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', updateFilters));
 
-    this.refreshList(listContainer, wrFilter.value, clientFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
+    this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, statusFilter, dateFrom, dateTo) {
+  refreshList(container, wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
 
@@ -150,6 +157,7 @@ const Transmittal = {
 
     if (wrFilter) items = items.filter(t => t.workRequestId === wrFilter);
     if (clientFilter) items = items.filter(t => t.clientId === clientFilter);
+    if (empFilter) items = items.filter(t => t.createdBy === empFilter || t.sentBy === empFilter || t.acknowledgedBy === empFilter);
     if (statusFilter) items = items.filter(t => t.status === statusFilter);
     if (dateFrom) {
       const fromTime = new Date(dateFrom).getTime();
@@ -330,7 +338,7 @@ const Transmittal = {
     const itemsTable = el('table', { class: 'data-table', style: 'margin-bottom: var(--spacing-sm);' });
     const itemsThead = el('thead');
     const itemsThr = el('tr');
-    ['Description', 'Document Type', ''].forEach(h => itemsThr.appendChild(el('th', { text: h })));
+    ['Document Type', 'Description', ''].forEach(h => itemsThr.appendChild(el('th', { text: h })));
     itemsThead.appendChild(itemsThr);
     itemsTable.appendChild(itemsThead);
     const itemsTbody = el('tbody');
@@ -367,11 +375,6 @@ const Transmittal = {
   addItemRow(tbody, description = '', documentType = '') {
     const tr = el('tr');
 
-    const descTd = el('td');
-    const descInput = el('input', { type: 'text', class: 'item-description', required: true, value: description, placeholder: 'Description' });
-    descTd.appendChild(descInput);
-    tr.appendChild(descTd);
-
     const typeTd = el('td');
     const typeSel = el('select', { class: 'item-doc-type', required: true });
     typeSel.appendChild(el('option', { value: '', text: '— Select Type —' }));
@@ -382,6 +385,11 @@ const Transmittal = {
     });
     typeTd.appendChild(typeSel);
     tr.appendChild(typeTd);
+
+    const descTd = el('td');
+    const descInput = el('input', { type: 'text', class: 'item-description', required: true, value: description, placeholder: 'Description' });
+    descTd.appendChild(descInput);
+    tr.appendChild(descTd);
 
     const actTd = el('td');
     const remBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: 'Remove' });
@@ -442,10 +450,12 @@ const Transmittal = {
         record.sentBy = old.sentBy;
         record.acknowledgedBy = old.acknowledgedBy;
         record.createdAt = old.createdAt;
+        record.createdBy = old.createdBy;
       }
     } else {
       record.id = generateId('tx');
       record.createdAt = new Date().toISOString();
+      record.createdBy = Auth.user.id;
     }
 
     // Link to Work Request
@@ -480,7 +490,7 @@ const Transmittal = {
     topBackBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
     topActions.appendChild(topBackBtn);
 
-    const printBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Print Transmittal Letter' });
+    const printBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Print Transmittal' });
     printBtn.addEventListener('click', () => this.openPrintLetter(t));
     topActions.appendChild(printBtn);
 
@@ -509,7 +519,7 @@ const Transmittal = {
 
     // Transmittal Letter Preview
     const letterSection = el('div', { class: 'form-section', style: 'margin-bottom: var(--spacing-lg);' });
-    letterSection.appendChild(el('h3', { text: 'Transmittal Letter' }));
+    letterSection.appendChild(el('h3', { text: 'Transmittal' }));
     letterSection.appendChild(this.buildLetterPreview(t));
     container.appendChild(letterSection);
 
@@ -577,7 +587,7 @@ const Transmittal = {
 
     const header = el('div', { style: 'text-align:center; margin-bottom: var(--spacing-lg); border-bottom: 2px solid var(--color-border); padding-bottom: var(--spacing-md);' });
     header.appendChild(el('h2', { text: entityName, style: 'margin:0; font-size:1.25rem;' }));
-    header.appendChild(el('p', { text: 'Transmittal Letter', style: 'margin:0; font-size:0.875rem; color:var(--color-text-muted);' }));
+    header.appendChild(el('p', { text: 'Transmittal', style: 'margin:0; font-size:0.875rem; color:var(--color-text-muted);' }));
     letter.appendChild(header);
 
     const metaBlock = el('div', { style: 'margin-bottom: var(--spacing-lg);' });
@@ -593,7 +603,7 @@ const Transmittal = {
     const itemTable = el('table', { style: 'width:100%; border-collapse:collapse; margin: var(--spacing-md) 0;' });
     const itemThead = el('thead');
     const itemThr = el('tr');
-    ['#', 'Description', 'Document Type'].forEach(h => {
+    ['Document Type', 'Description'].forEach(h => {
       const th = el('th', { text: h });
       th.style.borderBottom = '2px solid #333';
       th.style.textAlign = 'left';
@@ -606,7 +616,7 @@ const Transmittal = {
     const itemTbody = el('tbody');
     (t.items || []).forEach((item, idx) => {
       const tr = el('tr');
-      [String(idx + 1), item.description, item.documentType].forEach(val => {
+      [item.documentType, item.description].forEach(val => {
         const td = el('td', { text: val });
         td.style.borderBottom = '1px solid #ddd';
         td.style.padding = '8px';
@@ -631,8 +641,7 @@ const Transmittal = {
     letter.appendChild(sigBlock);
 
     const ackBlock = el('div', { style: 'margin-top: var(--spacing-xl); border-top: 1px dashed var(--color-border); padding-top: var(--spacing-lg);' });
-    ackBlock.appendChild(el('p', { text: 'Acknowledgment of Receipt:' }));
-    ackBlock.appendChild(el('p', { text: 'I hereby confirm receipt of the above documents in good order.' }));
+    ackBlock.appendChild(el('p', { text: 'Received by:' }));
     ackBlock.appendChild(el('div', { style: 'height: 48px;' }));
     ackBlock.appendChild(el('p', { text: '_______________________________', style: 'margin:0;' }));
     ackBlock.appendChild(el('p', { text: 'Name / Signature / Date', style: 'margin:0; font-size:0.8125rem; color:var(--color-text-muted);' }));
@@ -650,7 +659,7 @@ const Transmittal = {
     meta.setAttribute('charset', 'UTF-8');
     doc.head.appendChild(meta);
     const title = doc.createElement('title');
-    title.textContent = 'Transmittal Letter — ' + t.trackingNumber;
+    title.textContent = 'Transmittal — ' + t.trackingNumber;
     doc.head.appendChild(title);
 
     const style = doc.createElement('style');
@@ -668,7 +677,7 @@ const Transmittal = {
     body.appendChild(h2);
     const sub = doc.createElement('p');
     sub.className = 'sub';
-    sub.textContent = 'Transmittal Letter';
+    sub.textContent = 'Transmittal';
     body.appendChild(sub);
 
     const metaP = doc.createElement('div');
@@ -694,7 +703,7 @@ const Transmittal = {
     const table = doc.createElement('table');
     const thead = doc.createElement('thead');
     const thr = doc.createElement('tr');
-    ['#', 'Description', 'Document Type'].forEach(h => {
+    ['Document Type', 'Description'].forEach(h => {
       const th = doc.createElement('th');
       th.textContent = h;
       thr.appendChild(th);
@@ -705,7 +714,7 @@ const Transmittal = {
     const tbody = doc.createElement('tbody');
     (t.items || []).forEach((item, idx) => {
       const tr = doc.createElement('tr');
-      [String(idx + 1), item.description, item.documentType].forEach(val => {
+      [item.documentType, item.description].forEach(val => {
         const td = doc.createElement('td');
         td.textContent = val;
         tr.appendChild(td);
@@ -744,11 +753,8 @@ const Transmittal = {
     const ack = doc.createElement('div');
     ack.className = 'dashed-top';
     const ackP1 = doc.createElement('p');
-    ackP1.textContent = 'Acknowledgment of Receipt:';
+    ackP1.textContent = 'Received by:';
     ack.appendChild(ackP1);
-    const ackP2 = doc.createElement('p');
-    ackP2.textContent = 'I hereby confirm receipt of the above documents in good order.';
-    ack.appendChild(ackP2);
     const ackSpace = doc.createElement('div');
     ackSpace.className = 'sig-space';
     ack.appendChild(ackSpace);
