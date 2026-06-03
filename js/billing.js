@@ -22,9 +22,19 @@ const Billing = {
       h1.appendChild(document.createTextNode(inv?.invoiceNumber || 'Detail'));
       titleBar.appendChild(h1);
 
+      const actions = el('div', { class: 'title-bar-actions' });
+      if (inv && inv.status !== 'Draft') {
+        const genInvBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Invoice', style: 'margin-right:8px;' });
+        genInvBtn.addEventListener('click', () => this.generateInvoice(inv));
+        actions.appendChild(genInvBtn);
+        const genVouchBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Generate Voucher', style: 'margin-right:8px;' });
+        genVouchBtn.addEventListener('click', () => this.generateVoucher(inv));
+        actions.appendChild(genVouchBtn);
+      }
       const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to Invoices' });
       backBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
-      titleBar.appendChild(backBtn);
+      actions.appendChild(backBtn);
+      titleBar.appendChild(actions);
       container.appendChild(titleBar);
     } else if (this.view === 'templates') {
       const titleBar = el('div', { class: 'page-title-bar-v2' });
@@ -251,14 +261,13 @@ const Billing = {
       return;
     }
     const board = el('div', { class: 'board-v2' });
-    const statuses = ['Draft', 'Sent', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
+    const statuses = ['Draft', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
     const statusColors = {
       'Draft': '#94a3b8',
       'Sent': '#3b82f6',
       'Partially Paid': '#f59e0b',
       'Paid': '#10b981',
-      'Overdue': '#ef4444',
-      'Cancelled': '#64748b'
+      'Overdue': '#ef4444'
     };
 
     statuses.forEach(st => {
@@ -308,7 +317,12 @@ const Billing = {
         metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${progress}%` }));
         metaRow.appendChild(metaLeft);
 
-        metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(inv.total), style: 'font-weight:700;color:#1e293b;' }));
+        const financials = el('div', { style: 'text-align:right;' });
+        financials.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(inv.total), style: 'font-weight:700;color:#1e293b;' }));
+        if (balance > 0 && balance < inv.total) {
+          financials.appendChild(el('div', { text: `Bal: ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:#ef4444;font-weight:600;' }));
+        }
+        metaRow.appendChild(financials);
         card.appendChild(metaRow);
 
         // Card actions for Draft invoices
@@ -594,6 +608,8 @@ const Billing = {
     });
 
     const isNew = !this.detailId;
+    const inv = isNew ? null : DB.getById('invoices', this.detailId);
+
     const record = {
       invoiceNumber: data.invoiceNumber,
       clientId: data.clientId,
@@ -605,11 +621,9 @@ const Billing = {
       subtotal,
       vat: 0,
       total: subtotal,
-      status: isNew ? 'Draft' : undefined,
+      status: isNew ? 'Draft' : (inv?.status || 'Draft'),
       payments: inv?.payments || []
     };
-
-    const inv = isNew ? null : DB.getById('invoices', this.detailId);
     if (inv) {
       // Preserve fields not in form
       record.status = inv.status;
@@ -656,23 +670,8 @@ const Billing = {
 
     const container = el('div', { class: 'invoice-detail' });
 
-    // Top actions bar
-    const topActions = el('div', { class: 'form-header-bar', style: 'margin-bottom: var(--spacing-lg);' });
-    topActions.appendChild(el('h2', { text: inv.invoiceNumber }));
-    const topRight = el('div', { class: 'form-actions-top' });
-    const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back' });
-    backBtn.addEventListener('click', () => { this.view = 'list'; this.detailId = null; App.handleRoute(); });
-    topRight.appendChild(backBtn);
-    const genInvBtn = el('button', { class: 'btn btn-primary', text: 'Generate Invoice' });
-    genInvBtn.addEventListener('click', () => this.generateInvoice(inv));
-    topRight.appendChild(genInvBtn);
-    const genVouchBtn = el('button', { class: 'btn btn-ghost', text: 'Generate Voucher' });
-    genVouchBtn.addEventListener('click', () => this.generateVoucher(inv));
-    topRight.appendChild(genVouchBtn);
-    topActions.appendChild(topRight);
-    container.appendChild(topActions);
-
-    const statusWrap = el('div', { style: 'display:flex; gap:6px; align-items:center; margin-bottom: var(--spacing-md);' });
+    // Status and badges
+    const statusWrap = el('div', { style: 'display:flex; gap:8px; align-items:center; margin-bottom: var(--spacing-lg);' });
     statusWrap.appendChild(this.statusBadge(inv.status));
     if (inv.fromTemplate) statusWrap.appendChild(this.recurringBadge(inv));
     container.appendChild(statusWrap);
@@ -705,7 +704,6 @@ const Billing = {
     const subtotal = this.getSubtotal(inv);
     const paid = this.getPaidAmount(inv);
     const totals = el('div', { class: 'invoice-totals' });
-    totals.appendChild(el('div', { class: 'total-row' }, [el('span', { text: 'Subtotal:' }), el('span', { text: formatPHP(subtotal) })]));
     totals.appendChild(el('div', { class: 'total-row total-grand' }, [el('span', { text: 'Total:' }), el('span', { text: formatPHP(inv.total) })]));
     totals.appendChild(el('div', { class: 'total-row' }, [el('span', { text: 'Paid:' }), el('span', { text: formatPHP(paid) })]));
     totals.appendChild(el('div', { class: 'total-row' }, [el('span', { text: 'Balance:' }), el('span', { text: formatPHP(inv.total - paid) })]));
@@ -714,30 +712,54 @@ const Billing = {
     // Payments history
     if (Array.isArray(inv.payments) && inv.payments.length > 0) {
       const payHist = el('div', { class: 'form-section' });
-      payHist.appendChild(el('h3', { text: 'Payment History' }));
-      const pTable = el('table', { class: 'data-table' });
-      const pHead = el('thead');
-      const pThr = el('tr');
-      ['Date', 'Amount', 'Method', 'Reference', 'Recorded By', 'Collected By'].forEach(h => pThr.appendChild(el('th', { text: h })));
-      pHead.appendChild(pThr);
-      pTable.appendChild(pHead);
-      const pBody = el('tbody');
+      payHist.appendChild(el('h3', { text: 'Payment Details' }));
       inv.payments.forEach(p => {
-        const collector = p.collectedBy ? DB.getById('users', p.collectedBy) : null;
+        const pCard = el('div', { class: 'card', style: 'margin-bottom:12px; padding:16px; border:1px solid #e2e8f0; border-radius:8px;' });
+
+        // Header row: amount left, method icon right
+        const header = el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;' });
+        const amtBlock = el('div');
+        amtBlock.appendChild(el('span', { text: formatPHP(p.amount), style: 'display:block; font-weight:700; font-size:1.25rem; color:#1e293b; line-height:1.2;' }));
+        amtBlock.appendChild(el('span', { text: formatDate(p.date), style: 'display:block; font-size:0.75rem; color:#94a3b8; margin-top:2px;' }));
+        header.appendChild(amtBlock);
+        header.appendChild(this.methodIcon(p.method));
+        pCard.appendChild(header);
+
+        // Divider
+        pCard.appendChild(el('div', { style: 'height:1px; background:#e2e8f0; margin:0 0 12px;' }));
+
+        // Payment metadata rows (label : value pairs)
+        const rows = el('div', { style: 'display:flex; flex-direction:column; gap:6px;' });
+
+        const addRow = (label, value) => {
+          if (!value) return;
+          const row = el('div', { style: 'display:flex; justify-content:space-between; align-items:baseline; font-size:0.8125rem;' });
+          row.appendChild(el('span', { text: label, style: 'color:#94a3b8; font-weight:500;' }));
+          row.appendChild(el('span', { text: value, style: 'color:#334155; font-weight:600; text-align:right;' }));
+          rows.appendChild(row);
+        };
+
+        if (p.reference) addRow('Reference', p.reference);
+        if (p.checkNumber) addRow('Check Number', p.checkNumber);
+        if (p.bankName) addRow('Bank', p.bankName);
+        if (p.bankAccount) addRow('Account Number', p.bankAccount);
+        if (p.transactionId) addRow('Transaction ID', p.transactionId);
+        if (p.digitalAccount) addRow('Wallet / Account', p.digitalAccount);
+        if (p.cardLast4) addRow('Card Number', '**** ' + p.cardLast4);
+
         const recorder = p.recordedBy ? DB.getById('users', p.recordedBy) : null;
-        const ptr = el('tr');
-        ptr.appendChild(el('td', { text: formatDate(p.date) }));
-        ptr.appendChild(el('td', { text: formatPHP(p.amount) }));
-        ptr.appendChild(el('td', { text: p.method || '—' }));
-        ptr.appendChild(el('td', { text: p.reference || '—' }));
-        ptr.appendChild(el('td', { text: recorder ? recorder.name : '—' }));
-        ptr.appendChild(el('td', { text: collector ? collector.name : '—' }));
-        pBody.appendChild(ptr);
+        const collector = p.collectedBy ? DB.getById('users', p.collectedBy) : null;
+        addRow('Recorded By', recorder ? recorder.name : '—');
+        addRow('Collected By', collector ? collector.name : '—');
+
+        pCard.appendChild(rows);
+
+        if (p.notes) {
+          pCard.appendChild(el('div', { style: 'height:1px; background:#e2e8f0; margin:12px 0;' }));
+          pCard.appendChild(el('div', { text: p.notes, style: 'font-size:0.8125rem; color:#64748b; font-style:italic; line-height:1.4;' }));
+        }
+        payHist.appendChild(pCard);
       });
-      pTable.appendChild(pBody);
-      const pTableWrap = el('div', { style: 'overflow-x:auto;' });
-      pTableWrap.appendChild(pTable);
-      payHist.appendChild(pTableWrap);
       container.appendChild(payHist);
     }
 
@@ -746,17 +768,85 @@ const Billing = {
       const paySection = el('div', { class: 'form-section' });
       paySection.appendChild(el('h3', { text: 'Record Payment' }));
       const payForm = el('form', { class: 'form-stacked' });
-      payForm.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Amount Paid *' }), el('input', { type: 'number', name: 'payAmount', min: 0, step: 0.01, required: true })]));
-      payForm.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Payment Date *' }), el('input', { type: 'date', name: 'payDate', value: new Date().toISOString().slice(0, 10), required: true })]));
 
+      // Amount and Date (always shown)
+      payForm.appendChild(el('div', { class: 'form-group' }, [
+        el('label', { text: 'Amount Paid *' }),
+        el('input', { type: 'number', name: 'payAmount', min: 0, step: 0.01, required: true, placeholder: `Balance remaining: ${formatPHP(inv.total - paid)}` })
+      ]));
+      payForm.appendChild(el('div', { class: 'form-group' }, [
+        el('label', { text: 'Payment Date *' }),
+        el('input', { type: 'date', name: 'payDate', value: new Date().toISOString().slice(0, 10), required: true })
+      ]));
+
+      // Payment Method
       const methodGroup = el('div', { class: 'form-group' });
-      methodGroup.appendChild(el('label', { text: 'Method *' }));
+      methodGroup.appendChild(el('label', { text: 'Payment Method *' }));
       const methodSel = el('select', { name: 'payMethod', required: true });
-      ['Cash', 'Check', 'Bank Transfer'].forEach(m => methodSel.appendChild(el('option', { value: m, text: m })));
+      const methods = [
+        { value: '', text: '— Select Method —' },
+        { value: 'Cash', text: 'Cash' },
+        { value: 'Check', text: 'Check' },
+        { value: 'Bank Transfer', text: 'Bank Transfer (Wire / Deposit)' },
+        { value: 'GCash', text: 'GCash' },
+        { value: 'Maya', text: 'Maya' },
+        { value: 'Credit Card', text: 'Credit Card' },
+        { value: 'Debit Card', text: 'Debit Card' },
+        { value: 'PayPal', text: 'PayPal' },
+        { value: 'Other Digital', text: 'Other Digital Wallet / Platform' }
+      ];
+      methods.forEach(m => methodSel.appendChild(el('option', { value: m.value, text: m.text })));
       methodGroup.appendChild(methodSel);
       payForm.appendChild(methodGroup);
 
-      payForm.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Reference #' }), el('input', { type: 'text', name: 'payRef' })]));
+      // Conditional field groups
+      const createFieldGroup = (name, label, type = 'text', placeholder = '') =>
+        el('div', { class: 'form-group pay-field-group', 'data-method': name, style: 'display:none;' }, [
+          el('label', { text: label }),
+          el('input', { type, name, placeholder })
+        ]);
+
+      const checkFields = el('div', { class: 'pay-check-fields', style: 'display:none;' });
+      checkFields.appendChild(createFieldGroup('checkNumber', 'Check Number *', 'text', 'e.g., 0001234'));
+      checkFields.appendChild(createFieldGroup('bankName', 'Bank Name *', 'text', 'e.g., BDO, BPI, Metrobank'));
+      payForm.appendChild(checkFields);
+
+      const bankFields = el('div', { class: 'pay-bank-fields', style: 'display:none;' });
+      bankFields.appendChild(createFieldGroup('bankName', 'Bank Name *', 'text', 'e.g., BDO, BPI'));
+      bankFields.appendChild(createFieldGroup('bankAccount', 'Bank Account Number', 'text', 'e.g., 1234-5678-9012'));
+      bankFields.appendChild(createFieldGroup('transactionId', 'Transaction / Reference ID *', 'text', 'e.g., REF-2025-001'));
+      payForm.appendChild(bankFields);
+
+      const digitalFields = el('div', { class: 'pay-digital-fields', style: 'display:none;' });
+      digitalFields.appendChild(createFieldGroup('transactionId', 'Transaction / Reference ID *', 'text', 'e.g., GCASH-REF-001'));
+      digitalFields.appendChild(createFieldGroup('digitalAccount', 'Wallet / Account Number', 'text', 'e.g., 0917-123-4567'));
+      payForm.appendChild(digitalFields);
+
+      const cardFields = el('div', { class: 'pay-card-fields', style: 'display:none;' });
+      cardFields.appendChild(createFieldGroup('cardLast4', 'Card Last 4 Digits', 'text', 'e.g., 1234'));
+      cardFields.appendChild(createFieldGroup('transactionId', 'Authorization / Reference Code *', 'text', 'e.g., AUTH-XXXXXX'));
+      cardFields.appendChild(createFieldGroup('bankName', 'Card Issuer / Bank', 'text', 'e.g., BDO, Metrobank'));
+      payForm.appendChild(cardFields);
+
+      // Toggle conditional fields
+      methodSel.addEventListener('change', () => {
+        const m = methodSel.value;
+        checkFields.style.display = m === 'Check' ? 'block' : 'none';
+        bankFields.style.display = m === 'Bank Transfer' ? 'block' : 'none';
+        digitalFields.style.display = ['GCash','Maya','PayPal','Other Digital'].includes(m) ? 'block' : 'none';
+        cardFields.style.display = ['Credit Card','Debit Card'].includes(m) ? 'block' : 'none';
+      });
+
+      // Reference / common fields
+      payForm.appendChild(el('div', { class: 'form-group' }, [
+        el('label', { text: 'General Reference / Receipt No.' }),
+        el('input', { type: 'text', name: 'payRef', placeholder: 'Any additional reference number' })
+      ]));
+
+      payForm.appendChild(el('div', { class: 'form-group' }, [
+        el('label', { text: 'Payment Notes' }),
+        el('textarea', { name: 'payNotes', rows: 2, placeholder: 'e.g., Partial payment, installment #1, etc.' })
+      ]));
 
       const collectorGroup = el('div', { class: 'form-group' });
       collectorGroup.appendChild(el('label', { text: 'Payment Collected By' }));
@@ -774,21 +864,48 @@ const Billing = {
       payForm.addEventListener('submit', e => {
         e.preventDefault();
         const fd = new FormData(payForm);
+        const method = fd.get('payMethod');
         const payAmount = parseFloat(fd.get('payAmount')) || 0;
-        const payments = inv.payments || [];
-        payments.push({
+
+        // Build payment record with method-specific details
+        const paymentRecord = {
           amount: payAmount,
           date: fd.get('payDate'),
-          method: fd.get('payMethod'),
+          method,
           reference: fd.get('payRef') || '',
           recordedBy: Auth.user.id,
-          collectedBy: fd.get('payCollectedBy') || ''
-        });
+          collectedBy: fd.get('payCollectedBy') || '',
+          notes: fd.get('payNotes') || '',
+          recordedAt: new Date().toISOString()
+        };
+
+        // Add method-specific fields
+        if (method === 'Check') {
+          paymentRecord.checkNumber = fd.get('checkNumber') || '';
+          paymentRecord.bankName = fd.get('bankName') || '';
+        }
+        if (method === 'Bank Transfer') {
+          paymentRecord.bankName = fd.get('bankName') || '';
+          paymentRecord.bankAccount = fd.get('bankAccount') || '';
+          paymentRecord.transactionId = fd.get('transactionId') || '';
+        }
+        if (['GCash','Maya','PayPal','Other Digital'].includes(method)) {
+          paymentRecord.transactionId = fd.get('transactionId') || '';
+          paymentRecord.digitalAccount = fd.get('digitalAccount') || '';
+        }
+        if (['Credit Card','Debit Card'].includes(method)) {
+          paymentRecord.cardLast4 = fd.get('cardLast4') || '';
+          paymentRecord.transactionId = fd.get('transactionId') || '';
+          paymentRecord.bankName = fd.get('bankName') || '';
+        }
+
+        const payments = inv.payments || [];
+        payments.push(paymentRecord);
         const newPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         let newStatus = inv.status;
         if (newPaid >= inv.total) newStatus = 'Paid';
         else if (newPaid > 0 && newPaid < inv.total) newStatus = 'Partially Paid';
-        DB.update('invoices', inv.id, { payments, paidAmount: newPaid, status: newStatus });
+        DB.update('invoices', inv.id, { payments, paidAmount: newPaid, status: newStatus, updatedAt: new Date().toISOString() });
         App.handleRoute();
       });
       paySection.appendChild(payForm);
@@ -825,13 +942,9 @@ const Billing = {
 
     const style = d.createElement('style');
     style.textContent = `
-      @page { size: A4; margin: 20mm; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 16mm; }
-      .doc-header { text-align: center; border-bottom: 3px solid #1e293b; padding-bottom: 12px; margin-bottom: 20px; }
-      .doc-header h1 { font-size: 20pt; margin: 0 0 4px; letter-spacing: 2px; }
-      .doc-header .firm { font-size: 14pt; font-weight: 700; margin: 4px 0; }
-      .doc-header .meta { font-size: 9pt; color: #475569; margin: 2px 0; }
-      .doc-title { text-align: center; font-size: 16pt; font-weight: 700; letter-spacing: 4px; margin: 16px 0; text-transform: uppercase; }
+      @page { size: A4; margin: 15mm 20mm; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 0; }
+      .doc-title { text-align: center; font-size: 16pt; font-weight: 700; letter-spacing: 4px; margin: 0 0 16px; text-transform: uppercase; }
       .two-col { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
       .col { flex: 1; }
       .col h3 { font-size: 10pt; text-transform: uppercase; color: #64748b; margin: 0 0 4px; letter-spacing: 0.5px; }
@@ -852,6 +965,22 @@ const Billing = {
       .signature-box { flex: 1; text-align: center; }
       .signature-box .line { border-top: 1px solid #1e293b; margin-top: 40px; padding-top: 4px; font-size: 9pt; }
       .disclaimer { margin-top: 32px; padding: 10px; border: 2px solid #dc2626; color: #dc2626; font-size: 9pt; font-weight: 700; text-align: center; text-transform: uppercase; }
+      .pay-status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+      .pay-status.paid { background: #dcfce7; color: #166534; }
+      .pay-status.partial { background: #fef3c7; color: #92400e; }
+      .pay-status.unpaid { background: #fee2e2; color: #991b1b; }
+      .pay-summary { margin: 16px 0; }
+      .pay-summary h4 { margin: 0 0 12px; font-size: 10pt; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; }
+      .pay-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #fff; }
+      .pay-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+      .pay-card-amt { font-weight: 700; font-size: 1.25rem; color: #1e293b; line-height: 1.2; }
+      .pay-card-date { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
+      .pay-card-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.3px; }
+      .pay-card-divider { height: 1px; background: #e2e8f0; margin: 0 0 12px; }
+      .pay-card-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.8125rem; padding: 3px 0; }
+      .pay-card-label { color: #94a3b8; font-weight: 500; }
+      .pay-card-value { color: #334155; font-weight: 600; text-align: right; }
+      .pay-card-notes { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 0.8125rem; color: #64748b; font-style: italic; line-height: 1.4; }
       .footer { margin-top: 24px; font-size: 8pt; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 8px; }
     `;
     d.head.appendChild(style);
@@ -859,6 +988,10 @@ const Billing = {
     const subtotal = this.getSubtotal(inv);
     const vatAmount = parseFloat(inv.vat) || 0;
     const isVat = vatAmount > 0;
+    const paid = this.getPaidAmount(inv);
+    const balance = inv.total - paid;
+    const payStatusClass = paid >= inv.total ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
+    const payStatusText = paid >= inv.total ? 'PAID' : paid > 0 ? 'PARTIALLY PAID' : 'UNPAID';
 
     const lineItemsHtml = inv.lineItems.map(li => {
       const qty = parseFloat(li.qty) || 1;
@@ -871,13 +1004,77 @@ const Billing = {
       ? `<div class="vat-breakdown"><p><strong>VAT Breakdown</strong></p><p>VATable Sales: ${formatPHP(subtotal)}</p><p>VAT Amount (12%): ${formatPHP(vatAmount)}</p><p>Total Amount Due: ${formatPHP(inv.total)}</p></div>`
       : `<div class="disclaimer">This document is not valid for claim of input tax.</div>`;
 
+    // Build payment summary if payments exist
+    let paySummaryHtml = '';
+    if (Array.isArray(inv.payments) && inv.payments.length > 0) {
+      const payCards = inv.payments.map(p => {
+        const methodCfg = {
+          'GCash':    { color: '#1E40AF', bg: '#EFF6FF', label: 'GCash', svg: '<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#1E40AF"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="Arial">G</text></svg>' },
+          'Maya':     { color: '#7C3AED', bg: '#F3E8FF', label: 'Maya', svg: '<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#7C3AED"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="11" font-weight="bold" font-family="Arial">M</text></svg>' },
+          'PayPal':   { color: '#1E40AF', bg: '#EFF6FF', label: 'PayPal', svg: '<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#1E40AF"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="10" font-weight="bold" font-family="Arial">P</text></svg>' },
+          'Credit Card':{ color: '#1E293B', bg: '#F8FAFC', label: 'Credit', svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E293B" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>' },
+          'Debit Card': { color: '#1E293B', bg: '#F8FAFC', label: 'Debit', svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E293B" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>' },
+          'Bank Transfer':{ color: '#0369A1', bg: '#E0F2FE', label: 'Bank', svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0369A1" stroke-width="2"><path d="M3 21h18M4 18h16M5 18v-6M9 18v-6M15 18v-6M19 18v-6M2 12l10-8 10 8"/></svg>' },
+          'Check':    { color: '#B45309', bg: '#FEF3C7', label: 'Check', svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12l3 3 5-5"/></svg>' },
+          'Cash':     { color: '#15803D', bg: '#DCFCE7', label: 'Cash', svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2"><circle cx="12" cy="12" r="8"/><text x="12" y="16" text-anchor="middle" fill="#15803D" font-size="10" font-weight="bold" font-family="Arial">₱</text></svg>' },
+          'Other Digital':{ color: '#64748B', bg: '#F1F5F9', label: 'Digital', svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 17h.01"/></svg>' }
+        };
+        const def = methodCfg['Other Digital'];
+        const cfg = methodCfg[p.method] || def;
+
+        let detailRows = '';
+        const addRow = (label, value) => {
+          if (!value) return '';
+          return `<div style="display:flex; justify-content:space-between; align-items:baseline; font-size:0.8125rem; padding:3px 0;"><span style="color:#94a3b8; font-weight:500;">${label}</span><span style="color:#334155; font-weight:600; text-align:right;">${value}</span></div>`;
+        };
+
+        if (p.reference) detailRows += addRow('Reference', p.reference);
+        if (p.checkNumber) detailRows += addRow('Check Number', p.checkNumber);
+        if (p.bankName) detailRows += addRow('Bank', p.bankName);
+        if (p.bankAccount) detailRows += addRow('Account Number', p.bankAccount);
+        if (p.transactionId) detailRows += addRow('Transaction ID', p.transactionId);
+        if (p.digitalAccount) detailRows += addRow('Wallet / Account', p.digitalAccount);
+        if (p.cardLast4) addRow('Card Number', '**** ' + p.cardLast4);
+
+        const recorder = p.recordedBy ? DB.getById('users', p.recordedBy) : null;
+        const collector = p.collectedBy ? DB.getById('users', p.collectedBy) : null;
+        detailRows += addRow('Recorded By', recorder ? recorder.name : '—');
+        detailRows += addRow('Collected By', collector ? collector.name : '—');
+
+        const notesHtml = p.notes
+          ? `<div style="margin-top:12px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:0.8125rem; color:#64748b; font-style:italic; line-height:1.4;">${p.notes}</div>`
+          : '';
+
+        return `
+          <div style="border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-bottom:12px; background:#fff;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div>
+                <div style="font-weight:700; font-size:1.25rem; color:#1e293b; line-height:1.2;">${formatPHP(p.amount)}</div>
+                <div style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">${formatDate(p.date)}</div>
+              </div>
+              <span style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px;">
+                ${cfg.svg} ${cfg.label}
+              </span>
+            </div>
+            <div style="height:1px; background:#e2e8f0; margin:0 0 12px;"></div>
+            <div style="display:flex; flex-direction:column; gap:6px;">${detailRows}</div>
+            ${notesHtml}
+          </div>`;
+      }).join('');
+
+      paySummaryHtml = `
+        <div class="pay-summary">
+          <h4>Payment Details</h4>
+          ${payCards}
+          <div style="margin-top:8px; text-align:right; font-weight:600; font-size:10pt;">Total Paid: ${formatPHP(paid)} | Balance: ${formatPHP(balance)}</div>
+        </div>`;
+    }
+
     d.body.innerHTML = `
-      <div class="doc-header">
-        <div class="firm">${entity} Accounting Services Firm</div>
-        <div class="meta">VAT Reg TIN: 000-000-000-00000 | Branch: 0001</div>
-        <div class="meta">Registered Address: [Firm Registered Address], Metro Manila</div>
-        <div class="meta">ATP No. [Authority to Print Number] | Series: ${inv.invoiceNumber}</div>
+      <div style="text-align:center; margin-bottom:4px;">
+        <div style="font-size:14pt; font-weight:700; letter-spacing:1px;">${entity} Accounting Services Firm</div>
       </div>
+      <div style="border-bottom:2px solid #1e293b; margin-bottom:16px;"></div>
 
       <div class="doc-title">Service Invoice</div>
 
@@ -892,8 +1089,6 @@ const Billing = {
           <h3>Invoice Details</h3>
           <p><strong>Invoice No.:</strong> ${inv.invoiceNumber}</p>
           <p><strong>Date Issued:</strong> ${formatDate(inv.issueDate)}</p>
-          <p><strong>Due Date:</strong> ${formatDate(inv.dueDate)}</p>
-          <p><strong>Terms:</strong> Due upon receipt</p>
         </div>
       </div>
 
@@ -907,11 +1102,11 @@ const Billing = {
       </table>
 
       <div class="totals">
-        <div class="totals-row"><span>Subtotal</span><span>${formatPHP(subtotal)}</span></div>
         ${isVat ? `<div class="totals-row"><span>Value Added Tax (12%)</span><span>${formatPHP(vatAmount)}</span></div>` : ''}
         <div class="totals-row grand"><span>Total Amount Due</span><span>${formatPHP(inv.total)}</span></div>
       </div>
 
+      ${paySummaryHtml}
       ${vatHtml}
 
       <div class="signature-row">
@@ -946,12 +1141,10 @@ const Billing = {
 
     const style = d.createElement('style');
     style.textContent = `
-      @page { size: A4; margin: 20mm; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 16mm; }
-      .doc-header { text-align: center; border-bottom: 3px solid #1e293b; padding-bottom: 12px; margin-bottom: 20px; }
-      .doc-header h1 { font-size: 18pt; margin: 0 0 4px; }
-      .doc-header .meta { font-size: 9pt; color: #475569; margin: 2px 0; }
-      .doc-title { text-align: center; font-size: 16pt; font-weight: 700; letter-spacing: 4px; margin: 16px 0; text-transform: uppercase; }
+      @page { size: A4; margin: 15mm 20mm; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 0; }
+      .doc-title { text-align: center; font-size: 16pt; font-weight: 700; letter-spacing: 4px; margin: 0 0 16px; text-transform: uppercase; }
+      .page-break { page-break-before: always; }
       .section { margin-bottom: 20px; }
       .section h3 { font-size: 10pt; text-transform: uppercase; color: #64748b; margin: 0 0 8px; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
       .section p { margin: 4px 0; font-size: 10pt; }
@@ -976,11 +1169,90 @@ const Billing = {
     const balance = inv.total - paid;
     const amountWords = this._numberToWords(inv.total) + ' PESOS ONLY';
 
+    // Build dynamic payment details section
+    let paymentDetailsHtml = '';
+    if (Array.isArray(inv.payments) && inv.payments.length > 0) {
+      // If payments exist, show each one with full details
+      const payRows = inv.payments.map((p, idx) => {
+        const pAmountWords = this._numberToWords(p.amount) + ' PESOS ONLY';
+        let detailRows = '';
+        if (p.method === 'Check') {
+          detailRows = `
+            <tr><td><strong>Check Number</strong></td><td>${p.checkNumber || '—'}</td></tr>
+            <tr><td><strong>Drawee Bank</strong></td><td>${p.bankName || '—'}</td></tr>`;
+        } else if (p.method === 'Bank Transfer') {
+          detailRows = `
+            <tr><td><strong>Bank Name</strong></td><td>${p.bankName || '—'}</td></tr>
+            <tr><td><strong>Account Number</strong></td><td>${p.bankAccount || '—'}</td></tr>
+            <tr><td><strong>Transaction Reference</strong></td><td>${p.transactionId || '—'}</td></tr>`;
+        } else if (['GCash','Maya','PayPal','Other Digital'].includes(p.method)) {
+          detailRows = `
+            <tr><td><strong>Wallet / Account</strong></td><td>${p.digitalAccount || '—'}</td></tr>
+            <tr><td><strong>Transaction Reference</strong></td><td>${p.transactionId || '—'}</td></tr>`;
+        } else if (['Credit Card','Debit Card'].includes(p.method)) {
+          detailRows = `
+            <tr><td><strong>Card Last 4 Digits</strong></td><td>**** ${p.cardLast4 || '—'}</td></tr>
+            <tr><td><strong>Authorization Code</strong></td><td>${p.transactionId || '—'}</td></tr>
+            <tr><td><strong>Card Issuer</strong></td><td>${p.bankName || '—'}</td></tr>`;
+        }
+        return `
+          <div class="box" style="margin-bottom:12px;">
+            <p><strong>Payment ${idx + 1} — ${p.method}</strong> <span style="font-size:9pt;color:#475569;">(${formatDate(p.date)})</span></p>
+            <div class="grid-2">
+              <div>
+                <p><strong>Amount:</strong> ${formatPHP(p.amount)}</p>
+                <p class="amount-words">${pAmountWords}</p>
+              </div>
+              <div>
+                <table style="margin:0;">${detailRows}</table>
+              </div>
+            </div>
+            ${p.reference ? `<p style="margin-top:6px; font-size:9pt; color:#64748b;">General Ref: ${p.reference}</p>` : ''}
+            ${p.notes ? `<p style="font-size:9pt; color:#64748b; font-style:italic;">Notes: ${p.notes}</p>` : ''}
+          </div>`;
+      }).join('');
+
+      const remainingHtml = balance > 0
+        ? `<div class="box" style="background:#fef3c7; border-color:#f59e0b;">
+             <p><strong>Remaining Balance:</strong> ${formatPHP(balance)}</p>
+             <p style="font-size:9pt;">Invoice is partially paid. ${inv.payments.length} payment(s) recorded.</p>
+           </div>`
+        : `<div class="box" style="background:#dcfce7; border-color:#10b981;">
+             <p><strong>Status: FULLY PAID</strong></p>
+             <p style="font-size:9pt;">All ${inv.payments.length} payment(s) have been recorded and applied.</p>
+           </div>`;
+
+      paymentDetailsHtml = `
+        <div class="section">
+          <h3>Payment Record</h3>
+          ${payRows}
+          ${remainingHtml}
+        </div>`;
+    } else {
+      // No payments recorded — show template blanks for manual entry
+      paymentDetailsHtml = `
+        <div class="section">
+          <h3>Payment Details</h3>
+          <div class="grid-2">
+            <div class="box">
+              <p><strong>Amount in Figures:</strong> ${formatPHP(inv.total)}</p>
+              <p class="amount-words"><strong>Amount in Words:</strong> ${amountWords}</p>
+            </div>
+            <div class="box">
+              <p><strong>Payment Mode:</strong> ___________________</p>
+              <p><strong>Check / Ref No.:</strong> ___________________</p>
+              <p><strong>Bank / Platform:</strong> ___________________</p>
+              <p><strong>Date:</strong> ___________________</p>
+            </div>
+          </div>
+        </div>`;
+    }
+
     d.body.innerHTML = `
-      <div class="doc-header">
-        <h1>${entity} Accounting Services Firm</h1>
-        <div class="meta">TIN: 000-000-000-00000 | Branch: 0001 | [Firm Registered Address]</div>
+      <div style="text-align:center; margin-bottom:4px;">
+        <div style="font-size:14pt; font-weight:700; letter-spacing:1px;">${entity} Accounting Services Firm</div>
       </div>
+      <div style="border-bottom:2px solid #1e293b; margin-bottom:16px;"></div>
 
       <div class="doc-title">Payment Voucher</div>
 
@@ -999,21 +1271,7 @@ const Billing = {
         </div>
       </div>
 
-      <div class="section">
-        <h3>Payment Details</h3>
-        <div class="grid-2">
-          <div class="box">
-            <p><strong>Amount in Figures:</strong> ${formatPHP(inv.total)}</p>
-            <p class="amount-words"><strong>Amount in Words:</strong> ${amountWords}</p>
-          </div>
-          <div class="box">
-            <p><strong>Payment Mode:</strong> Check / Bank Transfer</p>
-            <p><strong>Check No.:</strong> _________________</p>
-            <p><strong>Bank:</strong> _________________</p>
-            <p><strong>Date:</strong> _________________</p>
-          </div>
-        </div>
-      </div>
+      ${paymentDetailsHtml}
 
       <div class="section">
         <h3>Account Distribution (PFRS Chart of Accounts)</h3>
@@ -1029,7 +1287,7 @@ const Billing = {
         </table>
       </div>
 
-      <div class="section">
+      <div class="section page-break">
         <h3>Supporting Documents</h3>
         <p>☐ Service Invoice No. ${inv.invoiceNumber} dated ${formatDate(inv.issueDate)}</p>
         <p>☐ Purchase Order / Contract Reference: _________________</p>
@@ -1078,6 +1336,30 @@ const Billing = {
     return result.toUpperCase();
   },
 
+  methodIcon(method) {
+    const icons = {
+      'GCash': { color: '#1E40AF', bg: '#EFF6FF', label: 'GCash', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="#1E40AF"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial">G</text></svg>' },
+      'Maya': { color: '#7C3AED', bg: '#F3E8FF', label: 'Maya', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="#7C3AED"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial">M</text></svg>' },
+      'PayPal': { color: '#1E40AF', bg: '#EFF6FF', label: 'PayPal', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="#1E40AF"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="10" font-weight="bold" font-family="Arial">P</text></svg>' },
+      'Credit Card': { color: '#1E293B', bg: '#F8FAFC', label: 'Credit', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E293B" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>' },
+      'Debit Card': { color: '#1E293B', bg: '#F8FAFC', label: 'Debit', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E293B" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>' },
+      'Bank Transfer': { color: '#0369A1', bg: '#E0F2FE', label: 'Bank', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0369A1" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 21h18M4 18h16M5 18v-6M9 18v-6M15 18v-6M19 18v-6M2 12l10-8 10 8"/></svg>' },
+      'Check': { color: '#B45309', bg: '#FEF3C7', label: 'Check', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12l3 3 5-5"/></svg>' },
+      'Cash': { color: '#15803D', bg: '#DCFCE7', label: 'Cash', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8"/><text x="12" y="16" text-anchor="middle" fill="#15803D" font-size="10" font-weight="bold" font-family="Arial">₱</text></svg>' },
+      'Other Digital': { color: '#64748B', bg: '#F1F5F9', label: 'Digital', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 17h.01"/></svg>' }
+    };
+    const def = icons['Other Digital'];
+    const cfg = icons[method] || def;
+    const wrap = el('span', {
+      style: `display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px;`
+    });
+    const svgWrap = document.createElement('span');
+    svgWrap.innerHTML = cfg.svg;
+    wrap.appendChild(svgWrap.firstChild);
+    wrap.appendChild(document.createTextNode(cfg.label));
+    return wrap;
+  },
+
   // ============================================================
   // Templates View
   // ============================================================
@@ -1086,8 +1368,8 @@ const Billing = {
     const wrapper = el('div');
 
     const actions = el('div', { class: 'actions-bar' });
-    const addBtn = el('button', { class: 'btn btn-primary', text: 'New Template' });
-    addBtn.addEventListener('click', () => this.showTemplateForm(wrapper));
+    const addBtn = el('button', { class: 'btn btn-primary', text: '+ New Template' });
+    addBtn.addEventListener('click', () => this.showTemplateForm());
     actions.appendChild(addBtn);
     wrapper.appendChild(actions);
 
@@ -1105,33 +1387,66 @@ const Billing = {
       container.appendChild(el('p', { text: 'No billing templates found.', class: 'empty-state' }));
       return;
     }
+    
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    thead.appendChild(el('tr', {}, [
+      el('th', { text: 'Template Name' }),
+      el('th', { text: 'Client' }),
+      el('th', { text: 'Schedule' }),
+      el('th', { text: 'Fee' }),
+      el('th', { text: 'Actions' })
+    ]));
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
     templates.forEach(t => {
       const client = DB.getById('clients', t.clientId);
-      const card = el('div', { class: 'card' });
-      card.appendChild(el('h3', { text: t.name }));
-      card.appendChild(el('p', { text: 'Client: ' + (client?.name || '—') + ' | Schedule: ' + t.schedule + ' | Professional Fee: ' + formatPHP(t.pfAmount) }));
-      const actions = el('div', { class: 'form-actions-top', style: 'margin-top:12px;' });
-      const genBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Next Period' });
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: t.name, style: 'font-weight:600;' }));
+      tr.appendChild(el('td', { text: client?.name || '—' }));
+      tr.appendChild(el('td', { text: t.schedule, style: 'text-transform:capitalize;' }));
+      tr.appendChild(el('td', { text: formatPHP(t.pfAmount) }));
+      
+      const tdAct = el('td');
+      const genBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate' });
       genBtn.addEventListener('click', () => this.generateFromTemplate(t));
-      actions.appendChild(genBtn);
-      card.appendChild(actions);
-      container.appendChild(card);
+      tdAct.appendChild(genBtn);
+      
+      const editBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Edit', style: 'margin-left:4px;' });
+      editBtn.addEventListener('click', () => this.showTemplateForm(t));
+      tdAct.appendChild(editBtn);
+
+      const delBtn = el('button', { class: 'btn btn-danger btn-sm', text: '×', style: 'margin-left:4px;' });
+      delBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${t.name}"?`, () => {
+          DB.delete('billingTemplates', t.id);
+          App.handleRoute();
+        }, 'danger');
+      });
+      tdAct.appendChild(delBtn);
+
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
     });
+    table.appendChild(tbody);
+    container.appendChild(table);
   },
 
-  showTemplateForm(container) {
+  showTemplateForm(existing = null) {
     const entity = Auth.activeEntity;
-    while (container.firstChild) container.removeChild(container.firstChild);
-    container.appendChild(el('h3', { text: 'New Billing Template' }));
-    const form = el('form', { class: 'form-stacked', style: 'max-width:500px;' });
-    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Template Name *' }), el('input', { type: 'text', name: 'name', required: true })]));
+    const form = el('form', { class: 'form-stacked' });
+    
+    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Template Name *' }), el('input', { type: 'text', name: 'name', required: true, value: existing?.name || '' })]));
 
     const clientGroup = el('div', { class: 'form-group' });
     clientGroup.appendChild(el('label', { text: 'Client *' }));
     const clientSel = el('select', { name: 'clientId', required: true });
     clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
-      clientSel.appendChild(el('option', { value: c.id, text: c.name }));
+      const opt = el('option', { value: c.id, text: c.name });
+      if (existing && existing.clientId === c.id) opt.selected = true;
+      clientSel.appendChild(opt);
     });
     clientGroup.appendChild(clientSel);
     form.appendChild(clientGroup);
@@ -1139,25 +1454,25 @@ const Billing = {
     const schedGroup = el('div', { class: 'form-group' });
     schedGroup.appendChild(el('label', { text: 'Schedule *' }));
     const schedSel = el('select', { name: 'schedule', required: true });
-    ['monthly', 'quarterly'].forEach(s => schedSel.appendChild(el('option', { value: s, text: s })));
+    ['monthly', 'quarterly'].forEach(s => {
+      const opt = el('option', { value: s, text: s });
+      if (existing && existing.schedule === s) opt.selected = true;
+      schedSel.appendChild(opt);
+    });
     schedGroup.appendChild(schedSel);
     form.appendChild(schedGroup);
 
-    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Professional Fee Amount *' }), el('input', { type: 'number', name: 'pfAmount', min: 0, step: 0.01, required: true })]));
+    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Professional Fee Amount *' }), el('input', { type: 'number', name: 'pfAmount', min: 0, step: 0.01, required: true, value: existing?.pfAmount || '' })]));
 
-    const btnGroup = el('div', { class: 'form-actions' });
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Template' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { this.view = 'templates'; App.handleRoute(); });
-    btnGroup.appendChild(saveBtn);
-    btnGroup.appendChild(cancelBtn);
-    form.appendChild(btnGroup);
+    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Template' });
+    form.appendChild(submitBtn);
+
+    const overlay = Workflow.showModal(existing ? 'Edit Template' : 'New Billing Template', form);
 
     form.addEventListener('submit', e => {
       e.preventDefault();
       const fd = new FormData(form);
       const record = {
-        id: generateId('bt'),
         name: fd.get('name').trim(),
         clientId: fd.get('clientId'),
         entity: entity,
@@ -1166,13 +1481,19 @@ const Billing = {
         lineItems: [
           { type: 'Professional Fee', description: fd.get('name').trim(), amount: parseFloat(fd.get('pfAmount')) || 0 }
         ],
-        createdAt: new Date().toISOString()
+        updatedAt: new Date().toISOString()
       };
-      DB.insert('billingTemplates', record);
-      this.view = 'templates';
+
+      if (existing) {
+        DB.update('billingTemplates', existing.id, record);
+      } else {
+        record.id = generateId('bt');
+        record.createdAt = new Date().toISOString();
+        DB.insert('billingTemplates', record);
+      }
+      overlay.remove();
       App.handleRoute();
     });
-    container.appendChild(form);
   },
 
   generateFromTemplate(t) {
@@ -1248,7 +1569,10 @@ const Billing = {
     trashed.forEach(inv => {
       const client = DB.getById('clients', inv.clientId);
       const tr = el('tr');
-      tr.appendChild(el('td', { text: inv.invoiceNumber }));
+      const tdInvoice = el('td');
+      tdInvoice.appendChild(el('span', { text: inv.invoiceNumber }));
+      if (inv.fromTemplate) tdInvoice.appendChild(this.recurringBadge(inv));
+      tr.appendChild(tdInvoice);
       tr.appendChild(el('td', { text: client?.name || '—' }));
       tr.appendChild(el('td', { text: formatDate(inv.issueDate) }));
       tr.appendChild(el('td', { text: formatPHP(inv.total) }));
