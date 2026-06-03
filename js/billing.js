@@ -169,7 +169,7 @@ const Billing = {
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
-      let invoices = DB.getWhere('invoices', inv => inv.entity === entity);
+      let invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Cancelled');
       if (wrFilter.value) invoices = invoices.filter(inv => {
         const wr = DB.getById('workRequests', inv.workRequestId);
         return wr && wr.id === wrFilter.value;
@@ -352,29 +352,29 @@ const Billing = {
         el('div', { class: 'list-item-title', text: inv.invoiceNumber + ' — ' + (client?.name || '—') }),
         el('div', { class: 'list-item-meta', text: formatDate(inv.issueDate) + ' | ' + formatPHP(inv.total) + ' | Paid: ' + formatPHP(paid) + ' | Bal: ' + formatPHP(balance) })
       ]));
+      const rightWrap = el('div', { style: 'display:flex; gap:6px; align-items:center; margin-left:auto;' });
       const badgeWrap = el('div', { style: 'display:flex; gap:4px; align-items:center;' });
       badgeWrap.appendChild(this.statusBadge(inv.status));
       if (inv.fromTemplate) badgeWrap.appendChild(this.recurringBadge(inv));
-      row.appendChild(badgeWrap);
+      rightWrap.appendChild(badgeWrap);
 
       // List actions for Draft invoices
       if (inv.status === 'Draft') {
-        const actions = el('div', { style: 'display:flex; gap:6px; align-items:center;' });
         const editBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.view = 'form'; this.detailId = inv.id; App.handleRoute();
         });
-        actions.appendChild(editBtn);
+        rightWrap.appendChild(editBtn);
         const trashBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Trash' });
         trashBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.trashInvoice(inv.id);
         });
-        actions.appendChild(trashBtn);
-        row.appendChild(actions);
+        rightWrap.appendChild(trashBtn);
       }
 
+      row.appendChild(rightWrap);
       row.addEventListener('click', () => { this.view = 'detail'; this.detailId = inv.id; App.handleRoute(); });
       list.appendChild(row);
     });
@@ -1100,9 +1100,6 @@ const Billing = {
     const container = el('div');
     const topActions = el('div', { class: 'form-header-bar', style: 'margin-bottom: var(--spacing-lg);' });
     topActions.appendChild(el('h2', { text: 'Trashed Invoices' }));
-    const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to Invoices' });
-    backBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
-    topActions.appendChild(backBtn);
     container.appendChild(topActions);
 
     if (trashed.length === 0) {
