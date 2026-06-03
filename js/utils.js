@@ -25,9 +25,9 @@ function generateId(prefix) {
 }
 
 function showFieldError(field, message) {
-  // If the field is inside a datepicker wrapper, target the form-group parent instead
+  // If the field is inside a datepicker/timepicker wrapper, target the form-group parent instead
   let container = field.parentElement;
-  if (container && container.classList.contains('mdp-wrapper')) {
+  if (container && (container.classList.contains('mdp-wrapper') || container.classList.contains('mtp-wrapper'))) {
     // Also show error style on the wrapper
     container.classList.add('input-error');
     container = container.parentElement;
