@@ -2284,12 +2284,19 @@ tbody tr:hover {
 }
 
 /* Dynamic Route Button */
+.btn-route-dynamic {
+  font-weight: 700;
+  border-width: 2px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
 .btn-route-dynamic.btn-disabled {
-  opacity: 0.5;
+  opacity: 1;
   cursor: not-allowed;
   background: #f1f5f9;
-  border-color: #e2e8f0;
-  color: #94a3b8;
+  border-color: #cbd5e1;
+  color: #64748b;
+  box-shadow: none;
 }
 
 /* Modal Message Wrappers (Redesign V2) */
@@ -2344,11 +2351,14 @@ tbody tr:hover {
   white-space: pre-wrap;
 }
 
-.modal-footer {
+.modal-message-wrapper .modal-footer {
   display: flex;
   gap: var(--spacing-md);
   justify-content: center;
   width: 100%;
+  background: transparent;
+  padding: 0;
+  margin-top: var(--spacing-lg);
 }
 
 .modal-btn-sure {
