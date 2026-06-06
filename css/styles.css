@@ -3860,7 +3860,7 @@ tbody tr:hover {
 }
 
 .linear-activity-bar {
-  height: 24px;
+  height: 12px;
   background: var(--color-bg);
   border-radius: var(--radius-pill);
   display: flex;
@@ -3875,7 +3875,7 @@ tbody tr:hover {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -3906,16 +3906,23 @@ tbody tr:hover {
 }
 
 /* --- Week View Styles --- */
-.calendar-week-grid {
+.calendar-week-grid, .calendar-day-grid {
   display: grid;
-  grid-template-columns: 70px repeat(7, 1fr);
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   border-top: 1px solid var(--color-border);
   border-left: 1px solid var(--color-border);
   position: relative;
   background: var(--color-surface);
-  min-height: 400px;
+}
+
+.calendar-week-grid {
+  grid-template-columns: 70px repeat(7, 1fr);
+}
+
+.calendar-day-grid {
+  grid-template-columns: 70px 1fr;
 }
 
 .week-time-label {
@@ -3933,6 +3940,10 @@ tbody tr:hover {
 
 .week-time-label.empty {
   border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--color-surface);
 }
 
 .week-day-header {
@@ -3944,7 +3955,11 @@ tbody tr:hover {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--color-surface);
+  box-shadow: 0 1px 0 var(--color-border);
 }
 
 .week-day-header .day-name {
@@ -3994,7 +4009,7 @@ tbody tr:hover {
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 99px;
-  z-index: 10;
+  z-index: 40;
   white-space: nowrap;
 }
 
@@ -4004,9 +4019,9 @@ tbody tr:hover {
   left: 50%;
   transform: translateX(-50%);
   width: 1px;
-  height: 1200px;
+  height: 800px;
   background: #ef4444;
-  z-index: 1;
+  z-index: 20;
   pointer-events: none;
 }
 .week-vertical-time-line::before {
@@ -4161,7 +4176,7 @@ tbody tr:hover {
 .dashboard-calendar-card {
   display: flex;
   flex-direction: row;
-  min-height: 540px;
+  height: 640px;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
@@ -4174,6 +4189,7 @@ tbody tr:hover {
   padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .calendar-sidebar {
@@ -4184,7 +4200,7 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  max-height: 580px;
+  max-height: 100%;
 }
 
 /* Header */
@@ -4312,6 +4328,7 @@ tbody tr:hover {
   grid-template-columns: repeat(7, 1fr);
   gap: 8px;
   flex: 1;
+  overflow-y: auto;
 }
 
 .calendar-day-name {

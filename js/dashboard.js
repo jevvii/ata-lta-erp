@@ -249,8 +249,13 @@ const Dashboard = {
       this.calMonth = todayDate.getMonth();
       this.calYear = todayDate.getFullYear();
     }
+
+    if (!this.selectedDay) {
+      const now = new Date();
+      this.selectedDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
     
-    if (this.calView === undefined) this.calMonthView(); // Default to month view
+    if (this.calView === undefined) this.calMonthView(); // Default to week view via init
 
     const events = this.getCalendarEvents();
 
@@ -262,7 +267,13 @@ const Dashboard = {
     const header = el('div', { class: 'calendar-header' });
     
     const headerLeft = el('div', { class: 'calendar-header-left' });
-    headerLeft.appendChild(el('h3', { class: 'calendar-month-year', text: `${months[this.calMonth]} ${this.calYear}` }));
+    
+    let headerText = `${months[this.calMonth]} ${this.calYear}`;
+    if (this.calView !== 'month' && this.selectedDay) {
+      const d = new Date(this.selectedDay);
+      headerText = `${months[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    headerLeft.appendChild(el('h3', { class: 'calendar-month-year', text: headerText }));
     
     const todayBtn = el('button', { class: 'calendar-today-btn', text: 'Today' });
     todayBtn.onclick = (e) => {
@@ -285,8 +296,12 @@ const Dashboard = {
           this.calMonth = 11;
           this.calYear--;
         }
-      } else if (this.calView === 'week') {
-        // Simple week nav (just -7 days if we were tracknig exact week, for now just stay in month)
+      } else {
+        const d = new Date(this.selectedDay);
+        d.setDate(d.getDate() - (this.calView === 'week' ? 7 : 1));
+        this.selectedDay = d.toISOString().slice(0, 10);
+        this.calMonth = d.getMonth();
+        this.calYear = d.getFullYear();
       }
       this.refreshCalendarCard();
     };
@@ -300,6 +315,12 @@ const Dashboard = {
           this.calMonth = 0;
           this.calYear++;
         }
+      } else {
+        const d = new Date(this.selectedDay);
+        d.setDate(d.getDate() + (this.calView === 'week' ? 7 : 1));
+        this.selectedDay = d.toISOString().slice(0, 10);
+        this.calMonth = d.getMonth();
+        this.calYear = d.getFullYear();
       }
       this.refreshCalendarCard();
     };
@@ -330,22 +351,20 @@ const Dashboard = {
     mainView.appendChild(header);
 
     // Grid
-    const grid = el('div', { class: this.calView === 'week' ? 'calendar-week-grid' : 'calendar-grid' });
+    const gridClass = this.calView === 'week' ? 'calendar-week-grid' : (this.calView === 'day' ? 'calendar-day-grid' : 'calendar-grid');
+    const grid = el('div', { class: gridClass });
+    
     if (this.calView === 'month') {
       this.renderMonthGrid(grid, events);
     } else if (this.calView === 'week') {
       this.renderWeekGrid(grid, events);
-    } else {
-      // Placeholder for Day view (showing simplified list for now)
-      grid.appendChild(el('div', { 
-        class: 'empty-state', 
-        style: 'grid-column: span 7; padding: 40px;', 
-        text: `${this.calView.charAt(0).toUpperCase() + this.calView.slice(1)} view coming soon. Plotting items in Month/Week view as requested.` 
-      }));
+    } else if (this.calView === 'day') {
+      this.renderDayGrid(grid, events);
     }
 
     mainView.appendChild(grid);
     container.appendChild(mainView);
+
 
     // Right Sidebar
     const sidebar = el('div', { class: 'calendar-sidebar' });
@@ -459,6 +478,84 @@ const Dashboard = {
 
         grid.appendChild(cell);
       }
+    });
+  },
+
+  renderDayGrid(grid, events) {
+    const d = new Date(this.selectedDay);
+    const dateStr = this.selectedDay;
+    const isToday = dateStr === new Date().toISOString().slice(0, 10);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // Header Row
+    grid.appendChild(el('div', { class: 'week-time-label empty' })); 
+    
+    const dayHeader = el('div', { class: `week-day-header ${isToday ? 'today' : ''}` });
+    dayHeader.innerHTML = `<span class="day-name">${days[d.getDay()]}</span><span class="day-num">${String(d.getDate()).padStart(2, '0')}</span>`;
+    
+    if (isToday) {
+        const nowHour = new Date().getHours();
+        const nowMin = new Date().getMinutes();
+        const timeBubble = el('div', { class: 'week-vertical-time-bubble', text: `${String(nowHour).padStart(2, '0')}:${String(nowMin).padStart(2, '0')}` });
+        dayHeader.appendChild(timeBubble);
+        const line = el('div', { class: 'week-vertical-time-line' });
+        dayHeader.appendChild(line);
+    }
+    grid.appendChild(dayHeader);
+
+    // Time Rows
+    const timeSlots = ['All Day', '09 AM', '10 AM', '11 AM', '12 PM', '01 PM', '02 PM', '03 PM', '04 PM', '05 PM'];
+    
+    timeSlots.forEach((time, slotIndex) => {
+      grid.appendChild(el('div', { class: 'week-time-label', text: time }));
+      
+      const dayEvents = events[dateStr] || [];
+      const cell = el('div', { class: 'week-cell', 'data-date': dateStr });
+      
+      const slotEvents = dayEvents.filter(ev => {
+         let hash = 0;
+         for(let k=0; k<ev.data.id.length; k++) hash += ev.data.id.charCodeAt(k);
+         let evSlot = (hash % 9) + 1;
+         if (slotIndex === 0 && dayEvents.length > 5) return true;
+         if (slotIndex === 0 && dayEvents.length <= 5 && evSlot > 9) return true;
+         return evSlot === slotIndex;
+      });
+
+      if (slotEvents.length > 0) {
+          slotEvents.forEach(ev => {
+              const isCompleted = ev.type === 'wr' ? ev.data.status === 'Completed' : ['Released', 'Paid'].includes(ev.data.status);
+              const colors = ['bg-green-500', 'bg-cyan-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-yellow-500'];
+              let hash = 0;
+              for(let k=0; k<ev.data.id.length; k++) hash += ev.data.id.charCodeAt(k);
+              const colorClass = colors[hash % colors.length];
+
+              const badge = el('div', { 
+                class: `week-event-pill ${colorClass} ${isCompleted ? 'completed' : ''}`,
+                title: ev.type === 'wr' ? `Work Request: ${ev.data.title}` : `Disbursement: ${ev.data.description}`
+              });
+              
+              const avatarWrap = el('div', { class: 'week-event-avatars' });
+              const numAvatars = (hash % 3) + 1;
+              for (let a=0; a<numAvatars; a++) {
+                  const img = el('img', { class: 'week-event-avatar', src: `https://ui-avatars.com/api/?name=${encodeURIComponent(ev.data.requestedBy || 'U')}&background=random` });
+                  avatarWrap.appendChild(img);
+              }
+              badge.appendChild(avatarWrap);
+              
+              const titleText = ev.type === 'wr' ? ev.data.title : ev.data.description;
+              badge.appendChild(el('span', { class: 'week-event-title', text: titleText }));
+              badge.appendChild(el('span', { class: 'week-event-arrow', text: '›' }));
+
+              badge.onclick = (e) => {
+                e.stopPropagation();
+                this.expandedItemId = ev.data.id;
+                this.refreshCalendarCard();
+              };
+              
+              cell.appendChild(badge);
+          });
+      }
+      grid.appendChild(cell);
     });
   },
 
