@@ -170,8 +170,9 @@ const Reports = {
 
   renderViewModeToggle() {
     const toggle = el('div', { class: 'view-mode-toggle' });
+    const viewIcons = { 'table': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>', 'board': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>', 'list': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>' };
     ['table', 'board', 'list'].forEach(mode => {
-      const btn = el('button', { text: mode.charAt(0).toUpperCase() + mode.slice(1) });
+      const btn = el('button', { html: (viewIcons[mode] || '') + ' ' + mode.charAt(0).toUpperCase() + mode.slice(1) });
       if (this.viewMode === mode) btn.classList.add('active');
       btn.addEventListener('click', () => {
         this.viewMode = mode;

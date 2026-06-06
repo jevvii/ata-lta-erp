@@ -8,11 +8,25 @@ const Billing = {
   view: 'list', // 'list' | 'form' | 'detail' | 'aging' | 'templates'
   detailId: null,
 
+  getInvoiceById(id) {
+    if (!id) return null;
+    let inv = DB.getById('invoices', id);
+    if (!inv) {
+      const pc = DB.getWhere('pendingChanges', p => p.table === 'invoices' && p.status === 'pending' && p.proposedData && p.proposedData.id === id)[0];
+      if (pc) {
+        inv = deepClone(pc.proposedData);
+        inv.status = 'Pending';
+        inv.pendingChangeId = pc.id;
+      }
+    }
+    return inv;
+  },
+
   render() {
     const container = el('div', { class: 'page' });
     
     if (this.view === 'detail' && this.detailId) {
-      const inv = DB.getById('invoices', this.detailId);
+      const inv = this.getInvoiceById(this.detailId);
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       const h1 = el('h1', { class: 'breadcrumb-h1' });
       const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Billing' });
@@ -21,13 +35,13 @@ const Billing = {
       h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
       h1.appendChild(document.createTextNode(inv?.invoiceNumber || 'Detail'));
       titleBar.appendChild(h1);
-
+ 
       const actions = el('div', { class: 'title-bar-actions' });
-      if (inv && inv.status !== 'Draft') {
-        const genInvBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Invoice', style: 'margin-right:8px;' });
+      if (inv && inv.status !== 'Draft' && inv.status !== 'Pending') {
+        const genInvBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Print Invoice', style: 'margin-right:8px;' });
         genInvBtn.addEventListener('click', () => this.generateInvoice(inv));
         actions.appendChild(genInvBtn);
-        const genVouchBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Generate Voucher', style: 'margin-right:8px;' });
+        const genVouchBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Print Voucher (No Header)', style: 'margin-right:8px;' });
         genVouchBtn.addEventListener('click', () => this.generateVoucher(inv));
         actions.appendChild(genVouchBtn);
       }
@@ -153,7 +167,7 @@ const Billing = {
 
     const statusFilter = el('select', { class: 'form-select' });
     statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Sent', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'].forEach(s => {
+    ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'].forEach(s => {
       statusFilter.appendChild(el('option', { value: s, text: s }));
     });
     filters.appendChild(statusFilter);
@@ -163,9 +177,9 @@ const Billing = {
     // View mode toggle
     const viewMode = App.getPreferredViewMode('billing') || 'table';
     const vmToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom:var(--spacing-md);' });
-    const vmTable = el('button', { text: 'Table', class: viewMode === 'table' ? 'active' : '' });
-    const vmBoard = el('button', { text: 'Board', class: viewMode === 'board' ? 'active' : '' });
-    const vmList = el('button', { text: 'List', class: viewMode === 'list' ? 'active' : '' });
+    const vmTable = el('button', { html: ViewIcons.table + ' Table', class: viewMode === 'table' ? 'active' : '' });
+    const vmBoard = el('button', { html: ViewIcons.board + ' Board', class: viewMode === 'board' ? 'active' : '' });
+    const vmList = el('button', { html: ViewIcons.list + ' List', class: viewMode === 'list' ? 'active' : '' });
     vmTable.addEventListener('click', () => { App.setPreferredViewMode('billing', 'table'); App.handleRoute(); });
     vmBoard.addEventListener('click', () => { App.setPreferredViewMode('billing', 'board'); App.handleRoute(); });
     vmList.addEventListener('click', () => { App.setPreferredViewMode('billing', 'list'); App.handleRoute(); });
@@ -180,6 +194,23 @@ const Billing = {
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
       let invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Cancelled');
+      
+      const pendingInvs = DB.getWhere('pendingChanges', pc => {
+        if (pc.table !== 'invoices' || pc.status !== 'pending') return false;
+        const inv = pc.proposedData;
+        if (inv.entity !== entity) return false;
+        const role = Auth.user?.role;
+        if (role !== 'Admin' && role !== 'Manager' && pc.submittedBy !== Auth.user?.id) return false;
+        return true;
+      }).map(pc => {
+        const inv = deepClone(pc.proposedData);
+        inv.status = 'Pending';
+        inv.pendingChangeId = pc.id;
+        return inv;
+      });
+
+      invoices = [...invoices, ...pendingInvs];
+
       if (wrFilter.value) invoices = invoices.filter(inv => {
         const wr = DB.getById('workRequests', inv.workRequestId);
         return wr && wr.id === wrFilter.value;
@@ -220,8 +251,24 @@ const Billing = {
       const balance = inv.total - paid;
       const tr = el('tr');
       const tdInvoice = el('td');
-      tdInvoice.appendChild(el('span', { text: inv.invoiceNumber }));
+      tdInvoice.appendChild(el('span', { text: inv.invoiceNumber, style: 'font-weight:600;' }));
       if (inv.fromTemplate) tdInvoice.appendChild(this.recurringBadge(inv));
+      if (inv.workRequestId) {
+        const wr = DB.getById('workRequests', inv.workRequestId);
+        if (wr) {
+          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #64748b; margin-top: 4px;' });
+          wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 500;' }));
+          if (inv.linkedTaskId) {
+            const task = DB.getById('tasks', inv.linkedTaskId);
+            if (task) {
+              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: #8c9ba5; font-style: italic;' }));
+            }
+          } else {
+            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: #8c9ba5; font-style: italic;' }));
+          }
+          tdInvoice.appendChild(wrWrap);
+        }
+      }
       tr.appendChild(tdInvoice);
       tr.appendChild(el('td', { text: client?.name || '—' }));
       tr.appendChild(el('td', { text: formatDate(inv.issueDate) }));
@@ -230,8 +277,12 @@ const Billing = {
       tr.appendChild(el('td', { text: formatPHP(balance) }));
       tr.appendChild(el('td')).appendChild(this.statusBadge(inv.status));
       const tdAct = el('td');
+      const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
+      viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailId = inv.id; App.handleRoute(); });
+      tdAct.appendChild(viewBtn);
+
       if (inv.status === 'Draft') {
-        const editBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Edit' });
+        const editBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'Edit', style: 'margin-left:4px;' });
         editBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.view = 'form'; this.detailId = inv.id; App.handleRoute();
@@ -243,10 +294,6 @@ const Billing = {
           this.trashInvoice(inv.id);
         });
         tdAct.appendChild(trashBtn);
-      } else {
-        const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
-        viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailId = inv.id; App.handleRoute(); });
-        tdAct.appendChild(viewBtn);
       }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
@@ -261,9 +308,14 @@ const Billing = {
       return;
     }
     const board = el('div', { class: 'board-v2' });
-    const statuses = ['Draft', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
+    let statuses = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
+    if (Auth.user?.role === 'Admin') {
+      statuses = ['Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
+    }
     const statusColors = {
       'Draft': '#94a3b8',
+      'Pending': '#f59e0b',
+      'Approved': '#10b981',
       'Sent': '#3b82f6',
       'Partially Paid': '#f59e0b',
       'Paid': '#10b981',
@@ -305,7 +357,25 @@ const Billing = {
         card.appendChild(titleRow);
 
         // Client info
-        card.appendChild(el('div', { text: client?.name || '—', style: 'font-size:0.875rem;color:#64748b;margin-bottom:12px;' }));
+        card.appendChild(el('div', { text: client?.name || '—', style: 'font-size:0.875rem;color:#64748b;margin-bottom:8px;' }));
+
+        // Linked WR/Task info
+        if (inv.workRequestId) {
+          const wr = DB.getById('workRequests', inv.workRequestId);
+          if (wr) {
+            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #1e40af; margin-bottom: 12px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
+            wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 600;' }));
+            if (inv.linkedTaskId) {
+              const task = DB.getById('tasks', inv.linkedTaskId);
+              if (task) {
+                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: #475569;' }));
+              }
+            } else {
+              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: #475569;' }));
+            }
+            card.appendChild(wrWrap);
+          }
+        }
 
         // Meta: Progress and Financials
         const metaRow = el('div', { class: 'card-v2-meta' });
@@ -362,9 +432,22 @@ const Billing = {
       const row = el('div', { class: 'list-item' });
       const paid = this.getPaidAmount(inv);
       const balance = inv.total - paid;
+      let wrMeta = '';
+      if (inv.workRequestId) {
+        const wr = DB.getById('workRequests', inv.workRequestId);
+        if (wr) {
+          wrMeta = ' | WR: ' + wr.title;
+          if (inv.linkedTaskId) {
+            const task = DB.getById('tasks', inv.linkedTaskId);
+            if (task) wrMeta += ` (Task: ${task.title})`;
+          } else {
+            wrMeta += ' (Entire WR)';
+          }
+        }
+      }
       row.appendChild(el('div', {}, [
         el('div', { class: 'list-item-title', text: inv.invoiceNumber + ' — ' + (client?.name || '—') }),
-        el('div', { class: 'list-item-meta', text: formatDate(inv.issueDate) + ' | ' + formatPHP(inv.total) + ' | Paid: ' + formatPHP(paid) + ' | Bal: ' + formatPHP(balance) })
+        el('div', { class: 'list-item-meta', text: formatDate(inv.issueDate) + ' | ' + formatPHP(inv.total) + ' | Paid: ' + formatPHP(paid) + ' | Bal: ' + formatPHP(balance) + wrMeta })
       ]));
       const rightWrap = el('div', { style: 'display:flex; gap:6px; align-items:center; margin-left:auto;' });
       const badgeWrap = el('div', { style: 'display:flex; gap:4px; align-items:center;' });
@@ -398,6 +481,8 @@ const Billing = {
   statusBadge(status) {
     const map = {
       'Draft': 'badge-info',
+      'Pending': 'badge-warning',
+      'Approved': 'badge-success',
       'Sent': 'badge-warning',
       'Partially Paid': 'badge-warning',
       'Paid': 'badge-success',
@@ -417,7 +502,7 @@ const Billing = {
   // ============================================================
   renderForm() {
     const entity = Auth.activeEntity;
-    const inv = this.detailId ? DB.getById('invoices', this.detailId) : null;
+    const inv = this.detailId ? this.getInvoiceById(this.detailId) : null;
     const container = el('div');
 
     // Header bar
@@ -631,7 +716,7 @@ const Billing = {
     });
 
     const isNew = !this.detailId;
-    const inv = isNew ? null : DB.getById('invoices', this.detailId);
+    const inv = isNew ? null : this.getInvoiceById(this.detailId);
 
     const record = {
       invoiceNumber: data.invoiceNumber,
@@ -667,16 +752,50 @@ const Billing = {
       record.updatedAt = new Date().toISOString();
     }
 
-    const result = PendingChanges.submit('invoices', record, isNew);
-
-    // Link to WR if selected
-    if (data.workRequestId) {
-      const wr = DB.getById('workRequests', data.workRequestId);
-      if (wr && result.approved) {
-        const linked = new Set(wr.linkedInvoiceId ? [wr.linkedInvoiceId] : []);
-        linked.add(record.id);
-        DB.update('workRequests', wr.id, { linkedInvoiceId: record.id });
+    if (isNew || record.status === 'Draft') {
+      if (isNew) {
+        DB.insert('invoices', record);
+      } else {
+        DB.update('invoices', record.id, record);
       }
+      // Link to WR if selected
+      if (data.workRequestId) {
+        const wr = DB.getById('workRequests', data.workRequestId);
+        if (wr) {
+          DB.update('workRequests', wr.id, { linkedInvoiceId: record.id });
+        }
+      }
+    } else {
+      const result = PendingChanges.submit('invoices', record, isNew);
+
+      if (result.approved) {
+        // Clean up old WR back-link if WR changed during edit
+        if (!isNew && inv && inv.workRequestId && inv.workRequestId !== (data.workRequestId || null)) {
+          const oldWr = DB.getById('workRequests', inv.workRequestId);
+          if (oldWr && oldWr.linkedInvoiceId === record.id) {
+            DB.update('workRequests', oldWr.id, { linkedInvoiceId: null });
+          }
+        }
+
+        // Link to WR if selected (only if approved)
+        if (data.workRequestId) {
+          const wr = DB.getById('workRequests', data.workRequestId);
+          if (wr) {
+            DB.update('workRequests', wr.id, { linkedInvoiceId: record.id });
+          }
+        }
+      }
+    }
+
+    // Success feedback
+    if (typeof Workflow !== 'undefined' && Workflow.showMessage) {
+      const wrName = data.workRequestId ? (DB.getById('workRequests', data.workRequestId)?.title || '') : '';
+      const linkMsg = wrName ? ' Linked to "' + wrName + '".' : '';
+      Workflow.showMessage(
+        'Invoice ' + (isNew ? 'Created' : 'Updated'),
+        'Invoice ' + record.invoiceNumber + ' has been ' + (isNew ? 'created' : 'updated') + ' successfully.' + linkMsg,
+        'success'
+      );
     }
 
     this.view = 'list';
@@ -688,7 +807,7 @@ const Billing = {
   // Detail View (with payment recording)
   // ============================================================
   renderDetail() {
-    const inv = DB.getById('invoices', this.detailId);
+    const inv = this.getInvoiceById(this.detailId);
     if (!inv) { this.view = 'list'; App.handleRoute(); return el('div'); }
     const client = DB.getById('clients', inv.clientId);
 
@@ -700,11 +819,83 @@ const Billing = {
     if (inv.fromTemplate) statusWrap.appendChild(this.recurringBadge(inv));
     container.appendChild(statusWrap);
 
+    if (inv.status === 'Draft' && inv.rejectionReason) {
+      const rejBanner = el('div', {
+        class: 'alert-banner alert-danger',
+        style: 'background: #fef2f2; border: 1px solid #fee2e2; color: #b91c1c; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+      });
+      rejBanner.appendChild(el('span', { html: '❌' }));
+      rejBanner.appendChild(el('span', { html: `<strong>Rejection Reason:</strong> ${inv.rejectionReason}` }));
+      container.appendChild(rejBanner);
+    }
+
+    if (inv.status === 'Pending') {
+      const banner = el('div', {
+        class: 'alert-banner alert-warning',
+        style: 'background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+      });
+      banner.appendChild(el('span', { html: '⚠️' }));
+      banner.appendChild(el('span', { text: 'This invoice is pending administrative approval and cannot be printed, sent, or have payments recorded until approved.' }));
+      container.appendChild(banner);
+    }
+
     const meta = el('div', { class: 'invoice-meta' });
     meta.appendChild(el('p', { text: 'Client: ' + (client?.name || '—') }));
     meta.appendChild(el('p', { text: 'Issue Date: ' + formatDate(inv.issueDate) }));
     meta.appendChild(el('p', { text: 'Due Date: ' + formatDate(inv.dueDate) }));
     container.appendChild(meta);
+
+    // Linked Work Request / Task info card
+    if (inv.workRequestId) {
+      const linkedWr = DB.getById('workRequests', inv.workRequestId);
+      if (linkedWr) {
+        const linkCard = el('div', {
+          style: 'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);border-radius:8px;padding:12px 16px;margin-bottom:var(--spacing-md);font-size:0.8125rem;'
+        });
+        const linkHeader = el('div', {
+          style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#1e40af;font-weight:600;'
+        });
+        linkHeader.appendChild(el('span', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>' }));
+        linkHeader.appendChild(el('span', { text: 'Linked Work Request' }));
+        linkCard.appendChild(linkHeader);
+
+        const wrLink = el('a', {
+          href: 'javascript:void(0)',
+          text: linkedWr.title,
+          style: 'color:#2563eb;font-weight:500;text-decoration:none;'
+        });
+        wrLink.addEventListener('click', () => {
+          Workflow.view = 'detail';
+          Workflow.detailWrId = linkedWr.id;
+          location.hash = '#workflow';
+        });
+        wrLink.addEventListener('mouseenter', () => { wrLink.style.textDecoration = 'underline'; });
+        wrLink.addEventListener('mouseleave', () => { wrLink.style.textDecoration = 'none'; });
+        linkCard.appendChild(wrLink);
+
+        if (inv.linkedTaskId) {
+          const linkedTask = DB.getById('tasks', inv.linkedTaskId);
+          if (linkedTask) {
+            linkCard.appendChild(el('div', {
+              text: '↳ Scope: Task — ' + linkedTask.title,
+              style: 'margin-top:4px;color:#64748b;font-size:0.75rem;'
+            }));
+          }
+        } else {
+          linkCard.appendChild(el('div', {
+            text: '↳ Scope: Entire Work Request / Project',
+            style: 'margin-top:4px;color:#64748b;font-size:0.75rem;'
+          }));
+        }
+
+        // Show WR phase status
+        linkCard.appendChild(el('div', {
+          text: 'Status: ' + (linkedWr.status || '—'),
+          style: 'margin-top:4px;color:#64748b;font-size:0.75rem;'
+        }));
+        container.appendChild(linkCard);
+      }
+    }
 
     // Line items table
     const table = el('table', { class: 'data-table' });
@@ -735,7 +926,7 @@ const Billing = {
 
     // Payments history
     if (Array.isArray(inv.payments) && inv.payments.length > 0) {
-      const payHist = el('div', { class: 'form-section' });
+      const payHist = el('div', { class: 'form-section', style: 'overflow-x:auto;' });
       payHist.appendChild(el('h3', { text: 'Payment Details' }));
       inv.payments.forEach(p => {
         const pCard = el('div', { class: 'card', style: 'margin-bottom:12px; padding:16px; border:1px solid #e2e8f0; border-radius:8px;' });
@@ -788,7 +979,7 @@ const Billing = {
     }
 
     // Payment recording
-    if (inv.status !== 'Paid' && inv.status !== 'Cancelled') {
+    if (inv.status !== 'Paid' && inv.status !== 'Cancelled' && inv.status !== 'Pending') {
       const paySection = el('div', { class: 'form-section' });
       paySection.appendChild(el('h3', { text: 'Record Payment' }));
       const payForm = el('form', { class: 'form-stacked' });
@@ -943,9 +1134,57 @@ const Billing = {
 
     // Status actions
     const actions = el('div', { class: 'form-actions' });
+    const role = Auth.user?.role;
+    const isAdminOrManager = role === 'Admin' || role === 'Manager';
+    
     if (inv.status === 'Draft') {
+      const editBtn = el('button', { class: 'btn btn-ghost', text: 'Edit Invoice', style: 'margin-right:8px;' });
+      editBtn.addEventListener('click', () => {
+        this.view = 'form';
+        this.detailId = inv.id;
+        App.handleRoute();
+      });
+      actions.appendChild(editBtn);
+
+      const trashBtn = el('button', { class: 'btn btn-danger', text: 'Trash', style: 'margin-right:8px;' });
+      trashBtn.addEventListener('click', () => {
+        this.trashInvoice(inv.id);
+      });
+      actions.appendChild(trashBtn);
+
+      if (isAdminOrManager) {
+        const approveBtn = el('button', { class: 'btn btn-success', text: 'Approve' });
+        approveBtn.addEventListener('click', () => {
+          DB.update('invoices', inv.id, { status: 'Approved', updatedAt: new Date().toISOString() });
+          // Link to WR if selected
+          if (inv.workRequestId) {
+            const wr = DB.getById('workRequests', inv.workRequestId);
+            if (wr) {
+              DB.update('workRequests', wr.id, { linkedInvoiceId: inv.id });
+            }
+          }
+          App.handleRoute();
+        });
+        actions.appendChild(approveBtn);
+      } else {
+        const sendBtn = el('button', { class: 'btn btn-primary', text: 'Send for Approval' });
+        sendBtn.addEventListener('click', () => {
+          // Set local status to Pending
+          DB.update('invoices', inv.id, { status: 'Pending', updatedAt: new Date().toISOString() });
+          // Submit pending change to set status to Approved
+          PendingChanges.submit('invoices', { ...inv, status: 'Approved' }, false);
+          
+          Workflow.showMessage('Submitted', 'Invoice has been sent for administrative approval.', 'success');
+          App.handleRoute();
+        });
+        actions.appendChild(sendBtn);
+      }
+    } else if (inv.status === 'Approved') {
       const sentBtn = el('button', { class: 'btn btn-primary', text: 'Mark as Sent' });
-      sentBtn.addEventListener('click', () => { DB.update('invoices', inv.id, { status: 'Sent' }); App.handleRoute(); });
+      sentBtn.addEventListener('click', () => {
+        DB.update('invoices', inv.id, { status: 'Sent', updatedAt: new Date().toISOString() });
+        App.handleRoute();
+      });
       actions.appendChild(sentBtn);
     }
     container.appendChild(actions);
@@ -1534,6 +1773,13 @@ const Billing = {
     Workflow.showConfirm('Move to Trash',
       `Are you sure you want to move invoice "${inv.invoiceNumber}" to trash? Only Draft invoices can be trashed.`,
       () => {
+        // Clean up WR backlink
+        if (inv.workRequestId) {
+          const wr = DB.getById('workRequests', inv.workRequestId);
+          if (wr && wr.linkedInvoiceId === inv.id) {
+            DB.update('workRequests', wr.id, { linkedInvoiceId: null });
+          }
+        }
         DB.update('invoices', id, { status: 'Cancelled', updatedAt: new Date().toISOString() });
         App.handleRoute();
       },
@@ -1545,6 +1791,12 @@ const Billing = {
     const inv = DB.getById('invoices', id);
     if (!inv || inv.status !== 'Cancelled') return;
     DB.update('invoices', id, { status: 'Draft', updatedAt: new Date().toISOString() });
+    if (inv.workRequestId) {
+      const wr = DB.getById('workRequests', inv.workRequestId);
+      if (wr) {
+        DB.update('workRequests', wr.id, { linkedInvoiceId: inv.id });
+      }
+    }
     App.handleRoute();
   },
 

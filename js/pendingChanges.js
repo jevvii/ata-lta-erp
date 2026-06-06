@@ -62,6 +62,52 @@ const PendingChanges = {
       DB.insert(pc.table, pc.proposedData);
     }
 
+    // Back-linking logic upon approval
+    if (pc.table === 'invoices') {
+      const record = pc.proposedData;
+      const isNew = !pc.parentRecordId;
+      const inv = isNew ? null : DB.getById('invoices', pc.parentRecordId);
+
+      // Clean up old WR back-link if WR changed during edit
+      if (!isNew && inv && inv.workRequestId && inv.workRequestId !== (record.workRequestId || null)) {
+        const oldWr = DB.getById('workRequests', inv.workRequestId);
+        if (oldWr && oldWr.linkedInvoiceId === record.id) {
+          DB.update('workRequests', oldWr.id, { linkedInvoiceId: null });
+        }
+      }
+
+      // Link to WR if selected
+      if (record.workRequestId) {
+        const wr = DB.getById('workRequests', record.workRequestId);
+        if (wr) {
+          DB.update('workRequests', wr.id, { linkedInvoiceId: record.id });
+        }
+      }
+    } else if (pc.table === 'transmittals') {
+      const record = pc.proposedData;
+      const isNew = !pc.parentRecordId;
+      const old = isNew ? null : DB.getById('transmittals', pc.parentRecordId);
+
+      // Clean up old WR link if WR changed
+      if (old && old.workRequestId && old.workRequestId !== (record.workRequestId || null)) {
+        const oldWr = DB.getById('workRequests', old.workRequestId);
+        if (oldWr) {
+          const linkedIds = (oldWr.linkedTransmittalIds || []).filter(id => id !== record.id);
+          DB.update('workRequests', oldWr.id, { linkedTransmittalIds: linkedIds });
+        }
+      }
+
+      // Link to Work Request
+      if (record.workRequestId) {
+        const wr = DB.getById('workRequests', record.workRequestId);
+        if (wr) {
+          const linkedIds = new Set(wr.linkedTransmittalIds || []);
+          linkedIds.add(record.id);
+          DB.update('workRequests', wr.id, { linkedTransmittalIds: Array.from(linkedIds) });
+        }
+      }
+    }
+
     DB.update('pendingChanges', pendingId, {
       status: 'approved',
       reviewedBy: Auth.user.id,
@@ -74,6 +120,10 @@ const PendingChanges = {
   reject(pendingId, reason) {
     const pc = DB.getById('pendingChanges', pendingId);
     if (!pc || pc.status !== 'pending') return false;
+
+    if (pc.table === 'invoices' && pc.parentRecordId) {
+      DB.update('invoices', pc.parentRecordId, { status: 'Draft', rejectionReason: reason || '' });
+    }
 
     DB.update('pendingChanges', pendingId, {
       status: 'rejected',

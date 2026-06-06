@@ -78,25 +78,74 @@ const Workflow = {
         break;
 
       case 'Billing':
-        // Rule 4: Invoices must be Sent or Paid
-        if (invoices.length === 0) { canTransition = false; missing.push('No linked invoices found'); }
-        else if (!invoices.every(inv => ['Sent', 'Partially Paid', 'Paid'].includes(inv.status))) {
+        // Rule 4: At least one invoice must be linked, and at least one whole-project invoice must be Sent, Partially Paid, or Paid.
+        // If there are other invoices, they do not block routing (simple linkage is allowed).
+        if (invoices.length === 0) {
           canTransition = false;
-          missing.push('All linked invoices must be Sent or Paid');
+          missing.push('No linked invoices found — create and link an invoice in the Billing module');
+        } else {
+          // Check if there is at least one "sent" billing for the whole project (no linkedTaskId)
+          const wholeProjectSent = invoices.some(inv => !inv.linkedTaskId && ['Sent', 'Partially Paid', 'Paid'].includes(inv.status));
+          if (!wholeProjectSent) {
+            // Fallback: check if we have any invoice at all that is Sent, Partially Paid, or Paid
+            const anySent = invoices.some(inv => ['Sent', 'Partially Paid', 'Paid'].includes(inv.status));
+            if (!anySent) {
+              canTransition = false;
+              missing.push('At least one linked invoice must be Sent, Partially Paid, or Paid');
+            }
+          }
         }
+        // Rule 4b: Disbursement-related tasks must have linked disbursement records
+        // Accept either task-level link or WR-level link (linkedWorkRequestId / linkedDisbursementIds)
+        const wrLevelDisbursements = DB.getWhere('disbursements', d => d.linkedWorkRequestId === wrId || (wr.linkedDisbursementIds || []).includes(d.id));
+        tasks.forEach(t => {
+          const title = t.title.toLowerCase();
+          if (title.includes('expense') || title.includes('disburse') || title.includes('payment') || title.includes('reimburse')) {
+            const hasTaskDisb = DB.getWhere('disbursements', d => d.linkedTaskId === t.id).length > 0;
+            const hasWrDisb = wrLevelDisbursements.length > 0;
+            if (!hasTaskDisb && !hasWrDisb) {
+              canTransition = false;
+              missing.push(`Task "${t.title}" requires a linked Disbursement record before routing`);
+            }
+          }
+        });
         break;
 
       case 'Disbursement':
-        // Rule 5: Disbursements must be Released
+        // Rule 5: Actual completion requires 100% compliance/payment of all finances attached
+        if (invoices.length > 0 && !invoices.every(inv => inv.status === 'Paid')) {
+          canTransition = false;
+          const unpaid = invoices.filter(inv => inv.status !== 'Paid');
+          unpaid.forEach(inv => {
+            missing.push(`Invoice ${inv.invoiceNumber || inv.id} is "${inv.status}" — must be Paid for completion`);
+          });
+        }
         if (disbursements.length > 0 && !disbursements.every(d => d.status === 'Released')) {
           canTransition = false;
-          missing.push('All linked disbursements must be Approved & Released');
+          const unreleased = disbursements.filter(d => d.status !== 'Released');
+          unreleased.forEach(d => {
+            missing.push(`Disbursement for ${d.category} is "${d.status}" — must be Released for completion`);
+          });
         }
-        // Note: Billing and Disbursement are often parallel, but here we treat them sequentially for simplicity in the linear board.
         break;
     }
 
     return { canTransition, missing, nextPhase };
+  },
+
+  /**
+   * Returns actionable hint text and optional route for a routing blocker message.
+   */
+  getRoutingHint(blockerMessage) {
+    const msg = blockerMessage.toLowerCase();
+    if (msg.includes('invoice')) return { text: 'Go to Billing module to create and link an invoice.', route: '#billing' };
+    if (msg.includes('disbursement') || msg.includes('expense') || msg.includes('reimburse')) return { text: 'Go to Disbursement module to file and link an expense.', route: '#disbursement' };
+    if (msg.includes('task') && msg.includes('completed')) return { text: 'Mark all tasks as Completed in the task list below.', route: null };
+    if (msg.includes('requirement')) return { text: 'Complete the requirement gathering tasks below.', route: null };
+    if (msg.includes('client assignment')) return { text: 'Edit the work request and assign a client.', route: null };
+    if (msg.includes('employee assignment')) return { text: 'Edit the work request and assign an employee.', route: null };
+    if (msg.includes('released')) return { text: 'Wait for admin to approve and release all linked disbursements.', route: '#disbursement' };
+    return null;
   },
 
   transitionWorkRequest(wrId) {
@@ -241,7 +290,7 @@ const Workflow = {
       titleBar.appendChild(h1);
       
       const actions = el('div', { class: 'title-bar-actions' });
-      if (isManagerial && wr) {
+      if (isManagerial && wr && !isArchived) {
         const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
         addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
         actions.appendChild(addBtn);
@@ -267,6 +316,8 @@ const Workflow = {
       container.appendChild(this.renderTemplates());
     } else if (this.view === 'templateForm') {
       container.appendChild(this.renderTemplateForm());
+    } else if (this.view === 'archive') {
+      container.appendChild(this.renderArchive());
     }
 
     return container;
@@ -295,6 +346,9 @@ const Workflow = {
       templateBtn.addEventListener('click', () => { this.view = 'templates'; this.templateEditingId = null; App.handleRoute(); });
       topActions.appendChild(templateBtn);
     }
+    const archiveBtn = el('button', { class: 'btn btn-ghost', text: 'Archive' });
+    archiveBtn.addEventListener('click', () => { this.view = 'archive'; App.handleRoute(); });
+    topActions.appendChild(archiveBtn);
     headerBar.appendChild(topActions);
     wrapper.appendChild(headerBar);
 
@@ -328,7 +382,7 @@ const Workflow = {
 
     const statusFilter = el('select', { class: 'form-select' });
     statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed', 'Cancelled'].forEach(s => {
+    ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed'].forEach(s => {
       statusFilter.appendChild(el('option', { value: s, text: s }));
     });
     filters.appendChild(statusFilter);
@@ -337,9 +391,9 @@ const Workflow = {
     // View mode toggle
     const viewMode = App.getPreferredViewMode('operations');
     const vmToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom:var(--spacing-md);' });
-    const vmTable = el('button', { text: 'Table', class: viewMode === 'table' ? 'active' : '' });
-    const vmBoard = el('button', { text: 'Board', class: viewMode === 'board' ? 'active' : '' });
-    const vmList = el('button', { text: 'List', class: viewMode === 'list' ? 'active' : '' });
+    const vmTable = el('button', { html: ViewIcons.table + ' Table', class: viewMode === 'table' ? 'active' : '' });
+    const vmBoard = el('button', { html: ViewIcons.board + ' Board', class: viewMode === 'board' ? 'active' : '' });
+    const vmList = el('button', { html: ViewIcons.list + ' List', class: viewMode === 'list' ? 'active' : '' });
     vmTable.addEventListener('click', () => { App.setPreferredViewMode('operations', 'table'); App.handleRoute(); });
     vmBoard.addEventListener('click', () => { App.setPreferredViewMode('operations', 'board'); App.handleRoute(); });
     vmList.addEventListener('click', () => { App.setPreferredViewMode('operations', 'list'); App.handleRoute(); });
@@ -353,7 +407,7 @@ const Workflow = {
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
-      let wrs = DB.getWhere('workRequests', r => r.entity === entity);
+      let wrs = DB.getWhere('workRequests', r => r.entity === entity && r.status !== 'Cancelled');
       if (!isManagerial && !Auth.can('dms:handover')) {
         const myTasks = DB.getWhere('tasks', t => t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id);
         const myWrIds = new Set(myTasks.map(t => t.workRequestId));
@@ -378,6 +432,7 @@ const Workflow = {
   },
 
   refreshTable(container, wrs) {
+    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
     if (wrs.length === 0) {
       container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
       return;
@@ -393,7 +448,13 @@ const Workflow = {
       const client = DB.getById('clients', wr.clientId);
       const assignedUser = DB.getById('users', wr.assignedTo);
       const tr = el('tr');
-      tr.appendChild(el('td', { text: wr.title }));
+      const tdTitle = el('td');
+      tdTitle.appendChild(el('div', { text: wr.title, style: 'font-weight: 600; color: #1e293b;' }));
+      const badgeRow = el('div', { style: 'display: flex; gap: 6px; margin-top: 4px;' });
+      badgeRow.appendChild(this.getFinanceBadgeForWr(wr));
+      badgeRow.appendChild(this.getDocBadgeForWr(wr));
+      tdTitle.appendChild(badgeRow);
+      tr.appendChild(tdTitle);
       tr.appendChild(el('td', { text: client?.name || '—' }));
       tr.appendChild(el('td', { text: wr.priority || '—' }));
       tr.appendChild(el('td')).appendChild(this.statusBadge(wr.status));
@@ -403,6 +464,25 @@ const Workflow = {
       const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
       viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
       tdAct.appendChild(viewBtn);
+      if (isManagerial && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+        const ts = this.getPhaseTransitionStatus(wr.id);
+        if (ts && ts.canTransition && ts.nextPhase) {
+          const routeBtn = el('button', { 
+            html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Route',
+            style: 'color:#10b981;font-weight:600;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;padding:2px 8px;margin-left:4px;cursor:pointer;font-size:11px;display:inline-flex;align-items:center;gap:3px;'
+          });
+          routeBtn.title = 'Route to ' + ts.nextPhase;
+          routeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.transitionWorkRequest(wr.id); });
+          tdAct.appendChild(routeBtn);
+        } else if (ts && ts.missing && ts.missing.length > 0) {
+          const blockerBadge = el('span', {
+            html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' blocker' + (ts.missing.length > 1 ? 's' : ''),
+            style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:rgba(245,158,11,0.08);border-radius:6px;margin-left:4px;cursor:help;'
+          });
+          blockerBadge.title = ts.missing.join('\n');
+          tdAct.appendChild(blockerBadge);
+        }
+      }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
     });
@@ -415,8 +495,10 @@ const Workflow = {
       container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
       return;
     }
+    // Exclude cancelled from board
+    wrs = wrs.filter(wr => wr.status !== 'Cancelled');
     const board = el('div', { class: 'board-v2' });
-    const statuses = ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed', 'Cancelled'];
+    const statuses = ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed'];
     const statusColors = {
       'Draft': '#94a3b8',
       'Pre-processing': '#3b82f6',
@@ -451,7 +533,7 @@ const Workflow = {
         const assigneeIds = [...new Set(tasks.map(t => t.assigneeId || t.assignedTo).filter(Boolean))];
         const assignees = assigneeIds.map(id => DB.getById('users', id)).filter(Boolean);
 
-        const card = el('div', { class: 'board-card-v2' });
+        const card = el('div', { class: 'board-card board-card-v2' });
         card.style.borderLeftColor = colColor;
         card.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
 
@@ -462,8 +544,23 @@ const Workflow = {
         const categoryPath = el('span', { class: 'card-v2-category', text: `${wr.priority} >` });
         topRow.appendChild(categoryPath);
         if (transition && transition.canTransition) {
-          const readyBadge = el('span', { class: 'badge-success btn-xs', text: 'Ready', style: 'margin-left: 8px; font-size: 10px; border-radius: 10px;' });
+          const readyBadge = el('span', { 
+            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Ready to route',
+            class: 'badge-success btn-xs', 
+            style: 'margin-left:8px;font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;' 
+          });
+          readyBadge.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.transitionWorkRequest(wr.id);
+          });
           topRow.appendChild(readyBadge);
+        } else if (transition && transition.missing && transition.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+          const blockerBadge = el('span', {
+            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + transition.missing.length + ' pending',
+            style: 'margin-left:8px;font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;color:#f59e0b;background:rgba(245,158,11,0.1);padding:2px 6px;cursor:help;'
+          });
+          blockerBadge.title = transition.missing.join('\n');
+          topRow.appendChild(blockerBadge);
         }
         if (wr.dueDate) {
           topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(wr.dueDate) }));
@@ -477,6 +574,12 @@ const Workflow = {
         titleRow.appendChild(checkbox);
         titleRow.appendChild(el('div', { class: 'card-v2-title', text: wr.title }));
         card.appendChild(titleRow);
+
+        // Dynamic badges row on Board Card
+        const badgeRow = el('div', { style: 'display:flex; gap:6px; margin-top:6px; margin-bottom:8px; flex-wrap:wrap;' });
+        badgeRow.appendChild(this.getFinanceBadgeForWr(wr));
+        badgeRow.appendChild(this.getDocBadgeForWr(wr));
+        card.appendChild(badgeRow);
 
         // Metadata: Progress, Doc count, Comment count, Avatars
         const metaRow = el('div', { class: 'card-v2-meta' });
@@ -517,6 +620,7 @@ const Workflow = {
   },
 
   refreshListCompact(container, wrs) {
+    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
     if (wrs.length === 0) {
       container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
       return;
@@ -525,11 +629,38 @@ const Workflow = {
     wrs.forEach(wr => {
       const client = DB.getById('clients', wr.clientId);
       const row = el('div', { class: 'list-item' });
-      row.appendChild(el('div', {}, [
-        el('div', { class: 'list-item-title', text: wr.title }),
-        el('div', { class: 'list-item-meta', text: (client?.name || '—') + ' | Due: ' + (wr.dueDate ? formatDate(wr.dueDate) : '—') })
-      ]));
+      const textCol = el('div');
+      textCol.appendChild(el('div', { class: 'list-item-title', text: wr.title }));
+      textCol.appendChild(el('div', { class: 'list-item-meta', text: (client?.name || '—') + ' | Due: ' + (wr.dueDate ? formatDate(wr.dueDate) : '—') }));
+      
+      const badgeRow = el('div', { style: 'display: flex; gap: 6px; margin-top: 4px;' });
+      badgeRow.appendChild(this.getFinanceBadgeForWr(wr));
+      badgeRow.appendChild(this.getDocBadgeForWr(wr));
+      textCol.appendChild(badgeRow);
+      
+      row.appendChild(textCol);
       row.appendChild(this.statusBadge(wr.status));
+      if (isManagerial && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+        const ts = this.getPhaseTransitionStatus(wr.id);
+        if (ts && ts.canTransition && ts.nextPhase) {
+          const readyBadge = el('span', {
+            html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Ready to route',
+            style: 'color:#10b981;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(16,185,129,0.08);border-radius:10px;font-weight:500;cursor:pointer;'
+          });
+          readyBadge.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.transitionWorkRequest(wr.id);
+          });
+          row.appendChild(readyBadge);
+        } else if (ts && ts.missing && ts.missing.length > 0) {
+          const blockerChip = el('span', {
+            html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' pending',
+            style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,158,11,0.08);border-radius:10px;cursor:help;font-weight:500;'
+          });
+          blockerChip.title = ts.missing.join('\n');
+          row.appendChild(blockerChip);
+        }
+      }
       row.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
       list.appendChild(row);
     });
@@ -547,6 +678,75 @@ const Workflow = {
       'Cancelled': 'badge-danger'
     };
     return el('span', { class: 'badge ' + (map[status] || ''), text: status });
+  },
+
+  getFinanceBadgeForWr(wr) {
+    const invoices = DB.getWhere('invoices', inv => inv.workRequestId === wr.id || wr.linkedInvoiceId === inv.id);
+    const disbursements = DB.getWhere('disbursements', d => d.linkedWorkRequestId === wr.id || (wr.linkedDisbursementIds || []).includes(d.id));
+    
+    let text = 'No Finances';
+    let bg = '#f1f5f9';
+    let fg = '#475569';
+    
+    if (invoices.length > 0 || disbursements.length > 0) {
+      const allInvoicesPaid = invoices.every(inv => inv.status === 'Paid');
+      const allDisbursementsReleased = disbursements.every(d => d.status === 'Released');
+      
+      if (allInvoicesPaid && allDisbursementsReleased) {
+        text = 'Finances: Settled';
+        bg = '#dcfce7';
+        fg = '#166534';
+      } else {
+        const anyOverdue = invoices.some(inv => inv.status === 'Overdue');
+        const anyDraftOrPending = invoices.some(inv => ['Draft', 'Pending'].includes(inv.status)) ||
+                                  disbursements.some(d => ['Submitted', 'Under Review'].includes(d.status));
+        
+        if (anyOverdue) {
+          text = 'Finances: Overdue';
+          bg = '#fee2e2';
+          fg = '#991b1b';
+        } else if (anyDraftOrPending) {
+          text = 'Finances: Pending Approval';
+          bg = '#fef3c7';
+          fg = '#b45309';
+        } else {
+          text = 'Finances: Active';
+          bg = '#dbeafe';
+          fg = '#1e40af';
+        }
+      }
+    }
+    
+    return el('span', {
+      text,
+      style: 'font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ' + bg + '; color: ' + fg + '; display: inline-flex; align-items: center; border: 1px solid rgba(0,0,0,0.05);'
+    });
+  },
+
+  getDocBadgeForWr(wr) {
+    const documents = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
+    
+    let text = 'No Documents';
+    let bg = '#f1f5f9';
+    let fg = '#475569';
+    
+    if (documents.length > 0) {
+      const storedCount = documents.filter(d => d.lifecycleState === 'stored').length;
+      if (storedCount === documents.length) {
+        text = 'Docs: Stored';
+        bg = '#dcfce7';
+        fg = '#166534';
+      } else {
+        text = `Docs: ${storedCount}/${documents.length} Stored`;
+        bg = '#dbeafe';
+        fg = '#1e40af';
+      }
+    }
+    
+    return el('span', {
+      text,
+      style: 'font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ' + bg + '; color: ' + fg + '; display: inline-flex; align-items: center; border: 1px solid rgba(0,0,0,0.05);'
+    });
   },
 
   renderProgressBar(status) {
@@ -956,6 +1156,21 @@ const Workflow = {
       div.appendChild(el('span', { class: 'detail-info-value', text: item.value }));
       subHeader.appendChild(div);
     });
+
+    const finDiv = el('div', { class: 'detail-info-item' });
+    finDiv.appendChild(el('span', { class: 'detail-info-label', text: 'Finance Status' }));
+    const finVal = el('span', { class: 'detail-info-value' });
+    finVal.appendChild(this.getFinanceBadgeForWr(wr));
+    finDiv.appendChild(finVal);
+    subHeader.appendChild(finDiv);
+
+    const docDiv = el('div', { class: 'detail-info-item' });
+    docDiv.appendChild(el('span', { class: 'detail-info-label', text: 'Documents Status' }));
+    const docVal = el('span', { class: 'detail-info-value' });
+    docVal.appendChild(this.getDocBadgeForWr(wr));
+    docDiv.appendChild(docVal);
+    subHeader.appendChild(docDiv);
+
     container.appendChild(subHeader);
 
     // Modern Centered Progress Indicator
@@ -983,6 +1198,39 @@ const Workflow = {
 
     const isDocStaff = Auth.user?.name?.toLowerCase().includes('documentation') ||
                        Auth.user?.email?.toLowerCase().startsWith('docs@');
+    const isArchived = wr.status === 'Cancelled';
+
+    // End-of-day time log reminder banner (Manila 5 PM+)
+    const now = new Date();
+    const manilaHour = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' })).getHours();
+    if (manilaHour >= 17 && !isArchived) {
+      const myTasks = sortedTasks.filter(t => (t.assigneeId || t.assignedTo) === Auth.user.id && t.status !== 'Completed' && t.status !== 'Cancelled');
+      const todayStr = now.toISOString().slice(0, 10);
+      const missingLogTasks = myTasks.filter(t => !(t.timeLogs || []).some(l => l.date === todayStr));
+      if (missingLogTasks.length > 0) {
+        const reminderBanner = el('div', {
+          style: 'background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;'
+        });
+        reminderBanner.appendChild(el('div', {
+          html: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+          style: 'flex-shrink:0;'
+        }));
+        const reminderText = el('div', { style: 'flex:1;' });
+        reminderText.appendChild(el('div', {
+          text: `⏰ End of day reminder: You haven't logged time today for ${missingLogTasks.length} assigned task(s).`,
+          style: 'font-weight:600;color:#92400e;font-size:13px;'
+        }));
+        const logBtn = el('button', {
+          text: 'Log Time Now',
+          class: 'btn btn-sm',
+          style: 'margin-top:6px;background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-weight:600;cursor:pointer;font-size:12px;'
+        });
+        logBtn.addEventListener('click', () => { this.showAddTimeLogModal(missingLogTasks[0].id); });
+        reminderText.appendChild(logBtn);
+        reminderBanner.appendChild(reminderText);
+        container.appendChild(reminderBanner);
+      }
+    }
 
     const groups = { 'General Tasks': sortedTasks };
     for (const [groupName, groupTasks] of Object.entries(groups)) {
@@ -994,7 +1242,7 @@ const Workflow = {
       // Action Buttons: Route + Cancel Work Request
       if (wr) {
         const ts = this.getPhaseTransitionStatus(wr.id);
-        const hasRoute = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
+        const showRouteButton = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
         const canCancel = isManagerial && wr.status !== 'Completed' && wr.status !== 'Cancelled';
         const phaseColors = {
           'Draft': '#94a3b8',
@@ -1006,7 +1254,7 @@ const Workflow = {
           'Cancelled': '#ef4444'
         };
 
-        if (hasRoute || canCancel) {
+        if (showRouteButton || canCancel) {
           const actionsWrap = el('div', { style: 'display:flex; gap:8px; margin-left:auto; align-items:center;' });
 
           if (canCancel) {
@@ -1022,21 +1270,79 @@ const Workflow = {
             actionsWrap.appendChild(cancelWrBtn);
           }
 
-          if (hasRoute) {
+          if (showRouteButton) {
             const routeColor = phaseColors[ts.nextPhase] || '#94a3b8';
             const routeBtn = el('button', {
               class: 'btn btn-sm',
               text: `Route to ${ts.nextPhase}`,
-              style: `background: transparent; border: none; color: ${routeColor}; font-weight: 600; padding: 4px 8px; cursor: pointer;`
+              style: `background: transparent; border: none; color: ${routeColor}; font-weight: 600; padding: 4px 8px; cursor: ${ts.canTransition ? 'pointer' : 'not-allowed'}; opacity: ${ts.canTransition ? '1' : '0.5'};`,
+              disabled: !ts.canTransition
             });
-            routeBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              this.transitionWorkRequest(wr.id);
-            });
+            if (ts.canTransition) {
+              routeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.transitionWorkRequest(wr.id);
+              });
+            }
             actionsWrap.appendChild(routeBtn);
           }
 
           groupHeader.appendChild(actionsWrap);
+        }
+
+        // Routing dependency checklist — shows blockers + actionable hints
+        if (ts && !ts.canTransition && ts.missing && ts.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+          const blockWrapper = el('div', {
+            style: 'width:100%; display:flex; justify-content:flex-end; margin-top:8px;'
+          });
+          const depPanel = el('div', {
+            style: 'background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;padding:10px 14px;font-size:12px;max-width:65%;'
+          });
+          depPanel.appendChild(el('div', {
+            html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> <strong>Routing blocked</strong> — Resolve these to route to ' + (ts.nextPhase || 'next phase') + ':',
+            style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#92400e;font-weight:500;'
+          }));
+          const depList = el('ul', { style: 'margin:0;padding-left:24px;color:#78350f;' });
+          ts.missing.forEach(m => {
+            const li = el('li', { style: 'margin-bottom:4px;' });
+            li.appendChild(el('div', { text: m, style: 'font-weight:500;' }));
+            const hint = this.getRoutingHint(m);
+            if (hint) {
+              const hintEl = el('div', { style: 'font-size:11px;color:#b45309;margin-top:2px;' });
+              hintEl.appendChild(el('span', { text: '→ ' + hint.text, style: 'font-style:italic;' }));
+              if (hint.route) {
+                const goBtn = el('button', {
+                  text: 'Go',
+                  class: 'btn btn-xs',
+                  style: 'margin-left:6px;padding:1px 6px;font-size:10px;background:rgba(245,158,11,0.15);color:#92400e;border:none;border-radius:4px;cursor:pointer;font-weight:600;'
+                });
+                goBtn.addEventListener('click', () => {
+                  if (hint.route === '#billing') { Billing.view = 'list'; Billing.detailId = null; }
+                  if (hint.route === '#disbursement') { Disbursement.view = 'list'; Disbursement.detailId = null; }
+                  location.hash = hint.route;
+                });
+                hintEl.appendChild(goBtn);
+              }
+              li.appendChild(hintEl);
+            }
+            depList.appendChild(li);
+          });
+          depPanel.appendChild(depList);
+          blockWrapper.appendChild(depPanel);
+          groupHeader.appendChild(blockWrapper);
+        } else if (ts && ts.canTransition && ts.nextPhase && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+          const readyWrapper = el('div', {
+            style: 'width:100%; display:flex; justify-content:flex-end; margin-top:8px;'
+          });
+          const readyPanel = el('div', {
+            style: 'background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);border-radius:8px;padding:10px 14px;font-size:12px;max-width:65%;'
+          });
+          readyPanel.appendChild(el('div', {
+            html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> <strong>Ready to route</strong> — All requirements met. Click "Route to ' + ts.nextPhase + '" above to proceed.',
+            style: 'display:flex;align-items:center;gap:6px;color:#166534;font-weight:500;'
+          }));
+          readyWrapper.appendChild(readyPanel);
+          groupHeader.appendChild(readyWrapper);
         }
       }
 
@@ -1057,7 +1363,7 @@ const Workflow = {
 
       groupTasks.forEach(t => {
         const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
-        const tr = el('tr', { class: 'task-row-v2' });
+        const tr = el('tr', { class: 'task-row-v2 task-expand' });
         
         // Totals calculation
         const hours = (t.timeLogs || []).reduce((acc, l) => acc + (l.hours || 0), 0);
@@ -1083,7 +1389,7 @@ const Workflow = {
         tr.appendChild(tdAssignee);
 
         // Due Date
-        tr.appendChild(el('td', { text: t.dueDate ? formatDate(t.dueDate) : '—' }));
+        tr.appendChild(el('td', { text: t.dueDate ? formatDate(t.dueDate) : 'N/A' }));
 
         // Progress Status (Dropdown with Left Arrow)
         const tdStatus = el('td');
@@ -1096,11 +1402,12 @@ const Workflow = {
         flow.forEach(s => {
           const opt = el('option', { value: s, text: s });
           if (s === t.status) opt.selected = true;
-          if (!validStatuses.includes(s)) {
+          if (!validStatuses.includes(s) || isArchived) {
             opt.disabled = true;
           }
           statusSel.appendChild(opt);
         });
+        if (isArchived) statusSel.disabled = true;
 
         const sColors = { 'Completed': '#10b981', 'In Progress': '#f59e0b', 'Draft': '#94a3b8', 'For Review': '#a855f7', 'Assigned': '#3b82f6', 'Cancelled': '#ef4444' };
         statusSel.style.color = sColors[t.status] || '#1e293b';
@@ -1146,12 +1453,21 @@ const Workflow = {
         const tdLinked = el('td');
         const linkedWrap = el('div', { style: 'display:flex; flex-direction:column; gap:4px;' });
         
-        const linkedInv = DB.getWhere('invoices', inv => inv.linkedTaskId === t.id)[0];
+        let linkedInv = DB.getWhere('invoices', inv => inv.linkedTaskId === t.id)[0];
+        if (!linkedInv) {
+          const pc = DB.getWhere('pendingChanges', p => p.table === 'invoices' && p.status === 'pending' && p.proposedData && p.proposedData.linkedTaskId === t.id)[0];
+          if (pc) {
+            linkedInv = deepClone(pc.proposedData);
+            linkedInv.status = 'Pending';
+            linkedInv.pendingChangeId = pc.id;
+          }
+        }
         const linkedDisb = DB.getWhere('disbursements', d => d.linkedTaskId === t.id);
         
         if (linkedInv) {
-          const badge = el('span', { class: 'badge badge-info', text: '📄 ' + linkedInv.invoiceNumber, style: 'cursor:pointer; font-size:10px;' });
-          badge.addEventListener('click', (e) => { e.stopPropagation(); Billing.detailId = linkedInv.id; Billing.view = 'detail'; App.handleRoute(); });
+          const badgeText = '📄 ' + linkedInv.invoiceNumber + (linkedInv.status === 'Pending' ? ' (Pending)' : '');
+          const badge = el('span', { class: 'badge badge-info', text: badgeText, style: 'cursor:pointer; font-size:10px;' });
+          badge.addEventListener('click', (e) => { e.stopPropagation(); Billing.detailId = linkedInv.id; Billing.view = 'detail'; location.hash = '#billing'; App.handleRoute(); });
           linkedWrap.appendChild(badge);
         }
         linkedDisb.forEach(d => {
@@ -1160,8 +1476,28 @@ const Workflow = {
           linkedWrap.appendChild(badge);
         });
         
-        if (!linkedInv && linkedDisb.length === 0) {
-          linkedWrap.appendChild(el('span', { text: '—', style: 'color:var(--color-text-muted);' }));
+        // Show actionable link hints for routing-critical tasks
+        const needsInvoice = t.title.toLowerCase().includes('invoice') || t.title.toLowerCase().includes('bill');
+        const needsDisbursement = t.title.toLowerCase().includes('expense') || t.title.toLowerCase().includes('disburse') || t.title.toLowerCase().includes('payment') || t.title.toLowerCase().includes('reimburse');
+        if (!isArchived && needsInvoice && !linkedInv) {
+          const linkHint = el('span', {
+            text: '⚠ Link invoice required',
+            style: 'font-size:10px;color:#f59e0b;font-weight:500;cursor:pointer;'
+          });
+          linkHint.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
+          linkedWrap.appendChild(linkHint);
+        }
+        if (!isArchived && needsDisbursement && linkedDisb.length === 0) {
+          const linkHint = el('span', {
+            text: '⚠ Link expense required',
+            style: 'font-size:10px;color:#f59e0b;font-weight:500;cursor:pointer;'
+          });
+          linkHint.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
+          linkedWrap.appendChild(linkHint);
+        }
+
+        if (!linkedInv && linkedDisb.length === 0 && !needsInvoice && !needsDisbursement) {
+          linkedWrap.appendChild(el('span', { text: 'N/A', style: 'color:var(--color-text-muted);' }));
         }
         tdLinked.appendChild(linkedWrap);
         tr.appendChild(tdLinked);
@@ -1177,12 +1513,12 @@ const Workflow = {
         tr.appendChild(el('td', { text: formatPHP(1200) }));
 
         // Hours (Aligned)
-        tr.appendChild(el('td', { text: hours > 0 ? `${hours}h` : '—' }));
+        tr.appendChild(el('td', { text: hours > 0 ? `${hours}h` : 'N/A' }));
 
         tbody.appendChild(tr);
 
         // Accordion Details Row
-        const detailsTr = el('tr', { class: 'task-details-row hidden' });
+        const detailsTr = el('tr', { class: 'task-details-row hidden accordion-panel collapsed' });
         const detailsTd = el('td', { colspan: 8 });
         const detailsContainer = el('div', { class: 'task-details-container' });
         
@@ -1196,8 +1532,8 @@ const Workflow = {
         const docsHeader = el('div', { class: 'details-section-title' });
         docsHeader.appendChild(el('span', { text: 'Attached Documents' }));
         
-        // Only Documentation Staff can upload
-        if (isDocStaff) {
+        // Only Documentation Staff can upload (disabled in archive)
+        if (isDocStaff && !isArchived) {
           const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload Scanned' });
           addDocBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddDocumentModal(t.id); });
           docsHeader.appendChild(addDocBtn);
@@ -1305,8 +1641,8 @@ const Workflow = {
                   contentArea.textContent = c.text;
                   commentRow.appendChild(contentArea);
 
-                  // Admin Actions: Edit/Delete
-                  if (isAdmin) {
+                  // Admin Actions: Edit/Delete (disabled in archive)
+                  if (isAdmin && !isArchived) {
                     const cActions = el('div', { style: 'display:flex; gap:8px; margin-top:8px; border-top:1px solid #f1f5f9; padding-top:4px;' });
                     
                     const editBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Edit', style: 'padding:0; font-size:0.7rem;' });
@@ -1363,7 +1699,7 @@ const Workflow = {
               }
               commentContainer.appendChild(list);
 
-              if (isAdmin) {
+              if (isAdmin && !isArchived) {
                 const addForm = el('div', { style: 'margin-top:12px; padding-top:12px; border-top: 1px solid #cbd5e1;' });
                 const addInput = el('textarea', { placeholder: 'Write a comment...', class: 'form-control', style: 'width:100%; min-height:50px; font-size:0.875rem;' });
                 const addBtnRow = el('div', { style: 'display:flex; gap:8px; margin-top:8px;' });
@@ -1402,7 +1738,8 @@ const Workflow = {
         const timeSection = el('div', { class: 'task-details-col' });
         const timeHeader = el('div', { class: 'details-section-title' });
         timeHeader.appendChild(el('span', { text: 'Time Log Today' }));
-        if ((t.assigneeId || t.assignedTo) === Auth.user.id) {
+        const canLogTime = ((t.assigneeId || t.assignedTo) === Auth.user.id) && !isArchived;
+        if (canLogTime) {
           const addTimeBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Add Log' });
           addTimeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddTimeLogModal(t.id); });
           timeHeader.appendChild(addTimeBtn);
@@ -1413,7 +1750,8 @@ const Workflow = {
         const today = new Date().toISOString().slice(0, 10);
         const todayLogs = (t.timeLogs || []).filter(l => l.date === today);
         if (todayLogs.length === 0) {
-          timeList.appendChild(el('div', { class: 'empty-state', text: 'No logs for today.' }));
+          const emptyText = isArchived ? 'Archived — time logging disabled.' : 'No logs for today.';
+          timeList.appendChild(el('div', { class: 'empty-state', text: emptyText }));
         } else {
           todayLogs.forEach(l => {
             const logDate = new Date(l.date);
@@ -1435,16 +1773,17 @@ const Workflow = {
         tr.addEventListener('click', () => {
           tr.classList.toggle('expanded');
           detailsTr.classList.toggle('hidden');
+          detailsTr.classList.toggle('collapsed');
         });
       });
       table.appendChild(tbody);
 
       // Aligned Footer Totals
       const tfoot = el('tfoot');
-      const footTr = el('tr');
-      for(let i=0; i<5; i++) footTr.appendChild(el('td')); // Empty placeholders
-      footTr.appendChild(el('td', { text: formatPHP(totalAmount) }));
-      footTr.appendChild(el('td', { text: `${totalHours} hrs` }));
+      const footTr = el('tr', { style: 'font-weight: bold;' });
+      for(let i=0; i<6; i++) footTr.appendChild(el('td')); // Empty placeholders (columns 1 to 6)
+      footTr.appendChild(el('td', { text: formatPHP(totalAmount) })); // Est. Amount (column 7)
+      footTr.appendChild(el('td', { text: `${totalHours} hrs` })); // Hours (column 8)
       tfoot.appendChild(footTr);
       table.appendChild(tfoot);
 
@@ -1453,6 +1792,153 @@ const Workflow = {
     }
     
     container.appendChild(listWrapper);
+
+    // Related Records Panel (Section 3B.7)
+    const relatedSection = el('div', { class: 'form-section', style: 'margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 24px;' });
+    relatedSection.appendChild(el('h3', { text: 'Related Financials & Documents' }));
+
+    const grid = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px;' });
+
+    // Fetch related records
+    const approvedInvs = DB.getWhere('invoices', inv => inv.workRequestId === wr.id || wr.linkedInvoiceId === inv.id);
+    const pendingInvs = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'invoices' || pc.status !== 'pending') return false;
+      const inv = pc.proposedData;
+      return inv && (inv.workRequestId === wr.id || wr.linkedInvoiceId === inv.id);
+    }).map(pc => {
+      const inv = deepClone(pc.proposedData);
+      inv.status = 'Pending';
+      inv.pendingChangeId = pc.id;
+      return inv;
+    });
+
+    const seenIds = new Set();
+    const invoices = [];
+    [...approvedInvs, ...pendingInvs].forEach(inv => {
+      if (!seenIds.has(inv.id)) {
+        seenIds.add(inv.id);
+        invoices.push(inv);
+      }
+    });
+
+    const disbursements = DB.getWhere('disbursements', d => d.linkedWorkRequestId === wr.id || (wr.linkedDisbursementIds || []).includes(d.id));
+    const transmittals = DB.getWhere('transmittals', t => t.workRequestId === wr.id || (wr.linkedTransmittalIds || []).includes(t.id));
+
+    // Invoices Column
+    const invCol = el('div', { class: 'card', style: 'padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: white;' });
+    invCol.appendChild(el('h4', { text: '📄 Invoices / Billings', style: 'margin-bottom: 12px; color: #1e3a8a; font-size: 0.95rem; font-weight: 600; border-bottom: 2px solid #3b82f6; padding-bottom: 6px;' }));
+    if (invoices.length === 0) {
+      invCol.appendChild(el('p', { text: 'No linked invoices.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
+    } else {
+      const invList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
+      invoices.forEach(inv => {
+        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;' });
+        const left = el('div');
+        const link = el('a', { href: 'javascript:void(0)', text: inv.invoiceNumber, style: 'color: #2563eb; font-weight: 600; text-decoration: none;' });
+        link.addEventListener('click', (e) => { e.stopPropagation(); Billing.detailId = inv.id; Billing.view = 'detail'; location.hash = '#billing'; App.handleRoute(); });
+        link.addEventListener('mouseenter', () => { link.style.textDecoration = 'underline'; });
+        link.addEventListener('mouseleave', () => { link.style.textDecoration = 'none'; });
+        left.appendChild(link);
+        
+        let scopeText = ' (Entire WR)';
+        if (inv.linkedTaskId) {
+          const task = DB.getById('tasks', inv.linkedTaskId);
+          if (task) scopeText = ` (Task: ${task.title})`;
+        }
+        left.appendChild(el('span', { text: scopeText, style: 'color: #64748b; font-size: 0.75rem; font-style: italic;' }));
+        left.appendChild(el('div', { text: `${formatDate(inv.issueDate)} • ${formatPHP(inv.total)}`, style: 'color: #64748b; font-size: 0.75rem; margin-top: 2px;' }));
+        
+        item.appendChild(left);
+        
+        let bg = '#f1f5f9';
+        let fg = '#475569';
+        if (inv.status === 'Paid') { bg = '#dcfce7'; fg = '#166534'; }
+        else if (inv.status === 'Approved') { bg = '#dbeafe'; fg = '#1e40af'; }
+        else if (inv.status === 'Sent') { bg = '#e0f2fe'; fg = '#0369a1'; }
+        else if (inv.status === 'Pending') { bg = '#fef3c7'; fg = '#b45309'; }
+        else if (inv.status === 'Draft') { bg = '#f1f5f9'; fg = '#475569'; }
+
+        const stBadge = el('span', { 
+          class: 'badge', 
+          text: inv.status, 
+          style: `font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${bg}; color: ${fg};`
+        });
+        item.appendChild(stBadge);
+        invList.appendChild(item);
+      });
+      invCol.appendChild(invList);
+    }
+    grid.appendChild(invCol);
+
+    // Disbursements Column
+    const disbCol = el('div', { class: 'card', style: 'padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: white;' });
+    disbCol.appendChild(el('h4', { text: '💸 Expenses / Disbursements', style: 'margin-bottom: 12px; color: #b45309; font-size: 0.95rem; font-weight: 600; border-bottom: 2px solid #f59e0b; padding-bottom: 6px;' }));
+    if (disbursements.length === 0) {
+      disbCol.appendChild(el('p', { text: 'No linked disbursements.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
+    } else {
+      const disbList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
+      disbursements.forEach(d => {
+        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;' });
+        const left = el('div');
+        const link = el('a', { href: 'javascript:void(0)', text: d.category, style: 'color: #2563eb; font-weight: 600; text-decoration: none;' });
+        link.addEventListener('click', (e) => { e.stopPropagation(); Disbursement.detailId = d.id; Disbursement.view = 'detail'; location.hash = '#disbursement'; App.handleRoute(); });
+        link.addEventListener('mouseenter', () => { link.style.textDecoration = 'underline'; });
+        link.addEventListener('mouseleave', () => { link.style.textDecoration = 'none'; });
+        left.appendChild(link);
+        
+        let scopeText = ' (Entire WR)';
+        if (d.linkedTaskId) {
+          const task = DB.getById('tasks', d.linkedTaskId);
+          if (task) scopeText = ` (Task: ${task.title})`;
+        }
+        left.appendChild(el('span', { text: scopeText, style: 'color: #64748b; font-size: 0.75rem; font-style: italic;' }));
+        left.appendChild(el('div', { text: `${formatDate(d.submittedAt)} • ${formatPHP(d.amount)}`, style: 'color: #64748b; font-size: 0.75rem; margin-top: 2px;' }));
+        
+        item.appendChild(left);
+        const stBadge = el('span', { 
+          class: 'badge', 
+          text: d.status, 
+          style: `font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${d.status === 'Released' ? '#dcfce7' : d.status === 'Approved' ? '#dbeafe' : '#fef3c7'}; color: ${d.status === 'Released' ? '#166534' : d.status === 'Approved' ? '#1e40af' : '#b45309'};`
+        });
+        item.appendChild(stBadge);
+        disbList.appendChild(item);
+      });
+      disbCol.appendChild(disbList);
+    }
+    grid.appendChild(disbCol);
+
+    // Transmittals Column
+    const transCol = el('div', { class: 'card', style: 'padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: white;' });
+    transCol.appendChild(el('h4', { text: '📦 Transmittals', style: 'margin-bottom: 12px; color: #065f46; font-size: 0.95rem; font-weight: 600; border-bottom: 2px solid #10b981; padding-bottom: 6px;' }));
+    if (transmittals.length === 0) {
+      transCol.appendChild(el('p', { text: 'No linked transmittals.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
+    } else {
+      const transList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
+      transmittals.forEach(t => {
+        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;' });
+        const left = el('div');
+        const link = el('a', { href: 'javascript:void(0)', text: t.trackingNumber, style: 'color: #2563eb; font-weight: 600; text-decoration: none;' });
+        link.addEventListener('click', (e) => { e.stopPropagation(); Transmittal.detailId = t.id; Transmittal.view = 'detail'; location.hash = '#transmittal'; App.handleRoute(); });
+        link.addEventListener('mouseenter', () => { link.style.textDecoration = 'underline'; });
+        link.addEventListener('mouseleave', () => { link.style.textDecoration = 'none'; });
+        left.appendChild(link);
+        left.appendChild(el('div', { text: `Sent: ${formatDate(t.sentAt)}`, style: 'color: #64748b; font-size: 0.75rem; margin-top: 2px;' }));
+        
+        item.appendChild(left);
+        const stBadge = el('span', { 
+          class: 'badge', 
+          text: t.status, 
+          style: `font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${t.status === 'Acknowledged' ? '#dcfce7' : '#f1f5f9'}; color: ${t.status === 'Acknowledged' ? '#166534' : '#475569'};`
+        });
+        item.appendChild(stBadge);
+        transList.appendChild(item);
+      });
+      transCol.appendChild(transList);
+    }
+    grid.appendChild(transCol);
+
+    relatedSection.appendChild(grid);
+    container.appendChild(relatedSection);
 
     return container;
   },
@@ -1517,8 +2003,16 @@ const Workflow = {
 
       if (typeSel.value === 'invoice') {
         DB.update('invoices', recId, { linkedTaskId: taskId, workRequestId: task.workRequestId });
+        if (wr && !wr.linkedInvoiceId) {
+          DB.update('workRequests', wr.id, { linkedInvoiceId: recId });
+        }
       } else if (typeSel.value === 'disbursement') {
         DB.update('disbursements', recId, { linkedTaskId: taskId, linkedWorkRequestId: task.workRequestId });
+        if (wr) {
+          const linkedIds = new Set(wr.linkedDisbursementIds || []);
+          linkedIds.add(recId);
+          DB.update('workRequests', wr.id, { linkedDisbursementIds: Array.from(linkedIds) });
+        }
       }
       overlay.remove();
       App.handleRoute();
@@ -2201,6 +2695,72 @@ const Workflow = {
     this.view = 'templates';
     this.templateEditingId = null;
     App.handleRoute();
+  },
+
+  renderArchive() {
+    const entity = Auth.activeEntity;
+    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+    const archived = DB.getWhere('workRequests', wr => wr.entity === entity && wr.status === 'Cancelled');
+
+    const container = el('div', { class: 'page' });
+    const titleBar = el('div', { class: 'page-title-bar-v2' });
+    const h1 = el('h1', { class: 'breadcrumb-h1' });
+    const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Operations' });
+    baseLink.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
+    h1.appendChild(baseLink);
+    h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+    h1.appendChild(document.createTextNode('Archive'));
+    titleBar.appendChild(h1);
+
+    const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to Work Requests' });
+    backBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
+    titleBar.appendChild(backBtn);
+    container.appendChild(titleBar);
+
+    if (archived.length === 0) {
+      container.appendChild(el('p', { text: 'Archive is empty.', class: 'empty-state' }));
+      return container;
+    }
+
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Title', 'Client', 'Priority', 'Status', 'Cancelled At', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    archived.forEach(wr => {
+      const client = DB.getById('clients', wr.clientId);
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: wr.title }));
+      tr.appendChild(el('td', { text: client?.name || '—' }));
+      tr.appendChild(el('td', { text: wr.priority || '—' }));
+      tr.appendChild(el('td')).appendChild(this.statusBadge(wr.status));
+      tr.appendChild(el('td', { text: formatDate(wr.updatedAt) }));
+      const tdAct = el('td');
+      const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
+      viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailWrId = wr.id; App.handleRoute(); });
+      tdAct.appendChild(viewBtn);
+      if (isManagerial) {
+        const restoreBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Restore', style: 'margin-left:4px;' });
+        restoreBtn.addEventListener('click', () => {
+          this.showConfirm('Restore Work Request',
+            `Restore "${wr.title}" to Draft? All tasks will remain Cancelled and must be reassigned manually.`,
+            () => {
+              DB.update('workRequests', wr.id, { status: 'Draft', updatedAt: new Date().toISOString() });
+              App.handleRoute();
+            }, 'warning');
+        });
+        tdAct.appendChild(restoreBtn);
+      }
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    return container;
   },
 
   generateFromTemplate(templateId) {

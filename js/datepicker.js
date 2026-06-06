@@ -50,7 +50,7 @@ const MaterialDatePicker = (() => {
     // Prevent native picker by switching to text
     input.setAttribute('type', 'text');
     input.setAttribute('data-datepicker', 'true');
-    input.style.cssText = 'position:absolute;opacity:0;pointer-events:none;width:0;height:0;overflow:hidden;padding:0;border:none;';
+    input.style.cssText = 'position:absolute;opacity:0.01;pointer-events:none;width:1px;height:1px;overflow:hidden;padding:0;border:none;';
     input.tabIndex = -1;
 
     // Create wrapper

@@ -49,18 +49,20 @@ const App = {
       }
     }
 
-    // Also badge the Admin nav link for pending disbursement submissions
+    // Also badge the Admin nav link for pending changes and disbursement submissions
     if (isAdmin) {
+      const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getAllPending === 'function') ? PendingChanges.getAllPending() : [];
+      const adminCount = count + pendingChanges.length;
       const adminNav = document.querySelector('nav a[href="#admin"]');
       if (adminNav) {
         let adminBadge = adminNav.querySelector('.nav-badge');
-        if (count > 0) {
+        if (adminCount > 0) {
           if (!adminBadge) {
             adminBadge = document.createElement('span');
             adminBadge.className = 'nav-badge';
             adminNav.appendChild(adminBadge);
           }
-          adminBadge.textContent = count > 99 ? '99+' : count;
+          adminBadge.textContent = adminCount > 99 ? '99+' : adminCount;
         } else if (adminBadge) {
           adminBadge.remove();
         }

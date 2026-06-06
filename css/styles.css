@@ -760,7 +760,8 @@ tbody tr:hover {
 
 /* View Mode Toggle */
 .view-mode-toggle { display: flex; gap: var(--spacing-xs); background: var(--color-bg); padding: 4px; border-radius: var(--radius-sm); }
-.view-mode-toggle button { padding: 6px 12px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.8125rem; }
+.view-mode-toggle button { padding: 6px 12px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.8125rem; display: inline-flex; align-items: center; gap: 4px; }
+.view-mode-toggle button svg { flex-shrink: 0; }
 .view-mode-toggle button.active { background: var(--color-surface); color: var(--color-primary); font-weight: 600; box-shadow: var(--shadow-card); }
 
 /* Card Grid */
@@ -1862,6 +1863,7 @@ tbody tr:hover {
   color: #334155;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

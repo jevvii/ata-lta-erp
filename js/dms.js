@@ -84,8 +84,9 @@ const DMS = {
 
     // View mode toggle
     const viewToggle = el('div', { class: 'view-mode-toggle' });
+    const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { text: label });
+      const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label });
       if (this.listViewMode === mode) btn.classList.add('active');
       btn.addEventListener('click', () => {
         App.setPreferredViewMode('documents', mode);

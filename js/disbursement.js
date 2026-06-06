@@ -215,8 +215,9 @@ const Disbursement = {
 
     // View mode toggle
     const viewToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom: var(--spacing-md);' });
+    const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { text: label, class: viewMode === mode ? 'active' : '' });
+      const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: viewMode === mode ? 'active' : '' });
       btn.addEventListener('click', () => {
         App.setPreferredViewMode('disbursement', mode);
         App.handleRoute();
@@ -298,10 +299,26 @@ const Disbursement = {
       const tr = el('tr');
       tr.appendChild(el('td', { text: emp?.name || '—' }));
       const tdCat = el('td');
-      tdCat.appendChild(el('span', { text: d.category }));
+      tdCat.appendChild(el('span', { text: d.category, style: 'font-weight:600;' }));
       if (d.fromTemplate) {
         tdCat.appendChild(document.createTextNode(' '));
         tdCat.appendChild(this.recurringBadge(d));
+      }
+      if (d.linkedWorkRequestId) {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        if (wr) {
+          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #64748b; margin-top: 4px;' });
+          wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 500;' }));
+          if (d.linkedTaskId) {
+            const task = DB.getById('tasks', d.linkedTaskId);
+            if (task) {
+              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: #8c9ba5; font-style: italic;' }));
+            }
+          } else {
+            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: #8c9ba5; font-style: italic;' }));
+          }
+          tdCat.appendChild(wrWrap);
+        }
       }
       tr.appendChild(tdCat);
       tr.appendChild(el('td', { text: formatPHP(d.amount) }));
@@ -380,7 +397,25 @@ const Disbursement = {
 
         // Subtitle: Employee and Fund
         const source = this.getFundSource(d);
-        card.appendChild(el('div', { text: `${emp?.name || '—'} • ${source}`, style: 'font-size:0.875rem;color:#64748b;margin-bottom:12px;' }));
+        card.appendChild(el('div', { text: `${emp?.name || '—'} • ${source}`, style: 'font-size:0.875rem;color:#64748b;margin-bottom:8px;' }));
+
+        // Linked WR/Task info
+        if (d.linkedWorkRequestId) {
+          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+          if (wr) {
+            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #1e40af; margin-bottom: 12px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
+            wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 600;' }));
+            if (d.linkedTaskId) {
+              const task = DB.getById('tasks', d.linkedTaskId);
+              if (task) {
+                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: #475569;' }));
+              }
+            } else {
+              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: #475569;' }));
+            }
+            card.appendChild(wrWrap);
+          }
+        }
 
         // Meta: Financials
         const metaRow = el('div', { class: 'card-v2-meta' });
@@ -408,7 +443,20 @@ const Disbursement = {
         titleRow.appendChild(this.recurringBadge(d));
       }
       left.appendChild(titleRow);
-      left.appendChild(el('div', { class: 'list-item-meta', text: (emp?.name || '—') + ' • ' + this.getFundSource(d) + ' • ' + formatDate(d.submittedAt) }));
+      let wrMeta = '';
+      if (d.linkedWorkRequestId) {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        if (wr) {
+          wrMeta = ' • WR: ' + wr.title;
+          if (d.linkedTaskId) {
+            const task = DB.getById('tasks', d.linkedTaskId);
+            if (task) wrMeta += ` (Task: ${task.title})`;
+          } else {
+            wrMeta += ' (Entire WR)';
+          }
+        }
+      }
+      left.appendChild(el('div', { class: 'list-item-meta', text: (emp?.name || '—') + ' • ' + this.getFundSource(d) + ' • ' + formatDate(d.submittedAt) + wrMeta }));
       item.appendChild(left);
       const viewBtn = el('button', { class: 'btn btn-ghost btn-sm', text: 'View' });
       viewBtn.addEventListener('click', () => { this.view = 'detail'; this.detailId = d.id; App.handleRoute(); });
@@ -595,6 +643,16 @@ const Disbursement = {
       record.createdAt = new Date().toISOString();
     }
 
+    // Clean up old WR link if WR changed or was removed
+    const old = isNew ? null : DB.getById('disbursements', this.detailId);
+    if (old && old.linkedWorkRequestId && old.linkedWorkRequestId !== (record.linkedWorkRequestId || null)) {
+      const oldWr = DB.getById('workRequests', old.linkedWorkRequestId);
+      if (oldWr) {
+        const linkedIds = (oldWr.linkedDisbursementIds || []).filter(id => id !== record.id);
+        DB.update('workRequests', oldWr.id, { linkedDisbursementIds: linkedIds });
+      }
+    }
+
     // If linked to a WR, update WR's linkedDisbursementIds
     if (record.linkedWorkRequestId) {
       const wr = DB.getById('workRequests', record.linkedWorkRequestId);
@@ -641,8 +699,58 @@ const Disbursement = {
     meta.appendChild(el('p', { text: 'Client: ' + (client?.name || '—') }));
     meta.appendChild(el('p', { text: 'Date Submitted: ' + formatDate(d.submittedAt) }));
     meta.appendChild(el('p', { text: 'Fund Source: ' + this.getFundSource(d) }));
-    if (wr) meta.appendChild(el('p', { text: 'Work Request: ' + wr.title }));
     container.appendChild(meta);
+
+    // Linked Work Request / Task info card
+    if (d.linkedWorkRequestId) {
+      const linkedWr = DB.getById('workRequests', d.linkedWorkRequestId);
+      if (linkedWr) {
+        const linkCard = el('div', {
+          style: 'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);border-radius:8px;padding:12px 16px;margin-bottom:var(--spacing-md);font-size:0.8125rem;'
+        });
+        const linkHeader = el('div', {
+          style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#1e40af;font-weight:600;'
+        });
+        linkHeader.appendChild(el('span', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>' }));
+        linkHeader.appendChild(el('span', { text: 'Linked Work Request' }));
+        linkCard.appendChild(linkHeader);
+
+        const wrLink = el('a', {
+          href: 'javascript:void(0)',
+          text: linkedWr.title,
+          style: 'color:#2563eb;font-weight:500;text-decoration:none;'
+        });
+        wrLink.addEventListener('click', () => {
+          Workflow.view = 'detail';
+          Workflow.detailWrId = linkedWr.id;
+          location.hash = '#workflow';
+        });
+        wrLink.addEventListener('mouseenter', () => { wrLink.style.textDecoration = 'underline'; });
+        wrLink.addEventListener('mouseleave', () => { wrLink.style.textDecoration = 'none'; });
+        linkCard.appendChild(wrLink);
+
+        if (d.linkedTaskId) {
+          const linkedTask = DB.getById('tasks', d.linkedTaskId);
+          if (linkedTask) {
+            linkCard.appendChild(el('div', {
+              text: '↳ Scope: Task — ' + linkedTask.title,
+              style: 'margin-top:4px;color:#64748b;font-size:0.75rem;'
+            }));
+          }
+        } else {
+          linkCard.appendChild(el('div', {
+            text: '↳ Scope: Entire Work Request / Project',
+            style: 'margin-top:4px;color:#64748b;font-size:0.75rem;'
+          }));
+        }
+
+        linkCard.appendChild(el('div', {
+          text: 'Status: ' + (linkedWr.status || '—'),
+          style: 'margin-top:4px;color:#64748b;font-size:0.75rem;'
+        }));
+        container.appendChild(linkCard);
+      }
+    }
 
     // Items table (Single row for disbursement)
     const table = el('table', { class: 'data-table' });

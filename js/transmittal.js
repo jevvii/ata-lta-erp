@@ -129,8 +129,9 @@ const Transmittal = {
 
     // View mode toggle
     const viewToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom:var(--spacing-md);' });
+    const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { text: label, class: this.listViewMode === mode ? 'active' : '' });
+      const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: this.listViewMode === mode ? 'active' : '' });
       btn.addEventListener('click', () => {
         App.setPreferredViewMode('transmittals', mode);
         App.handleRoute();
@@ -503,17 +504,29 @@ const Transmittal = {
       record.createdBy = Auth.user.id;
     }
 
-    // Link to Work Request
-    if (record.workRequestId) {
-      const wr = DB.getById('workRequests', record.workRequestId);
-      if (wr) {
-        const linkedIds = new Set(wr.linkedTransmittalIds || []);
-        linkedIds.add(record.id);
-        DB.update('workRequests', wr.id, { linkedTransmittalIds: Array.from(linkedIds) });
+    const result = PendingChanges.submit('transmittals', record, isNew);
+
+    if (result.approved) {
+      // Clean up old WR link if WR changed
+      const old = isNew ? null : DB.getById('transmittals', this.detailId);
+      if (old && old.workRequestId && old.workRequestId !== (record.workRequestId || null)) {
+        const oldWr = DB.getById('workRequests', old.workRequestId);
+        if (oldWr) {
+          const linkedIds = (oldWr.linkedTransmittalIds || []).filter(id => id !== record.id);
+          DB.update('workRequests', oldWr.id, { linkedTransmittalIds: linkedIds });
+        }
+      }
+
+      // Link to Work Request
+      if (record.workRequestId) {
+        const wr = DB.getById('workRequests', record.workRequestId);
+        if (wr) {
+          const linkedIds = new Set(wr.linkedTransmittalIds || []);
+          linkedIds.add(record.id);
+          DB.update('workRequests', wr.id, { linkedTransmittalIds: Array.from(linkedIds) });
+        }
       }
     }
-
-    PendingChanges.submit('transmittals', record, isNew);
 
     this.view = 'list';
     this.detailId = null;
