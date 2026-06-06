@@ -448,11 +448,19 @@ const Dashboard = {
       dayHeader.innerHTML = `<span class="day-name">${days[i]}</span><span class="day-num">${String(d.getDate()).padStart(2, '0')}</span>`;
       
       if (isToday) {
-          const nowHour = new Date().getHours();
-          const nowMin = new Date().getMinutes();
-          const timeBubble = el('div', { class: 'week-vertical-time-bubble', text: `${String(nowHour).padStart(2, '0')}:${String(nowMin).padStart(2, '0')}` });
+          const now = new Date();
+          const nowHour = now.getHours();
+          const nowMin = now.getMinutes();
+          const percent = ((nowHour * 60 + nowMin) / (24 * 60)) * 100;
+          
+          const timeBubble = el('div', { 
+            class: 'week-vertical-time-bubble', 
+            text: `${String(nowHour).padStart(2, '0')}:${String(nowMin).padStart(2, '0')}`,
+            style: `left: ${percent}%;`
+          });
           dayHeader.appendChild(timeBubble);
-          const lineWrap = el('div', { class: 'week-vertical-time-line-wrap' });
+          
+          const lineWrap = el('div', { class: 'week-vertical-time-line-wrap', style: `left: ${percent}%;` });
           const line = el('div', { class: 'week-vertical-time-line' });
           lineWrap.appendChild(line);
           dayHeader.appendChild(lineWrap);
@@ -464,14 +472,20 @@ const Dashboard = {
     const timeSlots = ['All Day', '09 AM', '10 AM', '11 AM', '12 PM', '01 PM', '02 PM', '03 PM', '04 PM', '05 PM'];
     
     timeSlots.forEach((time, slotIndex) => {
-      grid.appendChild(el('div', { class: 'week-time-label', text: time }));
+      const nowHour = new Date().getHours();
+      const isCurrentHour = (slotIndex > 0 && (slotIndex + 8 === nowHour));
+      const rowClass = isCurrentHour ? 'week-time-label current-hour' : 'week-time-label';
+      
+      grid.appendChild(el('div', { class: rowClass, text: time }));
       
       for (let i = 0; i < 7; i++) {
         const d = weekDates[i];
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const dayEvents = events[dateStr] || [];
         
-        const cell = el('div', { class: 'week-cell', 'data-date': dateStr });
+        const isToday = dateStr === new Date().toISOString().slice(0, 10);
+        const cellClass = `week-cell ${isCurrentHour && isToday ? 'current-hour-cell' : ''}`;
+        const cell = el('div', { class: cellClass, 'data-date': dateStr });
         
         const slotEvents = dayEvents.filter(ev => {
            let hash = 0;
@@ -572,11 +586,19 @@ const Dashboard = {
     dayHeader.innerHTML = `<span class="day-name">${days[d.getDay()]}</span><span class="day-num">${String(d.getDate()).padStart(2, '0')}</span>`;
     
     if (isToday) {
-        const nowHour = new Date().getHours();
-        const nowMin = new Date().getMinutes();
-        const timeBubble = el('div', { class: 'week-vertical-time-bubble', text: `${String(nowHour).padStart(2, '0')}:${String(nowMin).padStart(2, '0')}` });
+        const now = new Date();
+        const nowHour = now.getHours();
+        const nowMin = now.getMinutes();
+        const percent = ((nowHour * 60 + nowMin) / (24 * 60)) * 100;
+        
+        const timeBubble = el('div', { 
+          class: 'week-vertical-time-bubble', 
+          text: `${String(nowHour).padStart(2, '0')}:${String(nowMin).padStart(2, '0')}`,
+          style: `left: ${percent}%;`
+        });
         dayHeader.appendChild(timeBubble);
-        const lineWrap = el('div', { class: 'week-vertical-time-line-wrap' });
+        
+        const lineWrap = el('div', { class: 'week-vertical-time-line-wrap', style: `left: ${percent}%;` });
         const line = el('div', { class: 'week-vertical-time-line' });
         lineWrap.appendChild(line);
         dayHeader.appendChild(lineWrap);
@@ -587,10 +609,15 @@ const Dashboard = {
     const timeSlots = ['All Day', '09 AM', '10 AM', '11 AM', '12 PM', '01 PM', '02 PM', '03 PM', '04 PM', '05 PM'];
     
     timeSlots.forEach((time, slotIndex) => {
-      grid.appendChild(el('div', { class: 'week-time-label', text: time }));
+      const nowHour = new Date().getHours();
+      const isCurrentHour = (slotIndex > 0 && (slotIndex + 8 === nowHour));
+      const rowClass = isCurrentHour ? 'week-time-label current-hour' : 'week-time-label';
+      
+      grid.appendChild(el('div', { class: rowClass, text: time }));
       
       const dayEvents = events[dateStr] || [];
-      const cell = el('div', { class: 'week-cell', 'data-date': dateStr });
+      const cellClass = `week-cell ${isCurrentHour && isToday ? 'current-hour-cell' : ''}`;
+      const cell = el('div', { class: cellClass, 'data-date': dateStr });
       
       const slotEvents = dayEvents.filter(ev => {
          let hash = 0;
