@@ -5,30 +5,62 @@
 
 const Clients = {
   editingId: null,
+  activeTab: 'active',
 
   render() {
+    if (!this.activeTab) this.activeTab = 'active';
     const container = el('div', { class: 'page' });
     
     if (this.editingId) {
-      const c = DB.getById('clients', this.editingId);
+      const isNew = this.editingId === 'new';
+      const c = isNew ? null : DB.getById('clients', this.editingId);
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       const h1 = el('h1', { class: 'breadcrumb-h1' });
       const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Clients' });
       baseLink.addEventListener('click', () => { this.editingId = null; App.handleRoute(); });
       h1.appendChild(baseLink);
       h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-      h1.appendChild(document.createTextNode(c?.name || 'New Client'));
+      h1.appendChild(document.createTextNode(isNew ? 'New Client' : (c?.name || 'Edit Client')));
       titleBar.appendChild(h1);
       
       const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
       backBtn.addEventListener('click', () => { this.editingId = null; App.handleRoute(); });
       titleBar.appendChild(backBtn);
       container.appendChild(titleBar);
+
+      const formContainer = el('div', { class: 'form-container' });
+      container.appendChild(formContainer);
+      this.renderForm(formContainer, this.editingId);
+
+      return container;
     } else {
       container.appendChild(el('h1', { text: 'Clients' }));
     }
 
-    const actions = el('div', { class: 'actions-bar' });
+    // Tabs
+    const tabs = el('div', { class: 'admin-tabs clients-tabs-bar', style: 'margin-bottom: 20px;' });
+    const activeTabBtn = el('button', {
+      class: 'btn ' + (this.activeTab === 'active' ? 'btn-primary' : 'btn-ghost'),
+      text: 'Active Clients'
+    });
+    activeTabBtn.addEventListener('click', () => {
+      this.activeTab = 'active';
+      this.showList();
+    });
+    tabs.appendChild(activeTabBtn);
+
+    const archivedTabBtn = el('button', {
+      class: 'btn ' + (this.activeTab === 'archived' ? 'btn-primary' : 'btn-ghost'),
+      text: 'Archived Clients'
+    });
+    archivedTabBtn.addEventListener('click', () => {
+      this.activeTab = 'archived';
+      this.showList();
+    });
+    tabs.appendChild(archivedTabBtn);
+    container.appendChild(tabs);
+
+    const actions = el('div', { class: 'actions-bar' + (this.activeTab === 'archived' ? ' hidden' : '') });
 
     if (Auth.can('clients:edit')) {
       const addBtn = el('button', { class: 'btn btn-primary', text: 'Add Client' });
@@ -41,9 +73,17 @@ const Clients = {
     actions.appendChild(search);
     container.appendChild(actions);
 
-    const listContainer = el('div', { class: 'list-container' });
+    const listContainer = el('div', { class: 'list-container' + (this.activeTab === 'archived' ? ' hidden' : '') });
     container.appendChild(listContainer);
-    this.renderList(listContainer, '');
+    if (this.activeTab === 'active') {
+      this.renderList(listContainer, '');
+    }
+
+    const archiveContainer = el('div', { class: 'archive-container' + (this.activeTab === 'active' ? ' hidden' : '') });
+    container.appendChild(archiveContainer);
+    if (this.activeTab === 'archived') {
+      this.renderArchive(archiveContainer);
+    }
 
     const formContainer = el('div', { class: 'form-container hidden' });
     container.appendChild(formContainer);
@@ -59,7 +99,7 @@ const Clients = {
 
   getFilteredClients(query) {
     const entity = Auth.activeEntity;
-    let clients = DB.getWhere('clients', c => c.entity === entity);
+    let clients = DB.getWhere('clients', c => c.entity === entity && c.status !== 'Archived');
     if (query) {
       const q = query.toLowerCase();
       clients = clients.filter(c =>
@@ -141,6 +181,24 @@ const Clients = {
         editBtn.addEventListener('click', () => this.showForm(c.id));
         actions.appendChild(editBtn);
       }
+      
+      const role = Auth.user.role;
+      if (role === 'Admin' || role === 'Manager') {
+        const archiveBtn = el('button', { 
+          class: 'btn btn-ghost btn-sm', 
+          text: 'Archive', 
+          style: 'color: var(--color-danger); margin-left: 8px;' 
+        });
+        archiveBtn.addEventListener('click', () => {
+          if (role === 'Admin') {
+            this.archiveClientDirectly(c.id);
+          } else {
+            this.archiveClientRequest(c.id);
+          }
+        });
+        actions.appendChild(archiveBtn);
+      }
+
       row.appendChild(actions);
       tbody.appendChild(row);
     });
@@ -149,23 +207,19 @@ const Clients = {
   },
 
   showForm(clientId) {
-    const container = document.querySelector('.form-container');
-    const list = document.querySelector('.list-container');
-    const actions = document.querySelector('.actions-bar');
-    if (container) container.classList.remove('hidden');
-    if (list) list.classList.add('hidden');
-    if (actions) actions.classList.add('hidden');
+    this.editingId = clientId || 'new';
+    App.handleRoute();
+  },
 
-    this.editingId = clientId || null;
-    const client = clientId ? DB.getById('clients', clientId) : null;
-
+  renderForm(container, clientId) {
+    const client = clientId && clientId !== 'new' ? DB.getById('clients', clientId) : null;
     this.clearNode(container);
 
     // Form header bar
     const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: clientId ? 'Edit Client' : 'Add Client' }));
+    headerBar.appendChild(el('h2', { text: client ? 'Edit Client' : 'Add Client' }));
     const headerActions = el('div', { class: 'form-actions-top' });
-    const saveBtnTop = el('button', { type: 'submit', form: 'client-form', class: 'btn btn-primary', text: clientId ? 'Save Changes' : 'Save Client' });
+    const saveBtnTop = el('button', { type: 'submit', form: 'client-form', class: 'btn btn-primary', text: client ? 'Save Changes' : 'Save Client' });
     headerActions.appendChild(saveBtnTop);
     const cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel' });
     cancelBtn.addEventListener('click', () => this.showList());
@@ -363,14 +417,7 @@ const Clients = {
 
   showList() {
     this.editingId = null;
-    const container = document.querySelector('.form-container');
-    const list = document.querySelector('.list-container');
-    const actions = document.querySelector('.actions-bar');
-    if (container) { this.clearNode(container); container.classList.add('hidden'); }
-    if (list) list.classList.remove('hidden');
-    if (actions) actions.classList.remove('hidden');
-    const search = document.querySelector('.search-input');
-    this.renderList(list, search ? search.value.trim() : '');
+    App.handleRoute();
   },
 
   submitForm(form) {
@@ -469,7 +516,7 @@ const Clients = {
       relatedCompanies
     };
 
-    if (this.editingId) {
+    if (this.editingId && this.editingId !== 'new') {
       record.id = this.editingId;
       const old = DB.getById('clients', this.editingId);
       if (old) {
@@ -488,5 +535,208 @@ const Clients = {
     }
 
     this.showList();
+  },
+
+  archiveClientDirectly(clientId) {
+    if (!confirm('Are you sure you want to archive this client? This will cancel all related work requests and archive all associated documents.')) return;
+    
+    // 1. Update the client status to 'Archived'
+    const client = DB.getById('clients', clientId);
+    if (!client) return;
+    client.status = 'Archived';
+    client.updatedAt = new Date().toISOString();
+    DB.update('clients', clientId, client);
+
+    // 2. Cascade to Work Requests and Documents
+    const wrs = DB.getWhere('workRequests', wr => wr.clientId === clientId);
+    wrs.forEach(wr => {
+      DB.update('workRequests', wr.id, { status: 'Cancelled', updatedAt: new Date().toISOString() });
+
+      // Cascade to Documents
+      const docs = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
+      docs.forEach(doc => {
+        DB.update('documents', doc.id, { status: 'Archived', archived: true });
+      });
+    });
+
+    alert('Client archived successfully.');
+    App.handleRoute();
+  },
+
+  archiveClientRequest(clientId) {
+    // Check if there is already a pending change to archive this client
+    const pending = DB.getWhere('pendingChanges', pc => 
+      pc.table === 'clients' && 
+      pc.parentRecordId === clientId && 
+      pc.status === 'pending' && 
+      pc.proposedData && 
+      pc.proposedData.status === 'Archived'
+    );
+    if (pending.length > 0) {
+      alert('An archive request for this client is already pending approval.');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to request archiving this client? This requires Admin approval.')) return;
+
+    const client = DB.getById('clients', clientId);
+    if (!client) return;
+
+    const proposed = deepClone(client);
+    proposed.status = 'Archived';
+    proposed.updatedAt = new Date().toISOString();
+
+    const pc = {
+      id: generateId('pc'),
+      table: 'clients',
+      parentRecordId: clientId,
+      proposedData: proposed,
+      submittedBy: Auth.user.id,
+      submittedAt: new Date().toISOString(),
+      status: 'pending',
+      rejectionReason: '',
+      reviewedBy: '',
+      reviewedAt: ''
+    };
+    DB.insert('pendingChanges', pc);
+
+    alert('Archive request submitted for Admin approval.');
+    App.handleRoute();
+  },
+
+  getArchivedClients() {
+    const entity = Auth.activeEntity;
+    let clients = DB.getWhere('clients', c => c.entity === entity && c.status === 'Archived');
+
+    // Staff visibility filter
+    const role = Auth.user.role;
+    if (role === 'Staff') {
+      const userId = Auth.user.id;
+      const tasks = DB.getAll('tasks');
+      const workRequests = DB.getAll('workRequests');
+      const assignedClientIds = new Set();
+      tasks.forEach(t => {
+        if (t.assigneeId === userId) {
+          const wr = workRequests.find(w => w.id === t.workRequestId);
+          if (wr) assignedClientIds.add(wr.clientId);
+        }
+      });
+      clients = clients.filter(c => c.contactUserId === userId || assignedClientIds.has(c.id));
+    }
+    return clients;
+  },
+
+  renderArchive(container) {
+    this.clearNode(container);
+    const archivedClients = this.getArchivedClients();
+
+    if (archivedClients.length === 0) {
+      container.appendChild(el('p', { text: 'No archived clients found.', class: 'empty-state' }));
+      return;
+    }
+
+    const wrapper = el('div', { class: 'archive-list' });
+
+    archivedClients.forEach(c => {
+      const pocUser = DB.getById('users', c.contactUserId);
+      const panel = el('div', { class: 'accordion-panel collapsed', style: 'margin-bottom: var(--spacing-md); border-color: var(--color-border);' });
+      
+      // Accordion Header
+      const header = el('div', { class: 'accordion-header', style: 'display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;' });
+      
+      const titleWrap = el('div', {}, [
+        el('strong', { text: c.name, style: 'font-size: 1rem; color: var(--color-text);' }),
+        el('span', { text: ' (TIN: ' + c.tin + ')', style: 'color: var(--color-text-muted); font-size: 0.875rem; margin-left: 8px;' })
+      ]);
+      
+      header.appendChild(titleWrap);
+      panel.appendChild(header);
+
+      // Accordion Content
+      const content = el('div', { class: 'accordion-content', style: 'padding: 16px; background: #fafafa;' });
+
+      // Client info block
+      const infoBlock = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; font-size: 0.875rem;' }, [
+        el('div', {}, [ el('strong', { text: 'Trade Name: ' }), el('span', { text: c.tradeName || '—' }) ]),
+        el('div', {}, [ el('strong', { text: 'Address: ' }), el('span', { text: c.address || '—' }) ]),
+        el('div', {}, [ el('strong', { text: 'Point of Contact: ' }), el('span', { text: pocUser?.name || c.contactPerson || '—' }) ]),
+        el('div', {}, [ el('strong', { text: 'Retainer Client: ' }), el('span', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }) ])
+      ]);
+      content.appendChild(infoBlock);
+
+      // Fetch cancelled work requests
+      const wrs = DB.getWhere('workRequests', wr => wr.clientId === c.id);
+      
+      // Work Requests Sub-section
+      content.appendChild(el('h4', { text: 'Cancelled Work Requests', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: #374151;' }));
+      if (wrs.length === 0) {
+        content.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
+      } else {
+        const wrTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; margin-bottom: 16px;' }, [
+          el('thead', {}, [
+            el('tr', {}, [
+              el('th', { text: 'Title' }),
+              el('th', { text: 'Priority' }),
+              el('th', { text: 'Due Date' }),
+              el('th', { text: 'Status' })
+            ])
+          ])
+        ]);
+        const wrTbody = el('tbody');
+        wrs.forEach(wr => {
+          wrTbody.appendChild(el('tr', {}, [
+            el('td', { text: wr.title }),
+            el('td', { text: wr.priority }),
+            el('td', { text: wr.dueDate }),
+            el('td', {}, [ el('span', { class: 'badge badge-danger', text: wr.status }) ])
+          ]));
+        });
+        wrTable.appendChild(wrTbody);
+        content.appendChild(wrTable);
+      }
+
+      // Fetch archived documents
+      const wrIds = wrs.map(wr => wr.id);
+      const docs = DB.getWhere('documents', d => wrIds.includes(d.workRequestId) && (d.status === 'Archived' || d.archived === true));
+
+      // Documents Sub-section
+      content.appendChild(el('h4', { text: 'Archived Documents', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: #374151;' }));
+      if (docs.length === 0) {
+        content.appendChild(el('p', { text: 'No archived documents found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
+      } else {
+        const docTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem;' }, [
+          el('thead', {}, [
+            el('tr', {}, [
+              el('th', { text: 'File Name' }),
+              el('th', { text: 'Type' }),
+              el('th', { text: 'Category' }),
+              el('th', { text: 'Upload Date' })
+            ])
+          ])
+        ]);
+        const docTbody = el('tbody');
+        docs.forEach(d => {
+          docTbody.appendChild(el('tr', {}, [
+            el('td', { text: d.fileName }),
+            el('td', { text: d.document_type || '—' }),
+            el('td', { text: d.category || '—' }),
+            el('td', { text: new Date(d.uploadDate).toLocaleDateString() })
+          ]));
+        });
+        docTable.appendChild(docTbody);
+        content.appendChild(docTable);
+      }
+
+      panel.appendChild(content);
+
+      // Event listener to toggle panel collapse
+      header.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+      });
+
+      wrapper.appendChild(panel);
+    });
+
+    container.appendChild(wrapper);
   }
 };

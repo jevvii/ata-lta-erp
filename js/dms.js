@@ -165,6 +165,7 @@ const DMS = {
     let docs = DB.getWhere('documents', d => {
       if (!d.fileName) return false;
       if (d.entity !== entity) return false;
+      if (d.status === 'Archived' || d.archived === true) return false;
       return true;
     });
 

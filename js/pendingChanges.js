@@ -106,6 +106,22 @@ const PendingChanges = {
           DB.update('workRequests', wr.id, { linkedTransmittalIds: Array.from(linkedIds) });
         }
       }
+    } else if (pc.table === 'clients') {
+      const record = pc.proposedData;
+      if (record.status === 'Archived' && pc.parentRecordId) {
+        const clientId = pc.parentRecordId;
+        // Cascade to Work Requests (set status to 'Cancelled')
+        const wrs = DB.getWhere('workRequests', wr => wr.clientId === clientId);
+        wrs.forEach(wr => {
+          DB.update('workRequests', wr.id, { status: 'Cancelled', updatedAt: new Date().toISOString() });
+
+          // Cascade to Documents
+          const docs = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
+          docs.forEach(doc => {
+            DB.update('documents', doc.id, { status: 'Archived', archived: true });
+          });
+        });
+      }
     }
 
     DB.update('pendingChanges', pendingId, {
