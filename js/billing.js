@@ -208,12 +208,16 @@ const Billing = {
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
-      let invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Cancelled');
+      let invoices = DB.getWhere('invoices', inv => {
+        const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
+        return matchesEntity && inv.status !== 'Cancelled';
+      });
       
       const pendingInvs = DB.getWhere('pendingChanges', pc => {
         if (pc.table !== 'invoices' || pc.status !== 'pending') return false;
         const inv = pc.proposedData;
-        if (inv.entity !== entity) return false;
+        const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
+        if (!matchesEntity) return false;
         const role = Auth.user?.role;
         if (role !== 'Admin' && role !== 'Manager' && pc.submittedBy !== Auth.user?.id) return false;
         return true;

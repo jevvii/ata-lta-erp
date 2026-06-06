@@ -424,7 +424,10 @@ const Workflow = {
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
-      let wrs = DB.getWhere('workRequests', r => r.entity === entity && r.status !== 'Cancelled');
+      let wrs = DB.getWhere('workRequests', r => {
+        const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
+        return matchesEntity && r.status !== 'Cancelled';
+      });
       if (!isManagerial && !Auth.can('dms:handover')) {
         const myTasks = DB.getWhere('tasks', t => t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id);
         const myWrIds = new Set(myTasks.map(t => t.workRequestId));

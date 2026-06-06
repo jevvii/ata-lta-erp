@@ -256,7 +256,7 @@ const Disbursement = {
   refreshList(container, wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo, viewMode) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
-    let items = DB.getWhere('disbursements', d => d.entity === entity);
+    let items = DB.getWhere('disbursements', d => (entity === 'ALL' ? Auth.user.entities.includes(d.entity) : d.entity === entity));
 
     if (wrFilter) items = items.filter(d => d.linkedWorkRequestId === wrFilter);
     if (clientFilter) {

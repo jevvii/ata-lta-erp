@@ -169,7 +169,7 @@ const Transmittal = {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
 
-    let items = DB.getWhere('transmittals', t => t.entity === entity);
+    let items = DB.getWhere('transmittals', t => (entity === 'ALL' ? Auth.user.entities.includes(t.entity) : t.entity === entity));
 
     if (wrFilter) items = items.filter(t => t.workRequestId === wrFilter);
     if (clientFilter) items = items.filter(t => t.clientId === clientFilter);

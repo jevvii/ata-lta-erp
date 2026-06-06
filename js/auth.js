@@ -63,9 +63,9 @@ const Auth = {
 
   switchEntity(entity) {
     const upper = entity.toUpperCase();
-    if (this.user?.entities.includes(upper)) {
+    if (upper === 'ALL' || this.user?.entities.includes(upper)) {
       this.activeEntity = upper;
       sessionStorage.setItem('erp_session', JSON.stringify({ userId: this.user.id, activeEntity: upper }));
     }
-  }
+  },
 };

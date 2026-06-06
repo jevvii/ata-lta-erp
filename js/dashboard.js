@@ -5,8 +5,7 @@
 
 const Dashboard = {
   render() {
-    const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
-    if (isManagerial && Auth.user.entities.length > 1) {
+    if (Auth.activeEntity === 'ALL') {
       return this.renderConsolidated();
     }
     return this.renderEntityScoped();
@@ -592,7 +591,8 @@ const Dashboard = {
                 badge.appendChild(avatarWrap);
                 
                 const titleText = ev.type === 'wr' ? ev.data.title : ev.data.description;
-                badge.appendChild(el('span', { class: 'week-event-title', text: titleText }));
+                const entityPrefix = ev.data.entity ? `[${ev.data.entity.toUpperCase()}] ` : '';
+                badge.appendChild(el('span', { class: 'week-event-title', text: entityPrefix + titleText }));
                 badge.appendChild(el('span', { class: 'week-event-arrow', text: '›' }));
 
                 badge.onclick = (e) => {
@@ -730,7 +730,8 @@ const Dashboard = {
               badge.appendChild(avatarWrap);
               
               const titleText = ev.type === 'wr' ? ev.data.title : ev.data.description;
-              badge.appendChild(el('span', { class: 'week-event-title', text: titleText }));
+              const entityPrefix = ev.data.entity ? `[${ev.data.entity.toUpperCase()}] ` : '';
+              badge.appendChild(el('span', { class: 'week-event-title', text: entityPrefix + titleText }));
               badge.appendChild(el('span', { class: 'week-event-arrow', text: '›' }));
 
               badge.onclick = (e) => {
@@ -845,7 +846,8 @@ const Dashboard = {
         pill.appendChild(dot);
         
         const titleText = ev.type === 'wr' ? ev.data.title : ev.data.description;
-        pill.appendChild(el('span', { class: 'week-event-title', style: 'color:#fff;', text: titleText }));
+        const entityPrefix = ev.data.entity ? `[${ev.data.entity.toUpperCase()}] ` : '';
+        pill.appendChild(el('span', { class: 'week-event-title', style: 'color:#fff;', text: entityPrefix + titleText }));
         
         badge.appendChild(pill);
         
@@ -886,20 +888,19 @@ const Dashboard = {
   },
 
   getCalendarEvents() {
-    const isConsolidated = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
     const userEntities = Auth.user.entities.map(e => e.toUpperCase());
+    const active = (Auth.activeEntity || '').toUpperCase();
     
     let wrs = DB.getAll('workRequests');
     let disbursements = DB.getAll('disbursements');
     
     // Filter by Entity Access
-    if (!isConsolidated || Auth.user.entities.length === 1) {
-      const active = (Auth.activeEntity || '').toUpperCase();
-      wrs = wrs.filter(wr => wr.entity.toUpperCase() === active);
-      disbursements = disbursements.filter(d => d.entity.toUpperCase() === active);
-    } else {
+    if (active === 'ALL') {
       wrs = wrs.filter(wr => userEntities.includes(wr.entity.toUpperCase()));
       disbursements = disbursements.filter(d => userEntities.includes(d.entity.toUpperCase()));
+    } else {
+      wrs = wrs.filter(wr => wr.entity.toUpperCase() === active);
+      disbursements = disbursements.filter(d => d.entity.toUpperCase() === active);
     }
 
     const eventsByDate = {};

@@ -178,7 +178,8 @@ const DMS = {
 
     let docs = DB.getWhere('documents', d => {
       if (!d.fileName) return false;
-      if (d.entity !== entity) return false;
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(d.entity) : d.entity === entity);
+      if (!matchesEntity) return false;
       if (d.status === 'Archived' || d.archived === true) return false;
       return true;
     });

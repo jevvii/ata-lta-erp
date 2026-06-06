@@ -71,6 +71,10 @@ const Reports = {
   init() {},
 
   getAccessibleEntities() {
+    const active = Auth.activeEntity;
+    if (active && active !== 'ALL') {
+      return [active.toUpperCase()];
+    }
     return (Auth.user?.entities || []).map(e => e.toUpperCase());
   },
 

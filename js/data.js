@@ -382,22 +382,6 @@ const seedData = {
       dueDate: inThreeDays
     },
     {
-      id: makeId('wr', 100),
-      title: 'Quarterly Income Tax - Mock',
-      description: 'Mock item due this week.',
-      clientId: makeId('c', 5),
-      entity: 'LTA',
-      status: 'Processing',
-      requestedBy: makeId('u', 2),
-      assignedTo: makeId('u', 5),
-      linkedInvoiceId: null,
-      linkedDisbursementIds: [],
-      linkedTransmittalIds: [],
-      createdAt: today,
-      updatedAt: today,
-      dueDate: tomorrow
-    },
-    {
       id: makeId('wr', 1),
       title: 'Annual Tax Filing 2025',
       description: 'Comprehensive annual income tax return preparation and filing for CY 2024.',
@@ -1563,7 +1547,7 @@ const seedData = {
 // ============================================================
 
 const DB = {
-  SCHEMA_VERSION: 7,
+  SCHEMA_VERSION: 8,
 
   init() {
     const stored = localStorage.getItem('erp_schema_version');

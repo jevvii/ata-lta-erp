@@ -105,6 +105,15 @@ const App = {
   renderEntitySwitcher() {
     const sel = document.getElementById('entity-switcher');
     sel.innerHTML = '';
+    
+    if (Auth.user.entities.length > 1 && (Auth.user.role === 'Admin' || Auth.user.role === 'Manager')) {
+      const opt = document.createElement('option');
+      opt.value = 'ALL';
+      opt.textContent = 'Consolidated View';
+      if ('ALL' === Auth.activeEntity) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    
     Auth.user.entities.forEach(e => {
       const opt = document.createElement('option');
       opt.value = e;
@@ -112,6 +121,7 @@ const App = {
       if (e === Auth.activeEntity) opt.selected = true;
       sel.appendChild(opt);
     });
+    
     sel.onchange = (ev) => {
       Auth.switchEntity(ev.target.value);
       this.updateEntityBadge();

@@ -99,7 +99,10 @@ const Clients = {
 
   getFilteredClients(query) {
     const entity = Auth.activeEntity;
-    let clients = DB.getWhere('clients', c => c.entity === entity && c.status !== 'Archived');
+    let clients = DB.getWhere('clients', c => {
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(c.entity) : c.entity === entity);
+      return matchesEntity && c.status !== 'Archived';
+    });
     if (query) {
       const q = query.toLowerCase();
       clients = clients.filter(c =>
@@ -606,7 +609,10 @@ const Clients = {
 
   getArchivedClients() {
     const entity = Auth.activeEntity;
-    let clients = DB.getWhere('clients', c => c.entity === entity && c.status === 'Archived');
+    let clients = DB.getWhere('clients', c => {
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(c.entity) : c.entity === entity);
+      return matchesEntity && c.status === 'Archived';
+    });
 
     // Staff visibility filter
     const role = Auth.user.role;
