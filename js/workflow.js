@@ -280,6 +280,7 @@ const Workflow = {
     if (this.view === 'detail' && this.detailWrId) {
       const wr = DB.getById('workRequests', this.detailWrId);
       const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+      const isArchived = wr && wr.status === 'Cancelled';
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       const h1 = el('h1', { class: 'breadcrumb-h1' });
       const opLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Operations' });
@@ -386,6 +387,22 @@ const Workflow = {
       statusFilter.appendChild(el('option', { value: s, text: s }));
     });
     filters.appendChild(statusFilter);
+
+    const clearBtn = el('button', {
+      class: 'btn btn-ghost btn-sm',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Clear'
+    });
+    clearBtn.addEventListener('click', () => {
+      priorityFilter.value = '';
+      empFilter.value = '';
+      clientFilter.value = '';
+      dateFrom.value = '';
+      dateTo.value = '';
+      statusFilter.value = '';
+      refresh();
+    });
+    filters.appendChild(clearBtn);
+
     wrapper.appendChild(filters);
 
     // View mode toggle
