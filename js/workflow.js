@@ -940,17 +940,43 @@ const Workflow = {
 
     const assigneeSel = el('select', { class: 'task-assignee' });
     assigneeSel.appendChild(el('option', { value: '', text: '— Assignee —' }));
-    
+
     // Only show users from the same entity
     const entity = Auth.activeEntity;
     const staffPool = DB.getWhere('users', u => u.entities.includes(entity) || u.entities.includes(entity.toLowerCase()));
-    
+
     staffPool.forEach(u => {
       const opt = el('option', { value: u.id, text: u.name });
       if (taskData && (taskData.assigneeId === u.id || taskData.assignedTo === u.id)) opt.selected = true;
       assigneeSel.appendChild(opt);
     });
+
+    // Manual employee name option
+    assigneeSel.appendChild(el('option', { value: 'others', text: 'Others' }));
+    const assigneeOtherInput = el('input', {
+      type: 'text',
+      class: 'task-assignee-other',
+      placeholder: 'Enter employee name',
+      style: 'display: none;'
+    });
+    assigneeSel.addEventListener('change', () => {
+      const isOthers = assigneeSel.value === 'others';
+      assigneeOtherInput.style.display = isOthers ? 'inline-block' : 'none';
+      assigneeOtherInput.required = isOthers;
+      if (!isOthers) {
+        assigneeOtherInput.value = '';
+        assigneeOtherInput.classList.remove('input-error');
+      }
+    });
+    if (taskData?.assigneeName) {
+      assigneeSel.value = 'others';
+      assigneeOtherInput.value = taskData.assigneeName;
+      assigneeOtherInput.style.display = 'inline-block';
+      assigneeOtherInput.required = true;
+    }
+
     row.appendChild(assigneeSel);
+    row.appendChild(assigneeOtherInput);
 
     const predSel = el('select', { class: 'task-pred' });
     predSel.addEventListener('change', () => {
@@ -997,6 +1023,29 @@ const Workflow = {
     });
   },
 
+  validateManualAssignees(form) {
+    const taskRows = form.querySelectorAll('.task-row');
+    let firstInvalid = null;
+    taskRows.forEach(row => {
+      const title = row.querySelector('.task-title-input')?.value.trim();
+      if (!title) return;
+      const assigneeSel = row.querySelector('.task-assignee');
+      const assigneeOtherInput = row.querySelector('.task-assignee-other');
+      if (assigneeSel?.value === 'others' && !assigneeOtherInput?.value.trim()) {
+        assigneeOtherInput.classList.add('input-error');
+        if (!firstInvalid) firstInvalid = assigneeOtherInput;
+      } else if (assigneeOtherInput) {
+        assigneeOtherInput.classList.remove('input-error');
+      }
+    });
+    if (firstInvalid) {
+      this.showMessage('Validation Error', 'Please enter an employee name for tasks marked as Others.', 'danger');
+      firstInvalid.focus();
+      return false;
+    }
+    return true;
+  },
+
   loadTemplateTasks(templateId, container) {
     if (!templateId) {
       this.showMessage('Error', 'Please select a retainer template first.', 'danger');
@@ -1013,6 +1062,7 @@ const Workflow = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    if (!this.validateManualAssignees(form)) return;
     const data = Object.fromEntries(new FormData(form).entries());
     const entity = Auth.activeEntity;
 
@@ -1034,10 +1084,14 @@ const Workflow = {
     taskRows.forEach(row => {
       const title = row.querySelector('.task-title-input').value.trim();
       if (!title) return;
+      const assigneeSel = row.querySelector('.task-assignee');
+      const assigneeOtherInput = row.querySelector('.task-assignee-other');
+      const isManualAssignee = assigneeSel.value === 'others';
       tasks.push({
         key: row.dataset.taskKey || generateId('tmp'),
         title,
-        assigneeId: row.querySelector('.task-assignee').value || null,
+        assigneeId: isManualAssignee ? null : (assigneeSel.value || null),
+        assigneeName: isManualAssignee ? (assigneeOtherInput.value.trim() || null) : null,
         predecessorKey: row.querySelector('.task-pred').value || ''
       });
     });
@@ -1070,6 +1124,7 @@ const Workflow = {
         workRequestId: recordId,
         title: t.title,
         assigneeId: t.assigneeId || null,
+        assigneeName: t.assigneeName || null,
         predecessors: predId ? [predId] : [],
         status: existing?.status || 'Draft',
         dueDate: record.dueDate,
@@ -1126,6 +1181,7 @@ const Workflow = {
           id: tmplMap.get(t.key),
           title: t.title,
           assigneeId: t.assigneeId || null,
+          assigneeName: t.assigneeName || null,
           predecessors: predId ? [predId] : []
         };
       });
@@ -1382,7 +1438,9 @@ const Workflow = {
       let totalHours = 0;
 
       groupTasks.forEach(t => {
-        const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
+        const assignee = t.assigneeName
+          ? { name: t.assigneeName }
+          : DB.getById('users', t.assigneeId || t.assignedTo);
         const tr = el('tr', { class: 'task-row-v2 task-expand' });
         
         // Totals calculation
@@ -2226,7 +2284,24 @@ const Workflow = {
     DB.getAll('users').forEach(u => {
       assigneeSel.appendChild(el('option', { value: u.id, text: u.name }));
     });
+    assigneeSel.appendChild(el('option', { value: 'others', text: 'Others' }));
+    const assigneeOtherInput = el('input', {
+      type: 'text',
+      name: 'assigneeName',
+      placeholder: 'Enter employee name',
+      style: 'display: none; margin-top: var(--spacing-sm);'
+    });
+    assigneeSel.addEventListener('change', () => {
+      const isOthers = assigneeSel.value === 'others';
+      assigneeOtherInput.style.display = isOthers ? 'block' : 'none';
+      assigneeOtherInput.required = isOthers;
+      if (!isOthers) {
+        assigneeOtherInput.value = '';
+        assigneeOtherInput.classList.remove('input-error');
+      }
+    });
     assigneeGroup.appendChild(assigneeSel);
+    assigneeGroup.appendChild(assigneeOtherInput);
     form.appendChild(assigneeGroup);
 
     form.appendChild(el('div', { class: 'form-group' }, [
@@ -2243,6 +2318,18 @@ const Workflow = {
     priorityGroup.appendChild(prioritySel);
     form.appendChild(priorityGroup);
 
+    const predecessorGroup = el('div', { class: 'form-group' });
+    predecessorGroup.appendChild(el('label', { text: 'Predecessor' }));
+    const predSel = el('select', { name: 'predecessorId' });
+    predSel.appendChild(el('option', { value: '', text: '— No predecessor —' }));
+    const existingTasks = DB.getWhere('tasks', t => t.workRequestId === wrId);
+    existingTasks.forEach(t => {
+      const title = t.title?.trim() || 'Untitled task';
+      predSel.appendChild(el('option', { value: t.id, text: title }));
+    });
+    predecessorGroup.appendChild(predSel);
+    form.appendChild(predecessorGroup);
+
     const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Add Task' });
     form.appendChild(submitBtn);
 
@@ -2250,18 +2337,28 @@ const Workflow = {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;
+      if (assigneeSel.value === 'others' && !assigneeOtherInput.value.trim()) {
+        assigneeOtherInput.classList.add('input-error');
+        assigneeOtherInput.focus();
+        this.showMessage('Validation Error', 'Please enter an employee name.', 'danger');
+        return;
+      }
+      assigneeOtherInput.classList.remove('input-error');
       const data = Object.fromEntries(new FormData(form).entries());
+      const isManualAssignee = data.assigneeId === 'others';
+      const predecessorId = data.predecessorId || '';
       const newTask = {
         id: generateId('t'),
         workRequestId: wrId,
         title: data.title.trim(),
-        assigneeId: data.assigneeId || null,
+        assigneeId: isManualAssignee ? null : (data.assigneeId || null),
+        assigneeName: isManualAssignee ? (data.assigneeName?.trim() || null) : null,
         status: 'Draft',
         priority: data.priority || 'Normal',
         dueDate: data.dueDate || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        predecessors: [],
+        predecessors: predecessorId ? [predecessorId] : [],
         timeLogs: [],
         taskDocuments: [],
         comments: []
@@ -2708,6 +2805,7 @@ const Workflow = {
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (!this.validateManualAssignees(form)) return;
       this.submitTemplateForm(form, tasksList);
     });
 
@@ -2724,10 +2822,14 @@ const Workflow = {
     taskRows.forEach(row => {
       const title = row.querySelector('.task-title-input').value.trim();
       if (!title) return;
+      const assigneeSel = row.querySelector('.task-assignee');
+      const assigneeOtherInput = row.querySelector('.task-assignee-other');
+      const isManualAssignee = assigneeSel?.value === 'others';
       tasks.push({
         key: row.dataset.taskKey || generateId('tmp'),
         title,
-        assigneeId: row.querySelector('.task-assignee')?.value || null,
+        assigneeId: isManualAssignee ? null : (assigneeSel?.value || null),
+        assigneeName: isManualAssignee ? (assigneeOtherInput?.value.trim() || null) : null,
         predecessorKey: row.querySelector('.task-pred')?.value || ''
       });
     });
@@ -2750,6 +2852,7 @@ const Workflow = {
         id: idMap.get(t.key),
         title: t.title,
         assigneeId: t.assigneeId || null,
+        assigneeName: t.assigneeName || null,
         predecessors: predId ? [predId] : []
       };
     });
@@ -2877,6 +2980,7 @@ const Workflow = {
         workRequestId: workRequest.id,
         title: t.title,
         assigneeId: t.assigneeId || null,
+        assigneeName: t.assigneeName || null,
         predecessors: mappedPreds,
         status: 'Draft',
         dueDate: workRequest.dueDate,

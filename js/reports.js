@@ -273,7 +273,9 @@ const Reports = {
     tasks.forEach(t => {
       const wr = wrs.find(w => w.id === t.workRequestId);
       const client = wr ? clients.find(c => c.id === wr.clientId) : null;
-      const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
+      const assignee = t.assigneeName
+        ? { name: t.assigneeName }
+        : DB.getById('users', t.assigneeId || t.assignedTo);
       tbody.appendChild(el('tr', {}, [
         el('td', { text: t.title }),
         el('td', { text: client?.name || '—' }),
@@ -309,7 +311,9 @@ const Reports = {
       statusTasks.forEach(t => {
         const wr = wrs.find(w => w.id === t.workRequestId);
         const client = wr ? clients.find(c => c.id === wr.clientId) : null;
-        const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
+        const assignee = t.assigneeName
+          ? { name: t.assigneeName }
+          : DB.getById('users', t.assigneeId || t.assignedTo);
 
         const card = el('div', { class: 'board-card-v2' });
         card.appendChild(el('div', { class: 'board-card-title-v2', text: t.title }));
@@ -356,7 +360,9 @@ const Reports = {
     tasks.forEach(t => {
       const wr = wrs.find(w => w.id === t.workRequestId);
       const client = wr ? clients.find(c => c.id === wr.clientId) : null;
-      const assignee = DB.getById('users', t.assigneeId || t.assignedTo);
+      const assignee = t.assigneeName
+        ? { name: t.assigneeName }
+        : DB.getById('users', t.assigneeId || t.assignedTo);
 
       const item = el('div', { class: 'list-item' });
       const left = el('div');
@@ -768,10 +774,11 @@ const Reports = {
       overdueSection = el('p', { class: 'empty-state', text: 'No overdue tasks.' });
     } else {
       const rows = overdueTasks.map(t => {
-        const assigneeId = t.assigneeId || t.assignedTo;
-        const assignee = assigneeId
-          ? (DB.getById('users', assigneeId)?.name || assigneeId)
-          : 'Unassigned';
+        const assignee = t.assigneeName
+          ? t.assigneeName
+          : (t.assigneeId || t.assignedTo)
+            ? (DB.getById('users', t.assigneeId || t.assignedTo)?.name || t.assigneeId || t.assignedTo)
+            : 'Unassigned';
         return el('tr', {}, [
           el('td', { text: t.title }),
           el('td', { text: formatDate(t.dueDate) }),

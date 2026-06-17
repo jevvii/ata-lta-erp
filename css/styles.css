@@ -825,6 +825,7 @@ tbody tr:hover {
 .task-row { display: flex; align-items: center; gap: var(--spacing-md); margin-bottom: var(--spacing-sm); }
 .task-title-input { flex: 1; }
 .task-assignee, .task-pred { min-width: 150px; }
+.task-assignee-other { min-width: 150px; flex: 1; }
 
 /* Task Dependencies */
 .dependency-list { font-size: 0.8125rem; color: var(--color-text-muted); margin-bottom: var(--spacing-xs); }
