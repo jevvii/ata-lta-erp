@@ -566,7 +566,7 @@ h3 {
 }
 
 .form-group label {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text-muted);
 }
@@ -622,7 +622,7 @@ select:focus {
   border-radius: var(--radius-sm);
   font-family: inherit;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   min-height: 36px;
