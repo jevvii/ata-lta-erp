@@ -369,8 +369,7 @@ const Workflow = {
     ['Urgent', 'Priority', 'Low Priority'].forEach(p => priorityFilter.appendChild(el('option', { value: p, text: p })));
     filters.appendChild(priorityFilter);
 
-    const empFilter = el('select', { class: 'form-select' });
-    empFilter.appendChild(el('option', { value: '', text: 'All Employees' }));
+    const empOptions = [{ value: '', text: 'All Employees' }];
     DB.getWhere('users', u => {
       const userEnts = (u.entities || []).map(e => e.toUpperCase());
       if (entity === 'ALL') {
@@ -378,12 +377,12 @@ const Workflow = {
       }
       return userEnts.includes(entity.toUpperCase());
     }).forEach(u => {
-      empFilter.appendChild(el('option', { value: u.id, text: u.name }));
+      empOptions.push({ value: u.id, text: u.name });
     });
+    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions });
     filters.appendChild(empFilter);
 
-    const clientFilter = el('select', { class: 'form-select' });
-    clientFilter.appendChild(el('option', { value: '', text: 'All Clients' }));
+    const clientOptions = [{ value: '', text: 'All Clients' }];
     DB.getWhere('clients', c => {
       const clientEnt = (c.entity || '').toUpperCase();
       if (entity === 'ALL') {
@@ -391,8 +390,9 @@ const Workflow = {
       }
       return clientEnt === entity.toUpperCase();
     }).forEach(c => {
-      clientFilter.appendChild(el('option', { value: c.id, text: c.name }));
+      clientOptions.push({ value: c.id, text: c.name });
     });
+    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions });
     filters.appendChild(clientFilter);
 
     const dateFrom = el('input', { type: 'date', class: 'form-select' });

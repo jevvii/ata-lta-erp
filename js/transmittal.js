@@ -105,8 +105,7 @@ const Transmittal = {
     });
     filtersBar.appendChild(wrFilter);
 
-    const clientFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
-    clientFilter.appendChild(el('option', { value: '', text: 'All Clients' }));
+    const clientOptions = [{ value: '', text: 'All Clients' }];
     DB.getWhere('clients', c => {
       const clientEnt = (c.entity || '').toUpperCase();
       if (entity === 'ALL') {
@@ -114,12 +113,12 @@ const Transmittal = {
       }
       return clientEnt === entity.toUpperCase();
     }).forEach(c => {
-      clientFilter.appendChild(el('option', { value: c.id, text: c.name }));
+      clientOptions.push({ value: c.id, text: c.name });
     });
+    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '200px' });
     filtersBar.appendChild(clientFilter);
 
-    const empFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
-    empFilter.appendChild(el('option', { value: '', text: 'All Employees' }));
+    const empOptions = [{ value: '', text: 'All Employees' }];
     DB.getWhere('users', u => {
       const userEnts = (u.entities || []).map(e => e.toUpperCase());
       if (entity === 'ALL') {
@@ -127,8 +126,9 @@ const Transmittal = {
       }
       return userEnts.includes(entity.toUpperCase());
     }).forEach(u => {
-      empFilter.appendChild(el('option', { value: u.id, text: u.name }));
+      empOptions.push({ value: u.id, text: u.name });
     });
+    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions, maxWidth: '200px' });
     filtersBar.appendChild(empFilter);
 
     const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
