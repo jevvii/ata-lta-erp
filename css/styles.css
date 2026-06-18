@@ -170,14 +170,21 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   background: var(--color-surface);
-  border-bottom: none;
-  padding: 10px 20px;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 16px;
+  height: 48px;
   flex-shrink: 0;
   z-index: 10;
 }
 
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .header-brand .logo {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--color-text);
   letter-spacing: 0.01em;
@@ -263,8 +270,8 @@ a:hover {
 .entity-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: var(--radius-md);
   background: var(--color-bg);
   border: none;
@@ -273,25 +280,27 @@ a:hover {
 .pill-select {
   border: none;
   background: transparent;
-  padding-right: 20px;
+  padding-right: 18px;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--color-text);
   outline: none;
+  background-position: right 0 center;
+  padding-left: 4px;
 }
 
 .user-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 12px 4px 4px;
+  gap: 8px;
+  padding: 2px 10px 2px 2px;
   background: transparent;
   border-radius: var(--radius-pill);
 }
 
 .avatar {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: url('https://ui-avatars.com/api/?name=User&background=2563eb&color=fff') center/cover;
   display: inline-block;
@@ -318,7 +327,7 @@ a:hover {
   background: none;
   border: none;
   cursor: pointer;
-  padding: var(--spacing-sm);
+  padding: 8px;
 }
 
 .menu-toggle span {
@@ -343,11 +352,11 @@ a:hover {
 .sidebar {
   width: var(--sidebar-width);
   background: var(--color-surface);
-  border-right: none;
+  border-right: 1px solid var(--color-border);
   flex-shrink: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-top: var(--spacing-sm);
+  padding-top: 12px;
   box-shadow: 2px 0 10px rgba(0,0,0,0.01);
   z-index: 5;
   scrollbar-width: thin;
@@ -360,37 +369,43 @@ a:hover {
   width: var(--sidebar-collapsed-width);
 }
 
-/* Sidebar collapse toggle */
+/* Sidebar collapse toggle (now in header, Jira-style) */
 .sidebar-collapse-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin: 0 auto var(--spacing-xs);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--color-text-muted);
-  font-size: 0.8rem;
   transition: background 0.2s, color 0.2s;
   flex-shrink: 0;
 }
 
 .sidebar-collapse-btn:hover {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .sidebar-collapse-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   transition: transform 0.25s ease;
 }
 
-.sidebar.collapsed .sidebar-collapse-btn svg {
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+.app-header .sidebar-collapse-btn {
+  margin-left: -4px;
+}
+
+/* When sidebar is collapsed, rotate header toggle icon */
+#app-shell:has(.sidebar.collapsed) .sidebar-collapse-btn svg {
   transform: rotate(180deg);
 }
 
@@ -407,6 +422,14 @@ a:hover {
 .sidebar.collapsed .nav-list li a {
   justify-content: center;
   padding: 10px;
+}
+
+.sidebar.collapsed .nav-link-label {
+  justify-content: center;
+}
+
+.sidebar.collapsed .nav-link-text {
+  display: none;
 }
 
 .sidebar.collapsed .nav-link-icon {
@@ -436,14 +459,27 @@ a:hover {
 .nav-list li a {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 9px 14px;
   color: var(--color-text-muted);
   font-weight: 500;
   border-radius: var(--radius-md);
   transition: all 0.2s ease;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.nav-link-label {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.nav-link-text {
+  text-align: left;
 }
 
 .nav-link-icon {
@@ -542,7 +578,7 @@ input[type="number"],
 input[type="date"],
 textarea,
 select {
-  padding: 12px 16px;
+  padding: 8px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-family: inherit;
@@ -550,6 +586,7 @@ select {
   color: var(--color-text);
   background: var(--color-surface);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-height: 36px;
 }
 
 input:focus,
@@ -566,9 +603,12 @@ select:focus {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239494a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 32px;
+  background-position: right 10px center;
+  padding-right: 28px;
   cursor: pointer;
+  min-height: 36px;
+  padding-top: 7px;
+  padding-bottom: 7px;
 }
 
 /* Buttons */
@@ -577,7 +617,7 @@ select:focus {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-xs);
-  padding: 10px 24px;
+  padding: 8px 18px;
   border: none;
   border-radius: var(--radius-sm);
   font-family: inherit;
@@ -585,6 +625,7 @@ select:focus {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  min-height: 36px;
 }
 
 .btn-primary {
@@ -871,6 +912,8 @@ tbody tr:hover {
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 /* Radio / Checkbox */
@@ -1559,7 +1602,32 @@ tbody tr:hover {
 
 .filters-bar .form-select,
 .filters-bar input {
-  min-width: 160px;
+  min-width: 140px;
+  height: 32px;
+  padding: 6px 28px 6px 10px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  border-radius: var(--radius-sm);
+}
+
+.filters-bar .form-select {
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+
+.filters-bar .btn,
+.filters-bar .btn-sm {
+  height: 32px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+}
+
+/* Standard system-wide filter/search inputs */
+.search-input {
+  height: 32px;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  border-radius: var(--radius-pill);
 }
 
 /* Transmittal */
@@ -1664,10 +1732,14 @@ tbody tr:hover {
     display: none;
   }
 
+  .app-header .sidebar-collapse-btn {
+    display: none;
+  }
+
   .header-actions.show {
     display: flex;
     position: fixed;
-    top: 70px;
+    top: 56px;
     right: 0;
     left: 0;
     background: var(--color-surface);
