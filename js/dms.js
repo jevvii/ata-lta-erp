@@ -82,13 +82,15 @@ const DMS = {
     addBtn.addEventListener('click', () => { this.view = 'form'; this.detailId = null; App.handleRoute(); });
     actions.appendChild(addBtn);
 
-    // View mode toggle
+    // View mode toggle (saveCurrentFilters assigned after filter elements are created)
+    let saveCurrentFilters;
     const viewToggle = el('div', { class: 'view-mode-toggle' });
     const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
       const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label });
       if (this.listViewMode === mode) btn.classList.add('active');
       btn.addEventListener('click', () => {
+        saveCurrentFilters();
         App.setPreferredViewMode('documents', mode);
         this.listViewMode = mode;
         this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value);
@@ -165,11 +167,32 @@ const DMS = {
       empFilter.value = '';
       dateFrom.value = '';
       dateTo.value = '';
+      App.clearSavedFilters('documents');
       updateFilters();
     });
     filtersBar.appendChild(clearBtn);
 
     wrapper.appendChild(filtersBar);
+
+    // Restore saved filters
+    const savedFilters = App.restoreFilters('documents');
+    if (savedFilters) {
+      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
+      if (savedFilters.client) clientFilter.value = savedFilters.client;
+      if (savedFilters.employee) empFilter.value = savedFilters.employee;
+      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
+      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+    }
+
+    saveCurrentFilters = () => {
+      App.saveFilters('documents', {
+        workRequest: wrFilter.value,
+        client: clientFilter.value,
+        employee: empFilter.value,
+        dateFrom: dateFrom.value,
+        dateTo: dateTo.value
+      });
+    };
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
@@ -180,7 +203,7 @@ const DMS = {
       entityFilter.addEventListener('change', () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value));
     }
 
-    this.refreshList(listContainer, '', '', '', '', '', canCrossEntity ? entity : entity);
+    this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value);
     return wrapper;
   },
 

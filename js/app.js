@@ -254,6 +254,24 @@ const App = {
     if (mode === 'list' || mode === 'table' || mode === 'board') {
       localStorage.setItem(key, mode);
     }
+  },
+
+  saveFilters(module, filterMap) {
+    const key = `erp_filters_${module}`;
+    try { sessionStorage.setItem(key, JSON.stringify(filterMap)); } catch (e) { /* ignore */ }
+  },
+
+  restoreFilters(module) {
+    const key = `erp_filters_${module}`;
+    try {
+      const stored = sessionStorage.getItem(key);
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) { return null; }
+  },
+
+  clearSavedFilters(module) {
+    const key = `erp_filters_${module}`;
+    try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
   }
 };
 

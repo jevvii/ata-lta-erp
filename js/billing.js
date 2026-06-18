@@ -201,11 +201,34 @@ const Billing = {
       dateFrom.value = '';
       dateTo.value = '';
       statusFilter.value = '';
+      App.clearSavedFilters('billing');
       refresh();
     });
     filters.appendChild(clearBtn);
 
     wrapper.appendChild(filters);
+
+    // Restore saved filters
+    const savedFilters = App.restoreFilters('billing');
+    if (savedFilters) {
+      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
+      if (savedFilters.client) clientFilter.value = savedFilters.client;
+      if (savedFilters.employee) empFilter.value = savedFilters.employee;
+      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
+      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+      if (savedFilters.status) statusFilter.value = savedFilters.status;
+    }
+
+    const saveCurrentFilters = () => {
+      App.saveFilters('billing', {
+        workRequest: wrFilter.value,
+        client: clientFilter.value,
+        employee: empFilter.value,
+        dateFrom: dateFrom.value,
+        dateTo: dateTo.value,
+        status: statusFilter.value
+      });
+    };
 
     // View mode toggle
     const viewMode = App.getPreferredViewMode('billing') || 'table';
@@ -213,9 +236,9 @@ const Billing = {
     const vmTable = el('button', { html: ViewIcons.table + ' Table', class: viewMode === 'table' ? 'active' : '' });
     const vmBoard = el('button', { html: ViewIcons.board + ' Board', class: viewMode === 'board' ? 'active' : '' });
     const vmList = el('button', { html: ViewIcons.list + ' List', class: viewMode === 'list' ? 'active' : '' });
-    vmTable.addEventListener('click', () => { App.setPreferredViewMode('billing', 'table'); App.handleRoute(); });
-    vmBoard.addEventListener('click', () => { App.setPreferredViewMode('billing', 'board'); App.handleRoute(); });
-    vmList.addEventListener('click', () => { App.setPreferredViewMode('billing', 'list'); App.handleRoute(); });
+    vmTable.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'table'); App.handleRoute(); });
+    vmBoard.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'board'); App.handleRoute(); });
+    vmList.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'list'); App.handleRoute(); });
     vmToggle.appendChild(vmTable);
     vmToggle.appendChild(vmBoard);
     vmToggle.appendChild(vmList);

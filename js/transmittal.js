@@ -154,11 +154,34 @@ const Transmittal = {
       statusFilter.value = '';
       dateFrom.value = '';
       dateTo.value = '';
+      App.clearSavedFilters('transmittals');
       updateFilters();
     });
     filtersBar.appendChild(clearBtn);
 
     wrapper.appendChild(filtersBar);
+
+    // Restore saved filters
+    const savedFilters = App.restoreFilters('transmittals');
+    if (savedFilters) {
+      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
+      if (savedFilters.client) clientFilter.value = savedFilters.client;
+      if (savedFilters.employee) empFilter.value = savedFilters.employee;
+      if (savedFilters.status) statusFilter.value = savedFilters.status;
+      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
+      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+    }
+
+    const saveCurrentFilters = () => {
+      App.saveFilters('transmittals', {
+        workRequest: wrFilter.value,
+        client: clientFilter.value,
+        employee: empFilter.value,
+        status: statusFilter.value,
+        dateFrom: dateFrom.value,
+        dateTo: dateTo.value
+      });
+    };
 
     // View mode toggle
     const viewToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom:var(--spacing-md);' });
@@ -166,6 +189,7 @@ const Transmittal = {
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
       const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: this.listViewMode === mode ? 'active' : '' });
       btn.addEventListener('click', () => {
+        saveCurrentFilters();
         App.setPreferredViewMode('transmittals', mode);
         App.handleRoute();
       });
