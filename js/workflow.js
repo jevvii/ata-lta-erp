@@ -292,14 +292,15 @@ const Workflow = {
       
       const actions = el('div', { class: 'title-bar-actions' });
       if (isManagerial && wr && !isArchived) {
+        const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
+        addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
+        actions.appendChild(addBtn);
+
         if (wr.status === 'Draft') {
           const editWrBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit Work Request', style: 'margin-right: var(--spacing-sm);' });
           editWrBtn.addEventListener('click', () => { this.view = 'form'; this.editingId = wr.id; App.handleRoute(); });
           actions.appendChild(editWrBtn);
         }
-        const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
-        addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
-        actions.appendChild(addBtn);
       }
       const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
       backBtn.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
@@ -845,6 +846,9 @@ const Workflow = {
     headerBar.appendChild(el('h2', { text: wr ? 'Edit Work Request' : 'Add Work Request' }));
     const topActions = el('div', { class: 'form-actions-top' });
 
+    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Work Request', form: 'wr-form' });
+    topActions.appendChild(saveBtn);
+
     // Use Retainer Template button (only on creation, not edit)
     const templates = DB.getWhere('retainerTemplates', t => t.entity === entity);
     let selectedTemplateId = null;
@@ -882,10 +886,8 @@ const Workflow = {
       topActions.appendChild(templateWrapper);
     }
 
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Work Request', form: 'wr-form' });
     const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
     cancelBtn.addEventListener('click', () => { this.view = 'list'; this.editingId = null; App.handleRoute(); });
-    topActions.appendChild(saveBtn);
     topActions.appendChild(cancelBtn);
     headerBar.appendChild(topActions);
     container.appendChild(headerBar);

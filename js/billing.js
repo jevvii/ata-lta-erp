@@ -116,24 +116,21 @@ const Billing = {
     const entity = Auth.activeEntity;
     const wrapper = el('div');
 
-    // Header bar
-    const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: 'Invoices' }));
-    const topActions = el('div', { class: 'form-actions-top' });
+    // Actions bar
+    const actions = el('div', { class: 'actions-bar', style: 'margin-bottom: var(--spacing-md);' });
     const addBtn = el('button', { class: 'btn btn-primary', text: 'Create Invoice' });
     addBtn.addEventListener('click', () => { this.view = 'form'; this.detailId = null; App.handleRoute(); });
-    topActions.appendChild(addBtn);
+    actions.appendChild(addBtn);
     const templatesBtn = el('button', { class: 'btn btn-secondary', text: 'Templates' });
     templatesBtn.addEventListener('click', () => { this.view = 'templates'; App.handleRoute(); });
-    topActions.appendChild(templatesBtn);
+    actions.appendChild(templatesBtn);
     const agingBtn = el('button', { class: 'btn btn-secondary', text: 'Aging Report' });
     agingBtn.addEventListener('click', () => { this.view = 'aging'; App.handleRoute(); });
-    topActions.appendChild(agingBtn);
+    actions.appendChild(agingBtn);
     const trashBtn = el('button', { class: 'btn btn-secondary', text: 'Trash' });
     trashBtn.addEventListener('click', () => { this.view = 'trash'; App.handleRoute(); });
-    topActions.appendChild(trashBtn);
-    headerBar.appendChild(topActions);
-    wrapper.appendChild(headerBar);
+    actions.appendChild(trashBtn);
+    wrapper.appendChild(actions);
 
     // Filters
     const filters = el('div', { class: 'filters-bar' });
