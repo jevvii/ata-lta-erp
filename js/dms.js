@@ -198,9 +198,9 @@ const DMS = {
     wrapper.appendChild(listContainer);
 
     const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value);
-    [wrFilter, clientFilter, empFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', updateFilters));
+    [wrFilter, clientFilter, empFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); updateFilters(); }));
     if (entityFilter) {
-      entityFilter.addEventListener('change', () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value));
+      entityFilter.addEventListener('change', () => { saveCurrentFilters(); this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value); });
     }
 
     this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value);

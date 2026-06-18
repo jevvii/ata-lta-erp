@@ -489,7 +489,7 @@ const Workflow = {
       else this.refreshListCompact(contentContainer, wrs);
     };
 
-    [priorityFilter, empFilter, clientFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', refresh));
+    [priorityFilter, empFilter, clientFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
     refresh();
 
     return wrapper;

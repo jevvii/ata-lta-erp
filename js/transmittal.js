@@ -201,7 +201,7 @@ const Transmittal = {
     wrapper.appendChild(listContainer);
 
     const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
-    [wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', updateFilters));
+    [wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); updateFilters(); }));
 
     this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value);
     return wrapper;

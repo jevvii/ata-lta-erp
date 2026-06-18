@@ -286,7 +286,7 @@ const Billing = {
       else this.refreshListCompact(contentContainer, invoices);
     };
 
-    [wrFilter, clientFilter, empFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', refresh));
+    [wrFilter, clientFilter, empFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
     refresh();
 
     return wrapper;

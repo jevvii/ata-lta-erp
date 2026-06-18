@@ -284,7 +284,7 @@ const Disbursement = {
     wrapper.appendChild(listContainer);
 
     const refresh = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value, viewMode);
-    [wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', refresh));
+    [wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
 
     refresh();
 
