@@ -5274,3 +5274,156 @@ tbody tr:hover {
     max-height: 400px;
   }
 }
+
+/* ─── Searchable Dropdown (Combobox) ─── */
+.searchable-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 160px;
+  max-width: 240px;
+}
+
+.searchable-dropdown-input {
+  width: 100%;
+  padding: 6px 28px 6px 10px !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm) !important;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-text);
+  background: var(--color-surface);
+  cursor: pointer;
+  min-height: 32px !important;
+  height: 32px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.searchable-dropdown-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+.searchable-dropdown-input:focus {
+  outline: none;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(140, 82, 255, 0.15);
+  cursor: text;
+}
+
+.searchable-dropdown-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: auto;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  z-index: 1;
+}
+
+.searchable-dropdown.open .searchable-dropdown-arrow {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.searchable-dropdown-listbox {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  padding: 4px 0;
+}
+
+.searchable-dropdown.open .searchable-dropdown-listbox {
+  display: block;
+  animation: searchDropFadeIn 0.15s ease-out;
+}
+
+@keyframes searchDropFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.searchable-dropdown-item {
+  padding: 7px 12px;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s ease;
+  border-radius: 4px;
+  margin: 0 4px;
+}
+
+.searchable-dropdown-item:hover,
+.searchable-dropdown-item.highlighted {
+  background: var(--color-primary-alpha, rgba(140, 82, 255, 0.08));
+}
+
+.searchable-dropdown-item.selected {
+  color: var(--color-primary);
+  font-weight: 600;
+  background: var(--color-primary-alpha, rgba(140, 82, 255, 0.06));
+}
+
+.searchable-dropdown-item.selected.highlighted {
+  background: var(--color-primary-alpha, rgba(140, 82, 255, 0.12));
+}
+
+.searchable-dropdown-empty {
+  padding: 12px 16px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  font-style: italic;
+}
+
+/* Scrollbar styling for the listbox */
+.searchable-dropdown-listbox::-webkit-scrollbar {
+  width: 6px;
+}
+
+.searchable-dropdown-listbox::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.searchable-dropdown-listbox::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.searchable-dropdown-listbox::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* In .filters-bar context, match spacing with sibling selects */
+.filters-bar .searchable-dropdown {
+  min-width: 140px;
+}
+
+/* Responsive: stack on small screens */
+@media (max-width: 640px) {
+  .searchable-dropdown {
+    min-width: 120px;
+    max-width: 100%;
+  }
+}

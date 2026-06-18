@@ -130,8 +130,7 @@ const DMS = {
     });
     filtersBar.appendChild(wrFilter);
 
-    const clientFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
-    clientFilter.appendChild(el('option', { value: '', text: 'All Clients' }));
+    const clientOptions = [{ value: '', text: 'All Clients' }];
     DB.getWhere('clients', c => {
       const clientEnt = (c.entity || '').toUpperCase();
       if (entity === 'ALL') {
@@ -139,15 +138,16 @@ const DMS = {
       }
       return clientEnt === entity.toUpperCase();
     }).forEach(c => {
-      clientFilter.appendChild(el('option', { value: c.id, text: c.name }));
+      clientOptions.push({ value: c.id, text: c.name });
     });
+    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '200px' });
     filtersBar.appendChild(clientFilter);
 
-    const empFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
-    empFilter.appendChild(el('option', { value: '', text: 'All Uploaders' }));
+    const empOptions = [{ value: '', text: 'All Uploaders' }];
     DB.getWhere('users', u => ['Admin', 'Manager', 'Staff'].includes(u.role)).forEach(u => {
-      empFilter.appendChild(el('option', { value: u.id, text: u.name }));
+      empOptions.push({ value: u.id, text: u.name });
     });
+    const empFilter = createSearchableDropdown({ placeholder: 'All Uploaders', options: empOptions, maxWidth: '180px' });
     filtersBar.appendChild(empFilter);
 
     const dateFrom = el('input', { type: 'date', class: 'form-select', style: 'max-width:140px' });

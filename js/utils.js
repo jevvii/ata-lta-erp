@@ -96,3 +96,172 @@ const PaymentIcons = {
   'Cash':     { color: '#15803D', bg: '#DCFCE7', label: 'Cash', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8"/><text x="12" y="16" text-anchor="middle" fill="#15803D" font-size="10" font-weight="bold" font-family="Arial">₱</text></svg>' },
   'Other Digital':{ color: '#64748B', bg: '#F1F5F9', label: 'Digital', svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 17h.01"/></svg>' }
 };
+
+/**
+ * Searchable Dropdown (Combobox)
+ * Drop-in replacement for <select> in filter bars.
+ * Returns a wrapper div with .value getter/setter and dispatches 'change' events.
+ *
+ * @param {Object} opts
+ * @param {string} opts.placeholder - Placeholder text (e.g. 'All Employees')
+ * @param {Array<{value:string, text:string}>} opts.options - The selectable options
+ * @param {string} [opts.maxWidth] - Optional max-width CSS value
+ * @returns {HTMLElement} wrapper element with .value property
+ */
+function createSearchableDropdown({ placeholder, options, maxWidth }) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'searchable-dropdown';
+  if (maxWidth) wrapper.style.maxWidth = maxWidth;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'searchable-dropdown-input';
+  input.placeholder = placeholder;
+  input.setAttribute('autocomplete', 'off');
+
+  const arrow = document.createElement('span');
+  arrow.className = 'searchable-dropdown-arrow';
+  arrow.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+
+  const listbox = document.createElement('div');
+  listbox.className = 'searchable-dropdown-listbox';
+
+  wrapper.appendChild(input);
+  wrapper.appendChild(arrow);
+  wrapper.appendChild(listbox);
+
+  let selectedValue = '';
+  let selectedText = '';
+  let isOpen = false;
+  let highlightIdx = -1;
+
+  function renderList(filter) {
+    listbox.innerHTML = '';
+    const query = (filter || '').toLowerCase();
+    const filtered = options.filter(o => !query || o.text.toLowerCase().includes(query));
+
+    if (filtered.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'searchable-dropdown-empty';
+      empty.textContent = 'No results';
+      listbox.appendChild(empty);
+      return;
+    }
+
+    filtered.forEach((opt, i) => {
+      const item = document.createElement('div');
+      item.className = 'searchable-dropdown-item';
+      if (opt.value === selectedValue) item.classList.add('selected');
+      if (i === highlightIdx) item.classList.add('highlighted');
+      item.textContent = opt.text;
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // prevent blur
+        selectOption(opt.value, opt.text);
+        close();
+      });
+      item.addEventListener('mouseenter', () => {
+        highlightIdx = i;
+        listbox.querySelectorAll('.searchable-dropdown-item').forEach((el, j) => {
+          el.classList.toggle('highlighted', j === i);
+        });
+      });
+      listbox.appendChild(item);
+    });
+  }
+
+  function selectOption(val, text) {
+    const changed = selectedValue !== val;
+    selectedValue = val;
+    selectedText = text;
+    input.value = val ? text : '';
+    if (changed) {
+      wrapper.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  function open() {
+    if (isOpen) return;
+    isOpen = true;
+    highlightIdx = -1;
+    wrapper.classList.add('open');
+    renderList(selectedValue ? '' : input.value);
+  }
+
+  function close() {
+    if (!isOpen) return;
+    isOpen = false;
+    wrapper.classList.remove('open');
+    // Restore display text
+    input.value = selectedValue ? selectedText : '';
+  }
+
+  input.addEventListener('focus', () => {
+    input.select();
+    open();
+  });
+
+  input.addEventListener('input', () => {
+    highlightIdx = -1;
+    if (!isOpen) open();
+    renderList(input.value);
+  });
+
+  input.addEventListener('blur', () => {
+    close();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const items = listbox.querySelectorAll('.searchable-dropdown-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!isOpen) { open(); return; }
+      highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx));
+      if (items[highlightIdx]) items[highlightIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightIdx = Math.max(highlightIdx - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx));
+      if (items[highlightIdx]) items[highlightIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightIdx >= 0 && highlightIdx < items.length) {
+        items[highlightIdx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      }
+    } else if (e.key === 'Escape') {
+      close();
+      input.blur();
+    }
+  });
+
+  arrow.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (isOpen) { close(); input.blur(); }
+    else { input.focus(); }
+  });
+
+  // Close when clicking outside
+  document.addEventListener('mousedown', (e) => {
+    if (!wrapper.contains(e.target)) close();
+  });
+
+  // Expose .value as getter/setter for drop-in compatibility with <select>
+  Object.defineProperty(wrapper, 'value', {
+    get() { return selectedValue; },
+    set(val) {
+      if (val === '' || val == null) {
+        selectedValue = '';
+        selectedText = '';
+        input.value = '';
+      } else {
+        const match = options.find(o => o.value === val);
+        selectedValue = val;
+        selectedText = match ? match.text : val;
+        input.value = selectedText;
+      }
+    }
+  });
+
+  // Expose addEventListener on wrapper (already works since it's a div)
+  return wrapper;
+}
