@@ -1376,27 +1376,62 @@ const Workflow = {
     const assigneeOtherInput = el('input', {
       type: 'text',
       class: 'task-assignee-other',
-      placeholder: 'Enter employee name',
+      placeholder: 'Type assignee name',
       style: 'display: none;'
     });
+
+    const backBtn = el('button', {
+      type: 'button',
+      class: 'btn btn-ghost btn-sm btn-assignee-back',
+      html: '&#x2190;', // arrow ←
+      title: 'Back to selection',
+      style: 'display: none;'
+    });
+
+    const showDropdown = () => {
+      assigneeSel.style.display = 'block';
+      assigneeOtherInput.style.display = 'none';
+      backBtn.style.display = 'none';
+      assigneeSel.value = '';
+      assigneeOtherInput.value = '';
+      assigneeOtherInput.required = false;
+      assigneeOtherInput.classList.remove('input-error');
+    };
+
+    const showInput = () => {
+      assigneeSel.style.display = 'none';
+      assigneeOtherInput.style.display = 'block';
+      backBtn.style.display = 'inline-block';
+      assigneeSel.value = 'others';
+      assigneeOtherInput.required = true;
+      assigneeOtherInput.focus();
+    };
+
     assigneeSel.addEventListener('change', () => {
-      const isOthers = assigneeSel.value === 'others';
-      assigneeOtherInput.style.display = isOthers ? 'inline-block' : 'none';
-      assigneeOtherInput.required = isOthers;
-      if (!isOthers) {
-        assigneeOtherInput.value = '';
-        assigneeOtherInput.classList.remove('input-error');
+      if (assigneeSel.value === 'others') {
+        showInput();
       }
     });
+
+    backBtn.addEventListener('click', () => {
+      showDropdown();
+    });
+
     if (taskData?.assigneeName) {
       assigneeSel.value = 'others';
       assigneeOtherInput.value = taskData.assigneeName;
-      assigneeOtherInput.style.display = 'inline-block';
+      assigneeSel.style.display = 'none';
+      assigneeOtherInput.style.display = 'block';
+      backBtn.style.display = 'inline-block';
       assigneeOtherInput.required = true;
     }
 
-    row.appendChild(assigneeSel);
-    row.appendChild(assigneeOtherInput);
+    const assigneeWrapper = el('div', { class: 'task-assignee-wrapper' });
+    assigneeWrapper.appendChild(assigneeSel);
+    assigneeWrapper.appendChild(assigneeOtherInput);
+    assigneeWrapper.appendChild(backBtn);
+
+    row.appendChild(assigneeWrapper);
 
     // Custom Multi-select Dropdown
     const predWrapper = el('div', { class: 'multi-select-dropdown task-pred' });
@@ -2934,20 +2969,52 @@ const Workflow = {
     const assigneeOtherInput = el('input', {
       type: 'text',
       name: 'assigneeName',
-      placeholder: 'Enter employee name',
-      style: 'display: none; margin-top: var(--spacing-sm);'
+      placeholder: 'Type assignee name',
+      style: 'display: none;'
     });
+
+    const backBtn = el('button', {
+      type: 'button',
+      class: 'btn btn-ghost btn-sm btn-assignee-back',
+      html: '&#x2190;', // arrow ←
+      title: 'Back to selection',
+      style: 'display: none;'
+    });
+
+    const showDropdown = () => {
+      assigneeSel.style.display = 'block';
+      assigneeOtherInput.style.display = 'none';
+      backBtn.style.display = 'none';
+      assigneeSel.value = '';
+      assigneeOtherInput.value = '';
+      assigneeOtherInput.required = false;
+      assigneeOtherInput.classList.remove('input-error');
+    };
+
+    const showInput = () => {
+      assigneeSel.style.display = 'none';
+      assigneeOtherInput.style.display = 'block';
+      backBtn.style.display = 'inline-block';
+      assigneeSel.value = 'others';
+      assigneeOtherInput.required = true;
+      assigneeOtherInput.focus();
+    };
+
     assigneeSel.addEventListener('change', () => {
-      const isOthers = assigneeSel.value === 'others';
-      assigneeOtherInput.style.display = isOthers ? 'block' : 'none';
-      assigneeOtherInput.required = isOthers;
-      if (!isOthers) {
-        assigneeOtherInput.value = '';
-        assigneeOtherInput.classList.remove('input-error');
+      if (assigneeSel.value === 'others') {
+        showInput();
       }
     });
-    assigneeGroup.appendChild(assigneeSel);
-    assigneeGroup.appendChild(assigneeOtherInput);
+
+    backBtn.addEventListener('click', () => {
+      showDropdown();
+    });
+
+    const assigneeWrapper = el('div', { class: 'task-assignee-wrapper' });
+    assigneeWrapper.appendChild(assigneeSel);
+    assigneeWrapper.appendChild(assigneeOtherInput);
+    assigneeWrapper.appendChild(backBtn);
+    assigneeGroup.appendChild(assigneeWrapper);
     form.appendChild(assigneeGroup);
 
     form.appendChild(el('div', { class: 'form-group' }, [

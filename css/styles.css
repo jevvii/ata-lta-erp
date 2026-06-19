@@ -1147,8 +1147,27 @@ tbody tr:hover {
 /* Task Rows */
 .task-row { display: flex; align-items: center; gap: var(--spacing-md); margin-bottom: var(--spacing-sm); }
 .task-title-input { flex: 1; }
+.task-assignee-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 180px;
+}
 .task-assignee, .task-pred { min-width: 150px; }
-.task-assignee-other { min-width: 150px; flex: 1; }
+.task-assignee-wrapper select,
+.task-assignee-wrapper input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+.btn-assignee-back {
+  padding: 6px 10px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
 
 /* Custom Multi-select Dropdown styling */
 .multi-select-dropdown {
