@@ -3242,6 +3242,44 @@ const Workflow = {
     const idx = Math.max(flow.indexOf(task.status), 0);
     const allowed = new Set(flow.slice(0, idx + 2));
     allowed.add('Cancelled');
+
+    // Retrieve associated Work Request, if any
+    const wr = task.workRequestId ? DB.getById('workRequests', task.workRequestId) : null;
+    if (wr) {
+      if (wr.status === 'Completed' || wr.status === 'Cancelled') {
+        return [task.status];
+      }
+      let capStatus = null;
+      if (wr.status === 'Draft') {
+        capStatus = 'Assigned';
+      } else if (wr.status === 'Pre-processing') {
+        const title = (task.title || '').toLowerCase();
+        if (title.includes('requirement') || title.includes('gather')) {
+          capStatus = 'Completed';
+        } else {
+          capStatus = 'Assigned';
+        }
+      } else if (wr.status === 'Processing') {
+        capStatus = 'Completed';
+      } else if (wr.status === 'Billing' || wr.status === 'Disbursement') {
+        capStatus = task.status;
+      }
+
+      if (capStatus) {
+        const capIdx = flow.indexOf(capStatus);
+        if (capIdx !== -1) {
+          const capFlow = flow.slice(0, capIdx + 1);
+          const filtered = new Set();
+          allowed.forEach(status => {
+            if (capFlow.includes(status) || status === 'Cancelled') {
+              filtered.add(status);
+            }
+          });
+          return Array.from(filtered);
+        }
+      }
+    }
+
     return Array.from(allowed);
   },
 
@@ -3263,6 +3301,14 @@ const Workflow = {
     if (!task) return { error: 'Task not found.' };
     if (task.status === 'Completed' || task.status === 'Cancelled') {
       return { error: 'Completed and cancelled tasks are immutable.' };
+    }
+    const allowed = this.getValidNextStatuses(task);
+    if (!allowed.includes(newStatus)) {
+      const wr = task.workRequestId ? DB.getById('workRequests', task.workRequestId) : null;
+      if (wr) {
+        return { error: `Task status cannot be set to "${newStatus}" in the "${wr.status}" phase.` };
+      }
+      return { error: `Task status cannot be set to "${newStatus}".` };
     }
     if ((newStatus === 'In Progress' || newStatus === 'Completed') && !this.canStart(taskId)) {
       return { error: 'Dependency tasks must be completed first.' };
