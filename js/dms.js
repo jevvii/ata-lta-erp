@@ -93,7 +93,7 @@ const DMS = {
         saveCurrentFilters();
         App.setPreferredViewMode('documents', mode);
         this.listViewMode = mode;
-        this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText);
+        this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
       });
       viewToggle.appendChild(btn);
     });
@@ -203,18 +203,18 @@ const DMS = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText);
+    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
     [wrFilter, clientFilter, empFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); updateFilters(); }));
-    empFilter.addEventListener('input', () => { saveCurrentFilters(); updateFilters(); });
+    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); updateFilters(); }));
     if (entityFilter) {
-      entityFilter.addEventListener('change', () => { saveCurrentFilters(); this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText); });
+      entityFilter.addEventListener('change', () => { saveCurrentFilters(); this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText); });
     }
 
-    this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText);
+    this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, empFilter, dateFrom, dateTo, empSearchText) {
+  refreshList(container, wrFilter, clientFilter, empFilter, dateFrom, dateTo, empSearchText, clientSearchText) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
 
@@ -227,11 +227,22 @@ const DMS = {
     });
 
     if (wrFilter) docs = docs.filter(d => d.workRequestId === wrFilter);
-    if (clientFilter) {
-      docs = docs.filter(d => {
-        const wr = DB.getById('workRequests', d.workRequestId);
-        return wr && wr.clientId === clientFilter;
-      });
+    if (clientFilter || (clientSearchText && clientSearchText.trim() !== '')) {
+      const selectedClient = clientFilter ? DB.getById('clients', clientFilter) : null;
+      if (selectedClient && selectedClient.name === clientSearchText) {
+        docs = docs.filter(d => {
+          const wr = DB.getById('workRequests', d.workRequestId);
+          return wr && wr.clientId === clientFilter;
+        });
+      } else if (clientSearchText && clientSearchText.trim() !== '') {
+        const query = clientSearchText.trim().toLowerCase();
+        docs = docs.filter(d => {
+          const wr = DB.getById('workRequests', d.workRequestId);
+          if (!wr) return false;
+          const client = DB.getById('clients', wr.clientId);
+          return client && client.name.toLowerCase().includes(query);
+        });
+      }
     }
     if (empSearchText && empSearchText.trim() !== '') {
       const query = empSearchText.trim().toLowerCase();

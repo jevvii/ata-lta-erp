@@ -728,7 +728,16 @@ const Workflow = {
       } else if (empFilter.value) {
         wrs = wrs.filter(r => r.assignedTo === empFilter.value);
       }
-      if (clientFilter.value) wrs = wrs.filter(r => r.clientId === clientFilter.value);
+      const selectedClient = clientFilter.value ? DB.getById('clients', clientFilter.value) : null;
+      if (selectedClient && selectedClient.name === clientFilter.searchText) {
+        wrs = wrs.filter(r => r.clientId === clientFilter.value);
+      } else if (clientFilter.searchText && clientFilter.searchText.trim() !== '') {
+        const query = clientFilter.searchText.trim().toLowerCase();
+        wrs = wrs.filter(r => {
+          const client = DB.getById('clients', r.clientId);
+          return client && client.name.toLowerCase().includes(query);
+        });
+      }
       if (dateFrom.value) wrs = wrs.filter(r => r.dueDate && r.dueDate >= dateFrom.value);
       if (dateTo.value) wrs = wrs.filter(r => r.dueDate && r.dueDate <= dateTo.value);
       if (statusFilter.value) wrs = wrs.filter(r => r.status === statusFilter.value);
@@ -739,7 +748,7 @@ const Workflow = {
     };
 
     [priorityFilter, empFilter, clientFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
-    empFilter.addEventListener('input', () => { saveCurrentFilters(); refresh(); });
+    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); refresh(); }));
     refresh();
 
     return wrapper;

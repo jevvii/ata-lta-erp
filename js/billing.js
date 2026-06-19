@@ -279,7 +279,16 @@ const Billing = {
         const wr = DB.getById('workRequests', inv.workRequestId);
         return wr && wr.id === wrFilter.value;
       });
-      if (clientFilter.value) invoices = invoices.filter(inv => inv.clientId === clientFilter.value);
+      const selectedClient = clientFilter.value ? DB.getById('clients', clientFilter.value) : null;
+      if (selectedClient && selectedClient.name === clientFilter.searchText) {
+        invoices = invoices.filter(inv => inv.clientId === clientFilter.value);
+      } else if (clientFilter.searchText && clientFilter.searchText.trim() !== '') {
+        const query = clientFilter.searchText.trim().toLowerCase();
+        invoices = invoices.filter(inv => {
+          const client = DB.getById('clients', inv.clientId);
+          return client && client.name.toLowerCase().includes(query);
+        });
+      }
       if (empFilter.searchText && empFilter.searchText.trim() !== '') {
         const query = empFilter.searchText.trim().toLowerCase();
         invoices = invoices.filter(inv => {
@@ -308,7 +317,7 @@ const Billing = {
     };
 
     [wrFilter, clientFilter, empFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
-    empFilter.addEventListener('input', () => { saveCurrentFilters(); refresh(); });
+    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); refresh(); }));
     refresh();
 
     return wrapper;

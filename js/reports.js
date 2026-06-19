@@ -10,6 +10,7 @@ const Reports = {
   filters: {
     workRequest: '',
     client: '',
+    clientText: '',
     employee: '',
     dateFrom: '',
     dateTo: ''
@@ -164,14 +165,25 @@ const Reports = {
     bar.appendChild(wrSel);
 
     // Client
-    const clientSel = el('select', { class: 'form-select' });
-    clientSel.appendChild(el('option', { value: '', text: '— Client —' }));
+    const clientOptions = [{ value: '', text: '— Client —' }];
     DB.getAll('clients').filter(c => entities.includes(c.entity?.toUpperCase?.())).forEach(c => {
-      clientSel.appendChild(el('option', { value: c.id, text: c.name }));
+      clientOptions.push({ value: c.id, text: c.name });
     });
-    clientSel.value = this.filters.client;
-    clientSel.addEventListener('change', () => { this.filters.client = clientSel.value; triggerChange(); });
-    bar.appendChild(clientSel);
+    const clientFilter = createSearchableDropdown({ placeholder: '— Client —', options: clientOptions });
+    clientFilter.value = this.filters.client;
+    this.filters.clientText = clientFilter.searchText || '';
+
+    clientFilter.addEventListener('change', () => {
+      this.filters.client = clientFilter.value;
+      this.filters.clientText = clientFilter.searchText;
+      triggerChange();
+    });
+    clientFilter.addEventListener('input', () => {
+      this.filters.client = clientFilter.value;
+      this.filters.clientText = clientFilter.searchText;
+      triggerChange();
+    });
+    bar.appendChild(clientFilter);
 
     // Employee
     const empOptions = [{ value: '', text: '— Employee —' }];
@@ -209,7 +221,7 @@ const Reports = {
       html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Clear'
     });
     clearBtn.addEventListener('click', () => {
-      this.filters = { workRequest: '', client: '', employee: '', dateFrom: '', dateTo: '' };
+      this.filters = { workRequest: '', client: '', clientText: '', employee: '', dateFrom: '', dateTo: '' };
       triggerChange();
     });
     bar.appendChild(clearBtn);
@@ -248,11 +260,22 @@ const Reports = {
     if (this.filters.workRequest) {
       tasks = tasks.filter(t => t.workRequestId === this.filters.workRequest);
     }
-    if (this.filters.client) {
-      tasks = tasks.filter(t => {
-        const wr = wrs.find(w => w.id === t.workRequestId);
-        return wr && wr.clientId === this.filters.client;
-      });
+    if (this.filters.client || (this.filters.clientText && this.filters.clientText.trim() !== '')) {
+      const selectedClient = this.filters.client ? DB.getById('clients', this.filters.client) : null;
+      if (selectedClient && selectedClient.name === this.filters.clientText) {
+        tasks = tasks.filter(t => {
+          const wr = wrs.find(w => w.id === t.workRequestId);
+          return wr && wr.clientId === this.filters.client;
+        });
+      } else if (this.filters.clientText && this.filters.clientText.trim() !== '') {
+        const query = this.filters.clientText.trim().toLowerCase();
+        tasks = tasks.filter(t => {
+          const wr = wrs.find(w => w.id === t.workRequestId);
+          if (!wr) return false;
+          const client = DB.getById('clients', wr.clientId);
+          return client && client.name.toLowerCase().includes(query);
+        });
+      }
     }
     if (this.empFilter && this.empFilter.searchText && this.empFilter.searchText.trim() !== '') {
       const query = this.empFilter.searchText.trim().toLowerCase();
