@@ -5347,7 +5347,7 @@ tbody tr:hover {
 
 .searchable-dropdown-input {
   width: 100%;
-  padding: 6px 28px 6px 10px !important;
+  padding: 6px 48px 6px 10px !important;
   border: 1px solid var(--color-border) !important;
   border-radius: var(--radius-sm) !important;
   font-family: inherit;
@@ -5374,6 +5374,28 @@ tbody tr:hover {
   border-color: var(--color-primary) !important;
   box-shadow: 0 0 0 3px rgba(140, 82, 255, 0.15);
   cursor: text;
+}
+
+.searchable-dropdown-clear {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  z-index: 2;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  transition: color 0.2s ease-in-out;
+  line-height: 1;
+}
+
+.searchable-dropdown-clear:hover {
+  color: #64748b;
 }
 
 .searchable-dropdown-arrow {
