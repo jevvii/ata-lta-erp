@@ -1154,14 +1154,14 @@ tbody tr:hover {
   width: 100%;
 }
 .task-row .task-assignee-wrapper {
-  width: 180px;
-  min-width: 180px;
+  width: 190px;
+  min-width: 190px;
   flex-shrink: 0;
 }
 .task-row-v2 .task-assignee-wrapper,
 .task-table-v2 .task-assignee-wrapper {
-  width: 160px;
-  min-width: 160px;
+  width: 190px;
+  min-width: 190px;
   flex-shrink: 0;
 }
 .task-assignee, .task-pred { min-width: 150px; }
