@@ -140,6 +140,14 @@ function createSearchableDropdown({ placeholder, options, maxWidth }) {
     const query = (filter || '').toLowerCase();
     const filtered = options.filter(o => !query || o.text.toLowerCase().includes(query));
 
+    const trimmedFilter = (filter || '').trim();
+    if (trimmedFilter) {
+      const hasExactMatch = options.some(o => o.text.toLowerCase() === trimmedFilter.toLowerCase());
+      if (!hasExactMatch) {
+        filtered.push({ value: trimmedFilter, text: trimmedFilter });
+      }
+    }
+
     if (filtered.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'searchable-dropdown-empty';

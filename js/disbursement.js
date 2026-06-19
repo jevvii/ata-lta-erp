@@ -201,6 +201,12 @@ const Disbursement = {
     DB.getWhere('users', u => ['Admin', 'Manager', 'Staff'].includes(u.role)).forEach(u => {
       empOptions.push({ value: u.id, text: u.name });
     });
+    (DB.getAll('tasks') || []).forEach(t => {
+      const name = (t.assigneeName || '').trim();
+      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
+        empOptions.push({ value: name, text: name });
+      }
+    });
     const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions, maxWidth: '180px' });
     filtersBar.appendChild(empFilter);
 

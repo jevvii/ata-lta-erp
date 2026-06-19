@@ -178,6 +178,12 @@ const Reports = {
     DB.getAll('users').forEach(u => {
       empOptions.push({ value: u.id, text: u.name });
     });
+    (DB.getAll('tasks') || []).forEach(t => {
+      const name = (t.assigneeName || '').trim();
+      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
+        empOptions.push({ value: name, text: name });
+      }
+    });
     const empFilter = createSearchableDropdown({ placeholder: '— Employee —', options: empOptions });
     empFilter.value = this.filters.employee;
     empFilter.addEventListener('change', () => { this.filters.employee = empFilter.value; triggerChange(); });
