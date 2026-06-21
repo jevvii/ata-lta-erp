@@ -7809,3 +7809,18 @@ tbody tr:hover {
 .task-list .task-row {
   align-items: center;
 }
+
+/* Side Pane Assignee and Co-assignee styles */
+.side-pane-primary-assignee-dropdown,
+.side-pane-coassignee-dropdown {
+  width: 100%;
+  max-width: 220px;
+}
+
+.side-pane-primary-assignee-dropdown .searchable-dropdown-input,
+.side-pane-coassignee-dropdown .searchable-dropdown-input {
+  height: 28px;
+  min-height: 28px !important;
+  font-size: 0.8125rem;
+  padding: 4px 32px 4px 8px !important;
+}

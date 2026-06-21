@@ -1267,7 +1267,53 @@ const Workflow = {
 
     // Assignee Row
     propsSec.appendChild(propLabel('Assignee', assigneeIcon));
-    propsSec.appendChild(el('div', { class: 'side-pane-prop-value', text: assigneeName }));
+    const assigneeValEl = el('div', { class: 'side-pane-prop-value', style: 'display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; width: 100%;' });
+
+    if (wr && wr.status === 'Draft') {
+      // Editable mode: dropdown for primary assignee + co-assignee picker
+      const gwDropdown = this.createGroundWorkerDropdown({
+        selectedGroundWorkerName: task.assigneeName || '',
+        placeholder: 'Assign primary employee...',
+        className: 'side-pane-primary-assignee-dropdown',
+        onChange: ({ assigneeName }) => {
+          const name = (assigneeName || '').trim();
+          const existing = name ? (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase()) : null;
+          DB.update('tasks', task.id, {
+            assigneeId: existing ? existing.id : null,
+            assigneeName: name || null,
+            status: name ? 'Assigned' : 'Draft',
+            updatedAt: new Date().toISOString()
+          });
+          this.showTaskSidePane(task.id, triggerElement);
+          App.handleRoute();
+        }
+      });
+      assigneeValEl.appendChild(gwDropdown);
+
+      const coPicker = this.renderTaskCoAssigneePicker(
+        task,
+        { primaryName: task.assigneeName || '', className: 'side-pane-coassignee-dropdown' },
+        true,
+        true,
+        () => {
+          this.showTaskSidePane(task.id, triggerElement);
+        }
+      );
+      assigneeValEl.appendChild(coPicker);
+    } else {
+      // Read-only mode: display primary assignee + co-assignees text/chips
+      const names = getTaskAllAssigneeNames(task);
+      if (names.length === 0) {
+        assigneeValEl.appendChild(el('span', { text: '—', style: 'color: var(--color-text-muted); font-style: italic;' }));
+      } else {
+        const chipsWrap = el('div', { class: 'co-assignee-chips', style: 'display: flex; flex-wrap: wrap; gap: 4px;' });
+        names.forEach(name => {
+          chipsWrap.appendChild(el('span', { class: 'co-assignee-chip readonly', text: name }));
+        });
+        assigneeValEl.appendChild(chipsWrap);
+      }
+    }
+    propsSec.appendChild(assigneeValEl);
 
     paneContent.appendChild(propsSec);
 
@@ -2647,7 +2693,7 @@ const Workflow = {
     if (clear) clear.style.display = 'none';
   },
 
-  renderTaskCoAssigneePicker(t, { primaryName = '', className = 'inline-coassignee-dropdown' } = {}, editable = false, showChips = true) {
+  renderTaskCoAssigneePicker(t, { primaryName = '', className = 'inline-coassignee-dropdown' } = {}, editable = false, showChips = true, onChange) {
     const wrap = el('div', { class: 'task-coassignee-wrap', style: 'margin-top:4px;' });
     const chipsWrap = el('div', { class: 'co-assignee-chips' });
 
@@ -2661,6 +2707,7 @@ const Workflow = {
           remove.addEventListener('click', () => {
             const updated = coAssignees.filter((_, i) => i !== idx);
             DB.update('tasks', t.id, { coAssignees: updated, updatedAt: new Date().toISOString() });
+            if (onChange) onChange();
             App.handleRoute();
           });
           chip.appendChild(remove);
@@ -2685,6 +2732,8 @@ const Workflow = {
           if (!existing) DB.insert('groundWorkers', { id: generateId('gw'), name });
           const updated = [...coAssignees, name];
           DB.update('tasks', t.id, { coAssignees: updated, updatedAt: new Date().toISOString() });
+          this.clearDropdown(addDropdown);
+          if (onChange) onChange();
           App.handleRoute();
         }
       });
@@ -4401,9 +4450,6 @@ const Workflow = {
         const timeSection = el('div', { class: 'detail-block' });
         const timeHeader = el('div', { class: 'detail-section-title' });
         timeHeader.appendChild(el('span', { text: 'Time Log History' }));
-        const logTimeTopBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Log Time' });
-        logTimeTopBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddTimeLogModal(t.id); });
-        timeHeader.appendChild(logTimeTopBtn);
         timeSection.appendChild(timeHeader);
 
         const timeList = el('div', { class: 'details-content-list' });
