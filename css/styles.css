@@ -6726,6 +6726,17 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-panel .checklist-text span,
+.side-pane-toggle-content .checklist-text span {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .detail-panel .lock-hint,

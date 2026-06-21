@@ -1331,7 +1331,7 @@ const Workflow = {
 
             const textValue = blocked ? ('🔒 Waiting for: ' + (prereq ? prereq.text : 'Unknown')) : item.text;
             const textWrap = el('div', { class: 'checklist-text' });
-            textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '' }));
+            textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '', title: textValue }));
             row.appendChild(cb);
             row.appendChild(textWrap);
 
@@ -3993,7 +3993,7 @@ const Workflow = {
               
               // Wrapping text in checklist-text span/div structure
               const textWrap = el('div', { class: 'checklist-text' });
-              textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '' }));
+              textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '', title: textValue }));
               
               cb.addEventListener('change', (e) => {
                 e.stopPropagation();
