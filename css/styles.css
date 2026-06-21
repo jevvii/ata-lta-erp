@@ -5347,7 +5347,7 @@ tbody tr:hover {
 
 .searchable-dropdown-input {
   width: 100%;
-  padding: 6px 44px 6px 10px !important;
+  padding: 6px 48px 6px 10px !important;
   border: 1px solid var(--color-border) !important;
   border-radius: var(--radius-sm) !important;
   font-family: inherit;
@@ -5378,27 +5378,24 @@ tbody tr:hover {
 
 .searchable-dropdown-clear {
   position: absolute;
-  right: 24px;
+  right: 28px;
   top: 50%;
   transform: translateY(-50%);
   cursor: pointer;
-  font-size: 16px;
-  font-weight: bold;
   z-index: 2;
-  color: var(--color-text-muted);
+  color: #94a3b8;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: color 0.2s ease-in-out;
   line-height: 1;
 }
 
 .searchable-dropdown-clear:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  color: var(--color-text);
+  color: #64748b;
 }
 
 .searchable-dropdown-arrow {
@@ -5512,4 +5509,82 @@ tbody tr:hover {
     min-width: 120px;
     max-width: 100%;
   }
+}
+
+/* Filter Field Wrapper with Clear Button */
+.filter-field-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.filter-field-wrapper select,
+.filter-field-wrapper input {
+  width: 100%;
+}
+
+.filters-bar .filter-field-wrapper.has-value select.form-select,
+.audit-filters .filter-field-wrapper.has-value select.form-select {
+  padding-right: 44px !important;
+}
+
+.filters-bar .filter-field-wrapper.has-value input,
+.audit-filters .filter-field-wrapper.has-value input {
+  padding-right: 52px !important;
+}
+
+/* Date input dynamic sizing (material datepicker replaces the native input) */
+.filters-bar .filter-field-wrapper input[type="date"],
+.audit-filters .filter-field-wrapper input[type="date"],
+.filters-bar .filter-field-wrapper:has(.mdp-wrapper) .mdp-wrapper,
+.audit-filters .filter-field-wrapper:has(.mdp-wrapper) .mdp-wrapper {
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
+  transition: width 0.15s ease-in-out, min-width 0.15s ease-in-out, max-width 0.15s ease-in-out;
+}
+
+.filters-bar .filter-field-wrapper.has-value input[type="date"],
+.audit-filters .filter-field-wrapper.has-value input[type="date"],
+.filters-bar .filter-field-wrapper.has-value:has(.mdp-wrapper) .mdp-wrapper,
+.audit-filters .filter-field-wrapper.has-value:has(.mdp-wrapper) .mdp-wrapper {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+}
+
+/* Reserve right space for the clear icon so selected date text doesn't overlap it */
+.filter-field-wrapper.has-value .mdp-display {
+  padding-right: 44px;
+}
+
+/* Keep the clear icon the same distance from the material datepicker calendar indicator as on other fields */
+.filter-field-wrapper:has(.mdp-wrapper) .filter-field-clear {
+  right: 40px;
+}
+
+.filter-field-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+.filter-field-clear {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  z-index: 2;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  transition: color 0.2s ease-in-out;
+  line-height: 1;
+}
+
+.filter-field-clear:hover {
+  color: #64748b;
 }
