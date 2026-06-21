@@ -529,29 +529,7 @@ class SidePane {
       headerLeft.appendChild(expandBtn);
     }
     
-    // Mock Notion-style actions on the right header
-    const headerRight = el('div', { class: 'side-pane-header-right', style: 'display: flex; align-items: center; gap: 8px;' });
-    
-    const shareBtn = el('button', { class: 'side-pane-mock-btn', text: 'Share' });
-    shareBtn.style.cssText = 'padding: 4px 10px; font-size: 0.75rem; border: 1px solid var(--color-border); border-radius: 4px; background: transparent; cursor: pointer; color: var(--color-text-muted); font-weight: 500; height: 28px; line-height: 1;';
-    
-    const linkBtn = el('button', { class: 'side-pane-mock-btn', html: '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>' });
-    const starBtn = el('button', { class: 'side-pane-mock-btn', html: '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499c.15-.36.69-.36.84 0l2.3 4.697 5.181.753c.4.058.562.56.271.847l-3.748 3.654.885 5.161c.07.41-.363.725-.726.53L12 16.732l-4.638 2.433c-.363.195-.796-.12-.726-.53l.885-5.161-3.748-3.654c-.29-.287-.128-.789.27-.847l5.183-.753 2.3-4.697z"/></svg>' });
-    const dotBtn = el('button', { class: 'side-pane-mock-btn', html: '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/></svg>' });
-    
-    const mockStyles = 'background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; transition: background 0.15s;';
-    [linkBtn, starBtn, dotBtn].forEach(btn => {
-      btn.style.cssText = mockStyles;
-      btn.addEventListener('mouseenter', () => btn.style.background = 'var(--color-bg)');
-      btn.addEventListener('mouseleave', () => btn.style.background = 'transparent');
-    });
-    
-    headerRight.appendChild(shareBtn);
-    headerRight.appendChild(linkBtn);
-    headerRight.appendChild(starBtn);
-    headerRight.appendChild(dotBtn);
-    
-    const header = el('div', { class: 'side-pane-header' }, [headerLeft, headerRight]);
+    const header = el('div', { class: 'side-pane-header' }, [headerLeft]);
     this.pane.appendChild(header);
     
     // Body
