@@ -3497,7 +3497,7 @@ const Workflow = {
       });
 
       if (this.taskViewMode === 'board') {
-        const board = el('div', { class: 'board-v2', style: 'margin-top: 16px; display: flex; gap: var(--space-4); overflow-x: auto; padding-bottom: var(--space-4);' });
+        const board = el('div', { class: 'board-v2', style: 'margin-top: 0; padding-top: 16px; display: flex; gap: var(--space-4); overflow-x: auto; padding-bottom: var(--space-4);' });
         const statuses = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
         const statusColors = {
           'Draft': '#94a3b8',

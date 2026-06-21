@@ -7989,9 +7989,10 @@ tbody tr * {
   overflow: visible;
 }
 
-/* Disable stickiness on the task list board view column headers specifically */
-.project-detail-v2 .board-column-header-v2 {
-  position: static;
+/* Remove transparent margin-bottom gap below toolbar in board view to prevent cards from clipping through */
+.project-detail-v2 .task-list:has(.board-v2) .task-view-toolbar {
+  margin-bottom: 0;
 }
+
 
 
