@@ -1138,6 +1138,278 @@ const Workflow = {
     container.appendChild(list);
   },
 
+  showTaskSidePane(taskId, triggerElement) {
+    const task = DB.getById('tasks', taskId);
+    if (!task) return;
+
+    const assignedUser = task.assignedTo || task.assigneeId ? DB.getById('users', task.assignedTo || task.assigneeId) : null;
+    const assigneeName = task.assigneeName || assignedUser?.name || '—';
+    const wr = task.workRequestId ? DB.getById('workRequests', task.workRequestId) : null;
+
+    const paneContent = el('div');
+
+    // Title Section
+    const titleSec = el('div', { class: 'side-pane-title-section' });
+    titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📝' }));
+    titleSec.appendChild(el('h2', { class: 'side-pane-title', text: task.title || 'Untitled Task' }));
+    
+    if (wr) {
+      const openWrLink = el('button', { class: 'side-pane-view-details' });
+      openWrLink.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 19.5v-13A2.5 2.5 0 0 1 6.5 4H20v13H6.5a2.5 2.5 0 0 0-2.5 2.5z"></path></svg> Work Request: ${(wr.id || '').toString().toUpperCase()}`;
+      openWrLink.addEventListener('click', () => {
+        window.SidePaneInstance.close();
+      });
+      titleSec.appendChild(openWrLink);
+    }
+    paneContent.appendChild(titleSec);
+
+    // Properties Section
+    const propsSec = el('div', { class: 'side-pane-properties' });
+
+    const propLabel = (label, svg) => {
+      const lbl = el('div', { class: 'side-pane-prop-label' });
+      lbl.innerHTML = `${svg}<span>${label}</span>`;
+      return lbl;
+    };
+
+    const statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
+    const priorityIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
+    const dateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+    const assigneeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+
+    // Status Row
+    propsSec.appendChild(propLabel('Status', statusIcon));
+    const statusValEl = el('div', { class: 'side-pane-prop-value' });
+    const statusSel = el('select', { class: 'status-select form-select', style: 'padding: 2px 6px; font-size: 0.8125rem; font-weight: 600;' });
+    
+    const validStatuses = this.getValidNextStatuses(task);
+    const flow = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
+    const checklistCompletion = getTaskChecklistCompletion(task);
+    const hasIncompleteChecklist = checklistCompletion.total > 0 && checklistCompletion.done < checklistCompletion.total;
+    const isArchived = wr && (wr.status === 'Completed' || wr.status === 'Cancelled');
+
+    flow.forEach(s => {
+      const opt = el('option', { value: s, text: s });
+      if (s === task.status) opt.selected = true;
+      const blockedByChecklist = hasIncompleteChecklist && (s === 'Completed' || s === 'For Review');
+      const noAssignee = !(task.assigneeId || task.assignedTo || task.assigneeName);
+      
+      if (isArchived) {
+        opt.disabled = true;
+        opt.title = 'Work request is archived';
+      } else if (blockedByChecklist) {
+        opt.disabled = true;
+        opt.title = `${checklistCompletion.total - checklistCompletion.done} of ${checklistCompletion.total} requirement items incomplete`;
+      } else if (s === 'Assigned' && noAssignee) {
+        opt.disabled = true;
+        opt.title = 'Assign an employee first';
+      } else if (!validStatuses.includes(s)) {
+        opt.disabled = true;
+        opt.title = `Cannot change to ${s}`;
+      }
+      statusSel.appendChild(opt);
+    });
+    if (isArchived) statusSel.disabled = true;
+
+    const sColors = { 'Completed': '#17a34a', 'In Progress': '#eab308', 'Draft': '#6b6b6b', 'For Review': '#2f6feb', 'Assigned': '#2f6feb', 'Cancelled': '#dc2626' };
+    statusSel.style.color = sColors[task.status] || 'var(--fg)';
+
+    statusSel.addEventListener('change', () => {
+      const newStatus = statusSel.value;
+      const originalStatus = task.status;
+      const resetDropdown = () => {
+        statusSel.value = originalStatus;
+        statusSel.style.color = sColors[originalStatus] || 'var(--fg)';
+      };
+
+      if (newStatus === 'Completed' || newStatus === 'Cancelled') {
+        this.showConfirm('Confirm Status Change',
+          `Are you sure you want to mark this task as "${newStatus}"? This may affect dependencies and routing.`,
+          () => {
+            const res = this.updateTaskStatus(task.id, newStatus);
+            if (res.error) {
+              this.showMessage('Error', res.error, 'danger');
+              resetDropdown();
+            } else {
+              this.showTaskSidePane(taskId, triggerElement);
+              App.handleRoute(); // Refresh background
+            }
+          },
+          newStatus === 'Cancelled' ? 'danger' : 'warning',
+          resetDropdown
+        );
+      } else {
+        const res = this.updateTaskStatus(task.id, newStatus);
+        if (res.error) {
+          this.showMessage('Error', res.error, 'danger');
+          resetDropdown();
+        } else {
+          this.showTaskSidePane(taskId, triggerElement);
+          App.handleRoute(); // Refresh background
+        }
+      }
+    });
+    statusValEl.appendChild(statusSel);
+    propsSec.appendChild(statusValEl);
+
+    // Priority Row
+    propsSec.appendChild(propLabel('Priority', priorityIcon));
+    const priorityClass = { 'Urgent': 'badge-danger', 'Priority': 'badge-warn', 'Low Priority': 'badge-info' }[task.priority] || 'badge-muted';
+    propsSec.appendChild(el('div', { class: 'side-pane-prop-value' }, [
+      el('span', { class: `badge ${priorityClass}`, text: task.priority || 'Normal' })
+    ]));
+
+    // Due Date Row
+    propsSec.appendChild(propLabel('Due Date', dateIcon));
+    propsSec.appendChild(el('div', { class: 'side-pane-prop-value', text: task.dueDate ? formatDate(task.dueDate) : '—' }));
+
+    // Assignee Row
+    propsSec.appendChild(propLabel('Assignee', assigneeIcon));
+    propsSec.appendChild(el('div', { class: 'side-pane-prop-value', text: assigneeName }));
+
+    paneContent.appendChild(propsSec);
+
+    // Description Section
+    const descSec = el('div', { class: 'side-pane-section' }, [
+      el('h4', { class: 'side-pane-section-title', text: 'Description' }),
+      el('div', { class: 'side-pane-description', text: task.description || 'No description provided.' })
+    ]);
+    paneContent.appendChild(descSec);
+
+    // Requirements Checklist Section
+    const taskListEl = el('div', { class: 'side-pane-task-list' });
+    const normalizedChecklist = (task.checklist || []).map(item => {
+      if (typeof item === 'string') return { id: generateId('chk'), text: item, completed: false, assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] };
+      return item;
+    });
+
+    const tasksSec = el('div', { class: 'side-pane-section' }, [
+      el('h4', { class: 'side-pane-section-title', text: 'Requirements Checklist' }),
+      taskListEl
+    ]);
+
+    if (normalizedChecklist.length === 0) {
+      taskListEl.appendChild(el('div', { text: 'No checklist items for this task.', style: 'font-size:0.8125rem;color:var(--color-text-muted);font-style:italic;' }));
+    } else {
+      normalizedChecklist.forEach((item, idx) => {
+        const blocked = isChecklistBlocked(item, normalizedChecklist);
+        const prereq = normalizedChecklist.find(c => c.id === item.dependsOn);
+        const itemRow = el('div', { class: 'side-pane-task-item' + (blocked ? ' locked' : '') });
+        
+        const cb = el('input', { type: 'checkbox', style: 'cursor: pointer;' });
+        cb.checked = !!item.completed;
+        cb.disabled = blocked;
+        
+        cb.addEventListener('change', () => {
+          const now = new Date().toISOString();
+          if (cb.checked) {
+            item.completed = true;
+          } else {
+            item.completed = false;
+            normalizedChecklist.forEach(other => {
+              if (other.dependsOn === item.id) other.completed = false;
+            });
+          }
+          DB.update('tasks', task.id, { checklist: normalizedChecklist, updatedAt: now });
+          this.showTaskSidePane(taskId, triggerElement);
+          App.handleRoute(); // Refresh background
+        });
+
+        const textValue = blocked ? ('🔒 Waiting for: ' + (prereq ? prereq.text : 'Unknown')) : item.text;
+        const labelEl = el('span', { 
+          class: `side-pane-task-name ${item.completed ? 'completed' : ''}`, 
+          text: textValue 
+        });
+        
+        itemRow.appendChild(cb);
+        itemRow.appendChild(labelEl);
+        
+        if (item.assigneeName) {
+          itemRow.appendChild(el('span', { 
+            class: 'badge badge-neutral', 
+            text: item.assigneeName, 
+            style: 'font-size: 10px; margin-left: auto;' 
+          }));
+        }
+        
+        taskListEl.appendChild(itemRow);
+      });
+    }
+    paneContent.appendChild(tasksSec);
+
+    // Comments Section
+    const commentsSec = el('div', { class: 'side-pane-section' }, [
+      el('h4', { class: 'side-pane-section-title', text: 'Comments' })
+    ]);
+
+    const commentsList = el('div', { class: 'side-pane-task-list', style: 'margin-bottom: 12px;' });
+    const comments = task.comments || [];
+    if (comments.length === 0) {
+      commentsList.appendChild(el('div', { text: 'No comments yet.', style: 'font-size:0.8125rem;color:var(--color-text-muted);font-style:italic;' }));
+    } else {
+      comments.forEach(c => {
+        const u = DB.getById('users', c.userId);
+        const uName = u ? u.name : 'Unknown User';
+        const commentItem = el('div', { 
+          style: 'padding: 8px; border-bottom: 1px solid var(--color-border); font-size: 0.8125rem;' 
+        }, [
+          el('div', { style: 'font-weight: 600; color: var(--color-text); margin-bottom: 2px;' }, [
+            el('span', { text: uName }),
+            el('span', { text: ` • ${formatDate(c.date)}`, style: 'font-size: 10px; color: var(--color-text-muted); font-weight: normal;' })
+          ]),
+          el('div', { text: c.comment, style: 'color: var(--color-text-muted); line-height: 1.4;' })
+        ]);
+        commentsList.appendChild(commentItem);
+      });
+    }
+    commentsSec.appendChild(commentsList);
+
+    // Comment Form
+    const commentForm = el('form', { class: 'form-stacked' });
+    const textarea = el('textarea', { 
+      name: 'commentText', 
+      rows: 2, 
+      required: true, 
+      placeholder: 'Add a comment...', 
+      style: 'width: 100%; border: 1px solid var(--color-border); border-radius: 6px; padding: 6px 10px; font-size: 0.8125rem; margin-bottom: 6px; font-family: inherit;' 
+    });
+    const submitBtn = el('button', { 
+      type: 'submit', 
+      class: 'btn btn-primary btn-sm', 
+      text: 'Send',
+      style: 'padding: 4px 12px; font-size: 0.75rem; border-radius: 4px;' 
+    });
+    commentForm.appendChild(textarea);
+    commentForm.appendChild(submitBtn);
+
+    commentForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = textarea.value.trim();
+      if (!text) return;
+      const entry = {
+        userId: Auth.user.id,
+        date: new Date().toISOString(),
+        comment: text
+      };
+      const updatedComments = [...comments, entry];
+      DB.update('tasks', task.id, { comments: updatedComments, updatedAt: new Date().toISOString() });
+      this.showTaskSidePane(taskId, triggerElement);
+      App.handleRoute(); // Refresh background
+    });
+    commentsSec.appendChild(commentForm);
+    paneContent.appendChild(commentsSec);
+
+    window.SidePaneInstance.recordId = task.id;
+    window.SidePaneInstance.open({
+      title: `Task Details`,
+      content: paneContent,
+      onClose: () => {
+        window.SidePaneInstance.recordId = null;
+      },
+      triggerElement: triggerElement
+    });
+  },
+
   statusBadge(status) {
     const map = {
       'Draft': 'badge-draft',
@@ -2201,7 +2473,39 @@ const Workflow = {
     // Task view toolbar
     const toolbar = el('div', { class: 'task-view-toolbar' });
 
+    // Initialize task view mode
+    this.taskViewMode = this.taskViewMode || 'table';
+
+    const viewToggle = el('div', { class: 'group-toggle', style: 'margin-right: 8px;' });
+    const viewButtons = {};
+    ['table', 'board', 'list'].forEach(mode => {
+      const btn = el('button', {
+        type: 'button',
+        html: ViewIcons[mode] + ' ' + (mode === 'table' ? 'Table' : mode === 'board' ? 'Board' : 'List'),
+        class: this.taskViewMode === mode ? 'active' : ''
+      });
+      viewButtons[mode] = btn;
+      btn.addEventListener('click', () => {
+        if (this.taskViewMode === mode) return;
+        this.taskViewMode = mode;
+        Object.keys(viewButtons).forEach(m => {
+          viewButtons[m].classList.toggle('active', m === mode);
+        });
+        if (mode === 'board') {
+          groupToggle.style.display = 'none';
+        } else {
+          groupToggle.style.display = 'flex';
+        }
+        renderGroups();
+      });
+      viewToggle.appendChild(btn);
+    });
+    toolbar.appendChild(viewToggle);
+
     const groupToggle = el('div', { class: 'group-toggle' });
+    if (this.taskViewMode === 'board') {
+      groupToggle.style.display = 'none';
+    }
     const groupButtons = {};
     ['phase', 'assignee', 'flat'].forEach(mode => {
       const btn = el('button', {
@@ -2601,6 +2905,146 @@ const Workflow = {
 
         return activeFilters.every(f => checks[f]());
       });
+
+      if (this.taskViewMode === 'board') {
+        const board = el('div', { class: 'board-v2', style: 'margin-top: 16px; display: flex; gap: var(--space-4); overflow-x: auto; padding-bottom: var(--space-4);' });
+        const statuses = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
+        const statusColors = {
+          'Draft': '#94a3b8',
+          'Assigned': '#2f6feb',
+          'In Progress': '#eab308',
+          'For Review': '#a855f7',
+          'Completed': '#17a34a',
+          'Cancelled': '#dc2626'
+        };
+
+        statuses.forEach(st => {
+          const colColor = statusColors[st] || '#cbd5e1';
+          const col = el('div', { class: 'board-column-v2', style: 'flex: 1; min-width: 250px;' });
+          col.style.borderTop = `4px solid ${colColor}`;
+          
+          const header = el('div', { class: 'board-column-header-v2' });
+          const colTasks = filteredTasks.filter(t => t.status === st);
+          header.appendChild(el('div', { class: 'board-column-title', text: `${st} (${colTasks.length})` }));
+          col.appendChild(header);
+
+          const cardContainer = el('div', { class: 'board-cards-scroll', style: 'display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3);' });
+
+          colTasks.forEach(t => {
+            const card = el('div', { class: 'board-card board-card-v2', style: 'cursor: pointer;' });
+            card.style.borderLeftColor = colColor;
+            
+            if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
+              card.classList.add('side-pane-active');
+              window.SidePaneInstance.activeElement = card;
+            }
+
+            card.addEventListener('click', () => {
+              this.showTaskSidePane(t.id, card);
+            });
+
+            const topRow = el('div', { class: 'card-v2-top' });
+            const pClass = { 'Urgent': 'badge-danger', 'Priority': 'badge-warn', 'Low Priority': 'badge-info' }[t.priority] || 'badge-muted';
+            topRow.appendChild(el('span', { class: `badge ${pClass}`, text: t.priority || 'Normal' }));
+            if (t.dueDate) {
+              topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(t.dueDate) }));
+            }
+            card.appendChild(topRow);
+
+            const titleRow = el('div', { class: 'card-v2-title-row' });
+            titleRow.appendChild(el('div', { class: 'card-v2-title', text: t.title }));
+            card.appendChild(titleRow);
+
+            const comp = getTaskChecklistCompletion(t);
+            const metaRow = el('div', { class: 'card-v2-meta', style: 'margin-top: 8px;' });
+            if (comp.total > 0) {
+              const metaLeft = el('div', { class: 'card-v2-meta-left' });
+              const progBar = el('div', { class: 'card-v2-progress' });
+              progBar.appendChild(el('div', { class: 'card-v2-progress-fill', style: `width: ${comp.percent}%; background-color: ${colColor};` }));
+              metaLeft.appendChild(progBar);
+              metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${comp.done}/${comp.total}` }));
+              metaRow.appendChild(metaLeft);
+            }
+
+            const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
+            if (assigneeName) {
+              const avatars = el('div', { class: 'card-v2-avatars' });
+              const av = el('div', { class: 'avatar-xs', title: assigneeName });
+              av.textContent = assigneeName.slice(0, 1).toUpperCase();
+              av.style.background = 'color-mix(in oklab, var(--accent), transparent 85%)';
+              av.style.color = 'var(--accent)';
+              av.style.fontWeight = '700';
+              av.style.display = 'flex';
+              av.style.alignItems = 'center';
+              av.style.justifyContent = 'center';
+              av.style.borderRadius = '50%';
+              av.style.fontSize = '10px';
+              avatars.appendChild(av);
+              metaRow.appendChild(avatars);
+            }
+            card.appendChild(metaRow);
+
+            cardContainer.appendChild(card);
+          });
+
+          col.appendChild(cardContainer);
+          board.appendChild(col);
+        });
+
+        listWrapper.appendChild(board);
+        return;
+      }
+
+      if (this.taskViewMode === 'list') {
+        const list = el('div', { class: 'list-view operations-list-view', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-2);' });
+        
+        filteredTasks.forEach(t => {
+          const row = el('div', { class: 'list-item', style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
+          
+          if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
+            row.classList.add('side-pane-active');
+            window.SidePaneInstance.activeElement = row;
+          }
+
+          row.addEventListener('click', () => {
+            this.showTaskSidePane(t.id, row);
+          });
+
+          const textCol = el('div');
+          textCol.appendChild(el('div', { class: 'list-item-title', text: t.title }));
+          
+          const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
+          const metaText = (assigneeName ? `${assigneeName} | ` : '') + (t.dueDate ? `Due: ${formatDate(t.dueDate)}` : 'No due date');
+          textCol.appendChild(el('div', { class: 'list-item-meta', text: metaText }));
+          
+          const badgeRow = el('div', { style: 'display: flex; gap: 6px; margin-top: 4px;' });
+          const pClass = { 'Urgent': 'badge-danger', 'Priority': 'badge-warn', 'Low Priority': 'badge-info' }[t.priority] || 'badge-muted';
+          badgeRow.appendChild(el('span', { class: `badge ${pClass}`, text: t.priority || 'Normal' }));
+          
+          const comp = getTaskChecklistCompletion(t);
+          if (comp.total > 0) {
+            badgeRow.appendChild(el('span', { class: 'badge badge-info', text: `Checklist: ${comp.done}/${comp.total}` }));
+          }
+          textCol.appendChild(badgeRow);
+
+          row.appendChild(textCol);
+          
+          const statusBadgeClass = {
+            'Draft': 'badge-draft',
+            'Assigned': 'badge-preprocessing',
+            'In Progress': 'badge-processing',
+            'For Review': 'badge-billing',
+            'Completed': 'badge-success',
+            'Cancelled': 'badge-danger'
+          }[t.status] || 'badge-draft';
+          row.appendChild(el('span', { class: `badge ${statusBadgeClass}`, text: t.status }));
+
+          list.appendChild(row);
+        });
+
+        listWrapper.appendChild(list);
+        return;
+      }
 
       let groups = {};
       if (container.groupBy === 'phase') {

@@ -433,3 +433,129 @@ function getTaskAllAssigneeNames(task) {
 function manilaToday() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' })).toISOString().slice(0, 10);
 }
+
+class SidePane {
+  constructor() {
+    this.overlay = null;
+    this.pane = null;
+    this.body = null;
+    this.activeElement = null;
+    this.onCloseCallback = null;
+    this.onExpandCallback = null;
+    this.init();
+  }
+
+  init() {
+    let overlay = document.getElementById('global-side-pane-overlay');
+    let pane = document.getElementById('global-side-pane');
+    
+    if (!overlay) {
+      overlay = el('div', { id: 'global-side-pane-overlay', class: 'side-pane-overlay' });
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', () => this.close());
+    }
+    
+    if (!pane) {
+      pane = el('div', { id: 'global-side-pane', class: 'side-pane' });
+      document.body.appendChild(pane);
+    }
+    
+    this.overlay = overlay;
+    this.pane = pane;
+    
+    // Close on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isOpen()) {
+        this.close();
+      }
+    });
+  }
+
+  isOpen() {
+    return this.pane && this.pane.classList.contains('open');
+  }
+
+  open({ title, content, onClose, onExpand, triggerElement }) {
+    this.close(); // Close any currently open pane first (clears active classes)
+    
+    this.onCloseCallback = onClose;
+    this.onExpandCallback = onExpand;
+    this.activeElement = triggerElement;
+    
+    if (this.activeElement) {
+      this.activeElement.classList.add('side-pane-active');
+    }
+    
+    this.pane.innerHTML = '';
+    
+    // Header
+    const headerLeft = el('div', { class: 'side-pane-header-left' }, [
+      el('h3', { text: title, style: 'margin: 0; font-size: 1rem; font-weight: 700; color: var(--color-text);' })
+    ]);
+    
+    const headerRight = el('div', { class: 'side-pane-header-right' });
+    
+    if (onExpand) {
+      const expandBtn = el('button', { 
+        class: 'side-pane-expand-btn', 
+        title: 'Open as full page',
+        html: '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>'
+      });
+      expandBtn.addEventListener('click', () => {
+        this.close();
+        onExpand();
+      });
+      headerRight.appendChild(expandBtn);
+    }
+    
+    const closeBtn = el('button', { 
+      class: 'side-pane-close-btn', 
+      title: 'Close',
+      html: '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>'
+    });
+    closeBtn.addEventListener('click', () => this.close());
+    headerRight.appendChild(closeBtn);
+    
+    const header = el('div', { class: 'side-pane-header' }, [headerLeft, headerRight]);
+    this.pane.appendChild(header);
+    
+    // Body
+    this.body = el('div', { class: 'side-pane-body' });
+    if (content) {
+      if (typeof content === 'string') {
+        this.body.innerHTML = content;
+      } else {
+        this.body.appendChild(content);
+      }
+    }
+    this.pane.appendChild(this.body);
+    
+    // Transition classes
+    requestAnimationFrame(() => {
+      this.overlay.classList.add('open');
+      this.pane.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+  }
+
+  close() {
+    if (!this.isOpen()) return;
+    
+    if (this.overlay) this.overlay.classList.remove('open');
+    if (this.pane) this.pane.classList.remove('open');
+    document.body.style.overflow = '';
+    
+    if (this.activeElement) {
+      this.activeElement.classList.remove('side-pane-active');
+      this.activeElement = null;
+    }
+    
+    if (this.onCloseCallback) {
+      const cb = this.onCloseCallback;
+      this.onCloseCallback = null;
+      cb();
+    }
+  }
+}
+
+window.SidePaneInstance = new SidePane();
