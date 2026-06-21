@@ -617,55 +617,59 @@ const Workflow = {
     
     if (this.view === 'detail' && this.detailWrId) {
       const wr = DB.getById('workRequests', this.detailWrId);
-      const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
-      const isArchived = wr && wr.status === 'Cancelled';
-      // Identity Bar (Redesign pattern)
-      const identityBar = el('div', { class: 'identity-bar' });
-      const identityMain = el('div', { class: 'identity-main' });
-      
-      const identityParent = el('div', { class: 'identity-parent', text: 'Operations / Work Requests' });
-      identityParent.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
-      identityMain.appendChild(identityParent);
-      
-      identityMain.appendChild(el('h1', { class: 'identity-title', text: wr?.title || 'Detail' }));
-      
-      const identitySub = el('div', { class: 'identity-sub' });
-      identitySub.appendChild(el('span', { class: 'font-mono', text: wr?.id ? `WR-${wr.id.substring(0, 8).toUpperCase()}` : '' }));
-      const client = DB.getById('clients', wr?.clientId);
-      if (client?.name) {
-        identitySub.appendChild(el('span', { class: 'dot' }));
-        identitySub.appendChild(el('span', { text: client.name }));
-      }
-      identityMain.appendChild(identitySub);
-      identityBar.appendChild(identityMain);
-      
-      const identityBadges = el('div', { class: 'identity-badges' });
-      if (wr?.status) {
-        const statusBadgeClass = { 'Draft': 'badge-info', 'Completed': 'badge-success', 'Cancelled': 'badge-danger' }[wr.status] || 'badge-info';
-        identityBadges.appendChild(el('span', { class: `badge ${statusBadgeClass}`, text: wr.status }));
-      }
-      if (wr?.priority && wr.priority !== 'Normal') {
-        identityBadges.appendChild(el('span', { class: 'badge badge-muted', text: wr.priority }));
-      }
-      
-      // Action buttons
-      if (isManagerial && wr && !isArchived) {
-        const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task' });
-        addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
-        identityBadges.appendChild(addBtn);
 
-        if (wr.status === 'Draft') {
-          const editWrBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit Work Request' });
-          editWrBtn.addEventListener('click', () => { this.view = 'form'; this.editingId = wr.id; App.handleRoute(); });
-          identityBadges.appendChild(editWrBtn);
-        }
+      // Breadcrumb title bar consistent with the rest of the system
+      const client = DB.getById('clients', wr.clientId);
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'breadcrumb-h1' });
+      const opLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Operations' });
+      opLink.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
+      h1.appendChild(opLink);
+      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+      h1.appendChild(document.createTextNode(wr.title || 'Untitled Work Request'));
+      titleBar.appendChild(h1);
+
+      const actions = el('div', { class: 'title-bar-actions' });
+      const badges = el('div', { class: 'identity-badges', style: 'margin-right:12px;' });
+      const statusBadgeClass = {
+        'Draft': 'badge-info',
+        'Pre-processing': 'badge-info',
+        'Processing': 'badge-warn',
+        'Billing': 'badge-info',
+        'Disbursement': 'badge-info',
+        'Completed': 'badge-success',
+        'Cancelled': 'badge-danger'
+      }[wr.status] || 'badge-info';
+      badges.appendChild(el('span', { class: `badge ${statusBadgeClass}`, text: wr.status }));
+
+      if (wr?.priority && wr.priority !== 'Normal') {
+        const priorityClass = { 'Urgent': 'badge-danger', 'Priority': 'badge-warn', 'Low Priority': 'badge-info' }[wr.priority] || 'badge-muted';
+        badges.appendChild(el('span', { class: `badge ${priorityClass}`, text: wr.priority }));
       }
-      const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
+
+      const finBadge = this.getFinanceBadgeForWr(wr);
+      const docBadge = this.getDocBadgeForWr(wr);
+      if (finBadge) badges.appendChild(finBadge);
+      if (docBadge) badges.appendChild(docBadge);
+      actions.appendChild(badges);
+
+      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to Work Requests' });
       backBtn.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
-      identityBadges.appendChild(backBtn);
-      
-      identityBar.appendChild(identityBadges);
-      container.appendChild(identityBar);
+      actions.appendChild(backBtn);
+      titleBar.appendChild(actions);
+      container.appendChild(titleBar);
+
+      // Sub-header with WR id and client name
+      const subHeader = el('div', { class: 'detail-sub-header-v2' });
+      subHeader.appendChild(el('div', { class: 'detail-info-item' }, [
+        el('span', { class: 'detail-info-label', text: 'Work Request' }),
+        el('span', { class: 'detail-info-value font-mono', text: (wr.id || '').toString().toUpperCase() })
+      ]));
+      subHeader.appendChild(el('div', { class: 'detail-info-item' }, [
+        el('span', { class: 'detail-info-label', text: 'Client' }),
+        el('span', { class: 'detail-info-value', text: client?.name || 'Unknown Client' })
+      ]));
+      container.appendChild(subHeader);
     } else if (this.view === 'templates' || this.view === 'templateForm') {
         // Do nothing here, these views render their own breadcrumb title bar
     } else if (this.view !== 'archive') {
@@ -1150,70 +1154,56 @@ const Workflow = {
   getFinanceBadgeForWr(wr) {
     const invoices = DB.getWhere('invoices', inv => inv.workRequestId === wr.id || wr.linkedInvoiceId === inv.id);
     const disbursements = DB.getWhere('disbursements', d => d.linkedWorkRequestId === wr.id || (wr.linkedDisbursementIds || []).includes(d.id));
-    
+
     let text = 'No Finances';
-    let bg = '#f1f5f9';
-    let fg = '#475569';
-    
+    let cls = 'badge-muted';
+
     if (invoices.length > 0 || disbursements.length > 0) {
       const allInvoicesPaid = invoices.every(inv => inv.status === 'Paid');
       const allDisbursementsReleased = disbursements.every(d => d.status === 'Released');
-      
+
       if (allInvoicesPaid && allDisbursementsReleased) {
         text = 'Finances: Settled';
-        bg = '#dcfce7';
-        fg = '#166534';
+        cls = 'badge-success';
       } else {
         const anyOverdue = invoices.some(inv => inv.status === 'Overdue');
         const anyDraftOrPending = invoices.some(inv => ['Draft', 'Pending'].includes(inv.status)) ||
                                   disbursements.some(d => ['Submitted', 'Under Review'].includes(d.status));
-        
+
         if (anyOverdue) {
           text = 'Finances: Overdue';
-          bg = '#fee2e2';
-          fg = '#991b1b';
+          cls = 'badge-danger';
         } else if (anyDraftOrPending) {
           text = 'Finances: Pending Approval';
-          bg = '#fef3c7';
-          fg = '#b45309';
+          cls = 'badge-warn';
         } else {
           text = 'Finances: Active';
-          bg = '#dbeafe';
-          fg = '#1e40af';
+          cls = 'badge-info';
         }
       }
     }
-    
-    return el('span', {
-      text,
-      style: 'font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ' + bg + '; color: ' + fg + '; display: inline-flex; align-items: center; border: 1px solid rgba(0,0,0,0.05);'
-    });
+
+    return el('span', { class: 'badge ' + cls, text });
   },
 
   getDocBadgeForWr(wr) {
     const documents = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
-    
+
     let text = 'No Documents';
-    let bg = '#f1f5f9';
-    let fg = '#475569';
-    
+    let cls = 'badge-danger';
+
     if (documents.length > 0) {
       const storedCount = documents.filter(d => d.lifecycleState === 'stored').length;
       if (storedCount === documents.length) {
         text = 'Docs: Stored';
-        bg = '#dcfce7';
-        fg = '#166534';
+        cls = 'badge-success';
       } else {
         text = `Docs: ${storedCount}/${documents.length} Stored`;
-        bg = '#dbeafe';
-        fg = '#1e40af';
+        cls = 'badge-warn';
       }
     }
-    
-    return el('span', {
-      text,
-      style: 'font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ' + bg + '; color: ' + fg + '; display: inline-flex; align-items: center; border: 1px solid rgba(0,0,0,0.05);'
-    });
+
+    return el('span', { class: 'badge ' + cls, text });
   },
 
   getPriorityBadgeForWr(wr) {
@@ -2017,14 +2007,6 @@ const Workflow = {
     container.activeFilters = new Set();
     container.searchQuery = '';
 
-    // Finance & Document status badges (compact strip below identity bar)
-    const badgeStrip = el('div', { class: 'identity-badges', style: 'margin-bottom: 20px;' });
-    const finBadge = this.getFinanceBadgeForWr(wr);
-    const docBadge = this.getDocBadgeForWr(wr);
-    if (finBadge) badgeStrip.appendChild(finBadge);
-    if (docBadge) badgeStrip.appendChild(docBadge);
-    container.appendChild(badgeStrip);
-
     // Lifecycle Card Redesign
     const lifecycleCard = el('div', { class: 'lifecycle-card' });
     const lifecycleHeader = el('div', { class: 'lifecycle-header' });
@@ -2036,13 +2018,13 @@ const Workflow = {
     const showRouteButton = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
     const canCancel = isManagerial && wr.status !== 'Completed' && wr.status !== 'Cancelled';
     const phaseColors = {
-      'Draft': '#94a3b8',
-      'Pre-processing': '#3b82f6',
-      'Processing': '#f59e0b',
-      'Billing': '#a855f7',
-      'Disbursement': '#6366f1',
-      'Completed': '#10b981',
-      'Cancelled': '#ef4444'
+      'Draft': '#6b6b6b',
+      'Pre-processing': '#2f6feb',
+      'Processing': '#eab308',
+      'Billing': '#2f6feb',
+      'Disbursement': '#2f6feb',
+      'Completed': '#17a34a',
+      'Cancelled': '#dc2626'
     };
 
     if (canCancel) {
@@ -2059,7 +2041,6 @@ const Workflow = {
     }
 
     if (showRouteButton) {
-      const routeColor = phaseColors[ts.nextPhase] || '#94a3b8';
       const routeBtn = el('button', {
         class: 'btn btn-sm btn-primary',
         text: `Route to ${ts.nextPhase}`,
@@ -2086,23 +2067,23 @@ const Workflow = {
       const blockWrapper = el('div', { class: 'routing-block blocked' });
       const depPanel = el('div', { style: 'width: 100%;' });
       depPanel.appendChild(el('div', {
-        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> <strong>Routing blocked</strong> — Resolve these to route to ' + (ts.nextPhase || 'next phase') + ':',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> <strong>Routing blocked</strong> — Resolve these to route to ' + (ts.nextPhase || 'next phase') + ':',
         class: 'routing-title',
-        style: 'color:#92400e;'
+        style: 'color:var(--fg);'
       }));
-      const depList = el('ul', { class: 'routing-list', style: 'color:#78350f;' });
+      const depList = el('ul', { class: 'routing-list', style: 'color:var(--muted);' });
       ts.missing.forEach(m => {
         const li = el('li');
         li.appendChild(el('span', { text: m, style: 'font-weight:600;' }));
         const hint = this.getRoutingHint(m);
         if (hint) {
-          const hintEl = el('span', { style: 'font-size:11px;color:#b45309;margin-left:8px;display:inline-block;' });
+          const hintEl = el('span', { style: 'font-size:11px;color:var(--muted);margin-left:8px;display:inline-block;' });
           hintEl.appendChild(el('span', { text: '→ ' + hint.text, style: 'font-style:italic;' }));
           if (hint.route) {
             const goBtn = el('button', {
               text: 'Go',
               class: 'btn btn-xs',
-              style: 'margin-left:6px;padding:1px 6px;font-size:10px;background:rgba(245,158,11,0.15);color:#92400e;border:none;border-radius:4px;cursor:pointer;font-weight:600;'
+              style: 'margin-left:6px;padding:1px 6px;font-size:10px;background:color-mix(in oklab, var(--warn), transparent 85%);color:color-mix(in oklab, var(--warn), black 30%);border:none;border-radius:4px;cursor:pointer;font-weight:600;'
             });
             goBtn.addEventListener('click', () => {
               if (hint.route === '#billing') { Billing.view = 'list'; Billing.detailId = null; }
@@ -2119,12 +2100,11 @@ const Workflow = {
       blockWrapper.appendChild(depPanel);
       lifecycleCard.appendChild(blockWrapper);
     } else if (ts && ts.canTransition && ts.nextPhase && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-      const readyWrapper = el('div', { class: 'routing-block' });
+      const readyWrapper = el('div', { class: 'routing-block ready' });
       const readyPanel = el('div', { style: 'width: 100%;' });
       readyPanel.appendChild(el('div', {
-        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> <strong>Ready to route</strong> — All requirements met. Click "Route to ' + ts.nextPhase + '" above to proceed.',
-        class: 'routing-title',
-        style: 'color:#166534;'
+        html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> <strong>Ready to route</strong> — All requirements met. Click "Route to ' + ts.nextPhase + '" above to proceed.',
+        class: 'routing-title'
       }));
       readyWrapper.appendChild(readyPanel);
       lifecycleCard.appendChild(readyWrapper);
@@ -2175,24 +2155,23 @@ const Workflow = {
       if (missingItems.length > 0) {
         const reminderBanner = el('div', { class: 'eod-banner' });
         reminderBanner.appendChild(el('div', {
-          html: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+          html: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
           style: 'flex-shrink:0;'
         }));
         const reminderText = el('div', { style: 'flex:1;' });
         reminderText.appendChild(el('div', {
           text: `⏰ End of day reminder: ${missingItems.length} checklist item(s) assigned to ground workers are missing a time log for today.`,
-          style: 'font-weight:600;color:#92400e;font-size:13px;'
+          style: 'font-weight:600;color:var(--fg);font-size:13px;'
         }));
         const logBtn = el('button', {
           text: 'Log Time Now',
-          class: 'btn btn-sm',
-          style: 'margin-top:6px;background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-weight:600;cursor:pointer;font-size:12px;'
+          class: 'btn btn-primary btn-xs'
         });
         logBtn.addEventListener('click', () => { this.showAddTimeLogModal(missingItems[0].task.id, missingItems[0].item.id); });
         reminderText.appendChild(logBtn);
-        const requestLink = el('a', {
-          href: 'javascript:void(0)',
-          class: 'eod-request-link',
+        const requestLink = el('button', {
+          type: 'button',
+          class: 'btn btn-ghost btn-xs',
           text: 'Request all missing logs'
         });
         requestLink.addEventListener('click', () => {
@@ -2332,7 +2311,7 @@ const Workflow = {
     if (tasks.length === 0) {
       const emptyState = el('div', { class: 'task-empty-state' });
       emptyState.appendChild(el('div', {
-        html: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M17.636 18.364l-.707-.707M6.343 5.343l-.707-.707M3 12h1M5.343 18.364l.707-.707M12 21v-1M12 7a5 5 0 110 10 5 5 0 010-10z"/></svg>'
+        html: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M17.636 18.364l-.707-.707M6.343 5.343l-.707-.707M3 12h1M5.343 18.364l.707-.707M12 21v-1M12 7a5 5 0 110 10 5 5 0 010-10z"/></svg>'
       }));
       emptyState.appendChild(el('p', { text: 'No tasks have been added to this work request yet.' }));
       const addFirstBtn = el('button', { type: 'button', class: 'btn btn-primary', text: '+ Add First Task' });
@@ -2452,7 +2431,7 @@ const Workflow = {
         form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'End Time *' }), endInput]));
         const noteInput = el('input', { type: 'text', name: 'note', placeholder: 'What did you work on?' });
         form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Note / Activity' }), noteInput]));
-        const hoursInput = el('input', { type: 'text', name: 'hours', readOnly: true, value: '0.00', style: 'background: #f1f5f9; cursor: not-allowed;' });
+        const hoursInput = el('input', { type: 'text', name: 'hours', readOnly: true, value: '0.00', style: 'background: var(--bg); cursor: not-allowed;' });
         form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Calculated Hours' }), hoursInput]));
 
         function nextManilaDate(dateStr) {
@@ -2762,7 +2741,7 @@ const Workflow = {
             assigneeWrap.appendChild(overflow);
           }
           if (allAssigneeNames.length === 0) {
-            assigneeWrap.appendChild(el('span', { text: 'Unassigned', style: 'color:var(--color-text-muted);font-style:italic;' }));
+            assigneeWrap.appendChild(el('span', { text: 'Unassigned', style: 'color:var(--muted);font-style:italic;' }));
           }
           cellAssignee.appendChild(assigneeWrap);
           cellAssignee.appendChild(this.renderTaskCoAssigneePicker(t, { primaryName: t.assigneeName || '', className: 'inline-coassignee-dropdown' }, isDraft));
@@ -2804,15 +2783,15 @@ const Workflow = {
         });
         if (isArchived) statusSel.disabled = true;
 
-        const sColors = { 'Completed': '#10b981', 'In Progress': '#f59e0b', 'Draft': '#94a3b8', 'For Review': '#a855f7', 'Assigned': '#3b82f6', 'Cancelled': '#ef4444' };
-        statusSel.style.color = sColors[t.status] || '#1e293b';
+        const sColors = { 'Completed': '#17a34a', 'In Progress': '#eab308', 'Draft': '#6b6b6b', 'For Review': '#2f6feb', 'Assigned': '#2f6feb', 'Cancelled': '#dc2626' };
+        statusSel.style.color = sColors[t.status] || 'var(--fg)';
 
         statusSel.addEventListener('change', () => {
           const newStatus = statusSel.value;
           const originalStatus = t.status;
           const resetDropdown = () => {
             statusSel.value = originalStatus;
-            statusSel.style.color = sColors[originalStatus] || '#1e293b';
+            statusSel.style.color = sColors[originalStatus] || 'var(--fg)';
           };
           if (newStatus === 'Completed' || newStatus === 'Cancelled') {
             this.showConfirm('Confirm Status Change',
@@ -2853,7 +2832,7 @@ const Workflow = {
           const offset = circumference - (checklistCompletion.percent / 100) * circumference;
           const ring = el('div', {
             class: 'progress-ring-wrapper',
-            html: `<svg class="progress-ring" viewBox="0 0 20 20" style="width:18px; height:18px;"><circle cx="10" cy="10" r="${radius}" fill="none" stroke="var(--color-border)" stroke-width="3" /><circle cx="10" cy="10" r="${radius}" fill="none" stroke="var(--color-success)" stroke-width="3" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" stroke-linecap="round" transform="rotate(-90 10 10)" /></svg>`
+            html: `<svg class="progress-ring" viewBox="0 0 20 20" style="width:18px; height:18px;"><circle cx="10" cy="10" r="${radius}" fill="none" stroke="var(--border)" stroke-width="3" /><circle cx="10" cy="10" r="${radius}" fill="none" stroke="var(--success)" stroke-width="3" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" stroke-linecap="round" transform="rotate(-90 10 10)" /></svg>`
           });
           const progressText = el('span', { class: 'progress-text', text: `${checklistCompletion.done}/${checklistCompletion.total}` });
           const incompleteNames = getIncompleteChecklistNames(t);
@@ -2895,7 +2874,7 @@ const Workflow = {
         if (!isArchived && needsInvoice && !linkedInv) {
           const linkHint = el('span', {
             text: '⚠ Link invoice required',
-            style: 'font-size:10px;color:#f59e0b;font-weight:500;cursor:pointer;'
+            style: 'font-size:10px;color:var(--warn);font-weight:500;cursor:pointer;'
           });
           linkHint.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
           linkedWrap.appendChild(linkHint);
@@ -2903,14 +2882,14 @@ const Workflow = {
         if (!isArchived && needsDisbursement && linkedDisb.length === 0) {
           const linkHint = el('span', {
             text: '⚠ Link expense required',
-            style: 'font-size:10px;color:#f59e0b;font-weight:500;cursor:pointer;'
+            style: 'font-size:10px;color:var(--warn);font-weight:500;cursor:pointer;'
           });
           linkHint.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
           linkedWrap.appendChild(linkHint);
         }
 
         if (!linkedInv && linkedDisb.length === 0 && !needsInvoice && !needsDisbursement) {
-          linkedWrap.appendChild(el('span', { text: 'N/A', style: 'color:var(--color-text-muted);' }));
+          linkedWrap.appendChild(el('span', { text: 'N/A', style: 'color:var(--muted);' }));
         }
         cellLinked.appendChild(linkedWrap);
         rowEl.appendChild(cellLinked);
@@ -3268,7 +3247,7 @@ const Workflow = {
                 const link = el('a', {
                   href: '#',
                   text: fName,
-                  style: 'color:#2563eb; font-weight:600; text-decoration:underline; cursor:pointer;'
+                  style: 'color:var(--accent); font-weight:600; text-decoration:underline; cursor:pointer;'
                 });
                 link.addEventListener('click', (e) => {
                   e.preventDefault();
@@ -3287,7 +3266,7 @@ const Workflow = {
             item.appendChild(leftSide);
 
             if (isDocStaff || isAdmin) {
-              const delBtn = el('button', { class: 'btn btn-ghost btn-xs', text: '×', style: 'color:var(--color-danger); font-size:1.2rem; padding:0 4px; line-height:1;' });
+              const delBtn = el('button', { class: 'btn btn-ghost btn-xs', text: '×', style: 'color:var(--danger); font-size:1.2rem; padding:0 4px; line-height:1;' });
               delBtn.title = 'Remove Attachment';
               delBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -3304,8 +3283,8 @@ const Workflow = {
             docsList.appendChild(item);
 
             // Comments
-            const commentToggle = el('button', { class: 'btn btn-ghost btn-xs', text: '💬 Comments' + (d.comments?.length ? ` (${d.comments.length})` : ''), style: 'margin-left: 10px; font-size: 0.75rem; color: var(--color-text-muted);' });
-            const commentContainer = el('div', { class: 'doc-comments-container hidden', style: 'margin: 8px 0 16px 20px; padding: 12px; background: #f8fafc; border-radius: 8px; border-left: 3px solid #cbd5e1;' });
+            const commentToggle = el('button', { class: 'btn btn-ghost btn-xs', text: '💬 Comments' + (d.comments?.length ? ` (${d.comments.length})` : ''), style: 'margin-left: 10px; font-size: var(--text-xs); color: var(--muted);' });
+            const commentContainer = el('div', { class: 'doc-comments-container hidden', style: 'margin: 8px 0 16px 20px; padding: 12px; background: var(--bg); border-radius: var(--radius-sm); border-left: 3px solid var(--border);' });
             commentToggle.addEventListener('click', (e) => { e.stopPropagation(); commentContainer.classList.toggle('hidden'); });
 
             const renderComments = () => {
@@ -3315,19 +3294,19 @@ const Workflow = {
                 list.appendChild(el('div', { class: 'empty-state', text: 'No comments for this document.', style: 'padding: 4px 0;' }));
               } else {
                 d.comments.forEach((c, cIdx) => {
-                  const commentRow = el('div', { style: 'background:white; padding:8px 12px; border-radius:6px; border: 1px solid #e2e8f0; position:relative;' });
+                  const commentRow = el('div', { style: 'background:var(--surface); padding:8px 12px; border-radius:var(--radius-sm); border: 1px solid var(--border); position:relative;' });
                   const cUser = DB.getById('users', c.userId);
                   const header = el('div', { style: 'display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.75rem;' });
-                  header.appendChild(el('span', { text: cUser?.name || 'Unknown', style: 'font-weight:600; color:var(--color-primary);' }));
-                  header.appendChild(el('span', { text: formatDate(c.date), style: 'color:var(--color-text-muted);' }));
+                  header.appendChild(el('span', { text: cUser?.name || 'Unknown', style: 'font-weight:600; color:var(--accent);' }));
+                  header.appendChild(el('span', { text: formatDate(c.date), style: 'color:var(--muted);' }));
                   commentRow.appendChild(header);
 
-                  const contentArea = el('div', { style: 'font-size:0.875rem; color:#334155; line-height:1.4;' });
+                  const contentArea = el('div', { style: 'font-size:var(--text-sm); color:var(--fg); line-height:1.4;' });
                   contentArea.textContent = c.text;
                   commentRow.appendChild(contentArea);
 
                   if (isAdmin && !isArchived) {
-                    const cActions = el('div', { style: 'display:flex; gap:8px; margin-top:8px; border-top:1px solid #f1f5f9; padding-top:4px;' });
+                    const cActions = el('div', { style: 'display:flex; gap:8px; margin-top:8px; border-top:1px solid var(--border); padding-top:4px;' });
                     const editBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Edit', style: 'padding:0; font-size:0.7rem;' });
                     editBtn.addEventListener('click', (e) => {
                       e.stopPropagation();
@@ -3354,7 +3333,7 @@ const Workflow = {
                       editActions.appendChild(cancelEditBtn);
                       contentArea.appendChild(editActions);
                     });
-                    const delCommentBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Delete', style: 'padding:0; font-size:0.7rem; color:var(--color-danger);' });
+                    const delCommentBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Delete', style: 'padding:0; font-size:var(--text-xs); color:var(--danger);' });
                     delCommentBtn.addEventListener('click', (e) => {
                       e.stopPropagation();
                       this.showConfirm('Delete Comment', 'Are you sure you want to delete this comment?', () => {
@@ -3374,7 +3353,7 @@ const Workflow = {
               commentContainer.appendChild(list);
 
               if (isAdmin && !isArchived) {
-                const addForm = el('div', { style: 'margin-top:12px; padding-top:12px; border-top: 1px solid #cbd5e1;' });
+                const addForm = el('div', { style: 'margin-top:12px; padding-top:12px; border-top: 1px solid var(--border);' });
                 const addInput = el('textarea', { placeholder: 'Write a comment...', class: 'form-control', style: 'width:100%; min-height:50px; font-size:0.875rem;' });
                 const addBtnRow = el('div', { style: 'display:flex; gap:8px; margin-top:8px;' });
                 const saveNewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Save Comment' });
@@ -3498,7 +3477,7 @@ const Workflow = {
       // Footer totals row
       const footerRow = el('div', {
         class: 'task-row-footer',
-        style: 'display: grid; grid-template-columns: 36px 1.6fr 1.3fr 110px 120px 120px 90px 110px 110px; font-weight: bold; border-top: 2px solid var(--color-border); padding: 12px 16px;'
+        style: 'display: grid; grid-template-columns: 36px 1.6fr 1.3fr 110px 120px 120px 90px 110px 110px; font-weight: bold; border-top: 2px solid var(--border); padding: 12px 16px;'
       });
       for (let i = 0; i < 7; i++) {
         footerRow.appendChild(el('div'));
@@ -3558,9 +3537,9 @@ const Workflow = {
     } else {
       const invList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
       invoices.forEach(inv => {
-        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;' });
+        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: var(--bg); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);' });
         const left = el('div');
-        const link = el('a', { href: 'javascript:void(0)', text: inv.invoiceNumber, style: 'color: #2563eb; font-weight: 600; text-decoration: none;' });
+        const link = el('a', { href: 'javascript:void(0)', text: inv.invoiceNumber, style: 'color: var(--accent); font-weight: 600; text-decoration: none;' });
         link.addEventListener('click', (e) => { e.stopPropagation(); Billing.detailId = inv.id; Billing.view = 'detail'; location.hash = '#billing'; App.handleRoute(); });
         link.addEventListener('mouseenter', () => { link.style.textDecoration = 'underline'; });
         link.addEventListener('mouseleave', () => { link.style.textDecoration = 'none'; });
@@ -3571,18 +3550,18 @@ const Workflow = {
           const task = DB.getById('tasks', inv.linkedTaskId);
           if (task) scopeText = ` (Task: ${task.title})`;
         }
-        left.appendChild(el('span', { text: scopeText, style: 'color: #64748b; font-size: 0.75rem; font-style: italic;' }));
-        left.appendChild(el('div', { text: `${formatDate(inv.issueDate)} • ${formatPHP(inv.total)}`, style: 'color: #64748b; font-size: 0.75rem; margin-top: 2px;' }));
+        left.appendChild(el('span', { text: scopeText, style: 'color: var(--muted); font-size: var(--text-xs); font-style: italic;' }));
+        left.appendChild(el('div', { text: `${formatDate(inv.issueDate)} • ${formatPHP(inv.total)}`, style: 'color: var(--muted); font-size: var(--text-xs); margin-top: 2px;' }));
         
         item.appendChild(left);
         
-        let bg = '#f1f5f9';
-        let fg = '#475569';
-        if (inv.status === 'Paid') { bg = '#dcfce7'; fg = '#166534'; }
-        else if (inv.status === 'Approved') { bg = '#dbeafe'; fg = '#1e40af'; }
-        else if (inv.status === 'Sent') { bg = '#e0f2fe'; fg = '#0369a1'; }
-        else if (inv.status === 'Pending') { bg = '#fef3c7'; fg = '#b45309'; }
-        else if (inv.status === 'Draft') { bg = '#f1f5f9'; fg = '#475569'; }
+        let bg = 'var(--bg)';
+        let fg = 'var(--muted)';
+        if (inv.status === 'Paid') { bg = 'color-mix(in oklab, var(--success), transparent 88%)'; fg = 'var(--success)'; }
+        else if (inv.status === 'Approved') { bg = 'color-mix(in oklab, var(--accent), transparent 88%)'; fg = 'var(--accent)'; }
+        else if (inv.status === 'Sent') { bg = 'color-mix(in oklab, var(--accent), transparent 92%)'; fg = 'var(--accent)'; }
+        else if (inv.status === 'Pending') { bg = 'color-mix(in oklab, var(--warn), transparent 88%)'; fg = 'color-mix(in oklab, var(--warn), black 30%)'; }
+        else if (inv.status === 'Draft') { bg = 'var(--bg)'; fg = 'var(--muted)'; }
 
         const stBadge = el('span', { 
           class: 'badge', 
@@ -3616,9 +3595,9 @@ const Workflow = {
     } else {
       const disbList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
       disbursements.forEach(d => {
-        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;' });
+        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: var(--bg); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);' });
         const left = el('div');
-        const link = el('a', { href: 'javascript:void(0)', text: d.category, style: 'color: #2563eb; font-weight: 600; text-decoration: none;' });
+        const link = el('a', { href: 'javascript:void(0)', text: d.category, style: 'color: var(--accent); font-weight: 600; text-decoration: none;' });
         link.addEventListener('click', (e) => { e.stopPropagation(); Disbursement.detailId = d.id; Disbursement.view = 'detail'; location.hash = '#disbursement'; App.handleRoute(); });
         link.addEventListener('mouseenter', () => { link.style.textDecoration = 'underline'; });
         link.addEventListener('mouseleave', () => { link.style.textDecoration = 'none'; });
@@ -3629,14 +3608,14 @@ const Workflow = {
           const task = DB.getById('tasks', d.linkedTaskId);
           if (task) scopeText = ` (Task: ${task.title})`;
         }
-        left.appendChild(el('span', { text: scopeText, style: 'color: #64748b; font-size: 0.75rem; font-style: italic;' }));
-        left.appendChild(el('div', { text: `${formatDate(d.submittedAt)} • ${formatPHP(d.amount)}`, style: 'color: #64748b; font-size: 0.75rem; margin-top: 2px;' }));
+        left.appendChild(el('span', { text: scopeText, style: 'color: var(--muted); font-size: var(--text-xs); font-style: italic;' }));
+        left.appendChild(el('div', { text: `${formatDate(d.submittedAt)} • ${formatPHP(d.amount)}`, style: 'color: var(--muted); font-size: var(--text-xs); margin-top: 2px;' }));
         
         item.appendChild(left);
         const stBadge = el('span', { 
           class: 'badge', 
           text: d.status, 
-          style: `font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${d.status === 'Released' ? '#dcfce7' : d.status === 'Approved' ? '#dbeafe' : '#fef3c7'}; color: ${d.status === 'Released' ? '#166534' : d.status === 'Approved' ? '#1e40af' : '#b45309'};`
+          style: `font-size: 10px; padding: 2px 6px; border-radius: var(--radius-sm); background: ${d.status === 'Released' ? 'color-mix(in oklab, var(--success), transparent 88%)' : d.status === 'Approved' ? 'color-mix(in oklab, var(--accent), transparent 88%)' : 'color-mix(in oklab, var(--warn), transparent 88%)'}; color: ${d.status === 'Released' ? 'var(--success)' : d.status === 'Approved' ? 'var(--accent)' : 'color-mix(in oklab, var(--warn), black 30%)'};`
         });
         item.appendChild(stBadge);
         disbList.appendChild(item);
@@ -3653,20 +3632,20 @@ const Workflow = {
     } else {
       const transList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
       transmittals.forEach(t => {
-        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;' });
+        const item = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; background: var(--bg); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);' });
         const left = el('div');
-        const link = el('a', { href: 'javascript:void(0)', text: t.trackingNumber, style: 'color: #2563eb; font-weight: 600; text-decoration: none;' });
+        const link = el('a', { href: 'javascript:void(0)', text: t.trackingNumber, style: 'color: var(--accent); font-weight: 600; text-decoration: none;' });
         link.addEventListener('click', (e) => { e.stopPropagation(); Transmittal.detailId = t.id; Transmittal.view = 'detail'; location.hash = '#transmittal'; App.handleRoute(); });
         link.addEventListener('mouseenter', () => { link.style.textDecoration = 'underline'; });
         link.addEventListener('mouseleave', () => { link.style.textDecoration = 'none'; });
         left.appendChild(link);
-        left.appendChild(el('div', { text: `Sent: ${formatDate(t.sentAt)}`, style: 'color: #64748b; font-size: 0.75rem; margin-top: 2px;' }));
+        left.appendChild(el('div', { text: `Sent: ${formatDate(t.sentAt)}`, style: 'color: var(--muted); font-size: var(--text-xs); margin-top: 2px;' }));
         
         item.appendChild(left);
         const stBadge = el('span', { 
           class: 'badge', 
           text: t.status, 
-          style: `font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${t.status === 'Acknowledged' ? '#dcfce7' : '#f1f5f9'}; color: ${t.status === 'Acknowledged' ? '#166534' : '#475569'};`
+          style: `font-size: 10px; padding: 2px 6px; border-radius: var(--radius-sm); background: ${t.status === 'Acknowledged' ? 'color-mix(in oklab, var(--success), transparent 88%)' : 'var(--bg)'}; color: ${t.status === 'Acknowledged' ? 'var(--success)' : 'var(--muted)'};`
         });
         item.appendChild(stBadge);
         transList.appendChild(item);
@@ -3877,7 +3856,7 @@ const Workflow = {
     ]));
 
     // Hours (read-only, auto-calculated)
-    const hoursInput = el('input', { type: 'text', name: 'hours', readOnly: true, value: '0.00', style: 'background: #f1f5f9; cursor: not-allowed;' });
+    const hoursInput = el('input', { type: 'text', name: 'hours', readOnly: true, value: '0.00', style: 'background: var(--bg); cursor: not-allowed;' });
     form.appendChild(el('div', { class: 'form-group' }, [
       el('label', { text: 'Calculated Hours' }),
       hoursInput

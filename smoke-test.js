@@ -167,7 +167,7 @@ async function runTests() {
     const accordions = await page.$$('.accordion-panel');
     const collapsedPanels = await page.$$('.accordion-panel.collapsed');
     await log('Task Accordion Panels (#15, #19)', expandRows.length > 0 && accordions.length >= 3, `expand rows=${expandRows.length}, accordion panels=${accordions.length}, collapsed=${collapsedPanels.length}`);
-    await page.click('button:has-text("← Back to List")');
+    await page.click('button:has-text("Back to Work Requests")');
   } else {
     await log('Task Accordion Panels (#15, #19)', false, 'no WR card found');
   }
