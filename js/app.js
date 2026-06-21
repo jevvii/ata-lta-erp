@@ -213,6 +213,7 @@ const App = {
   },
 
   handleRoute() {
+    if (window.SidePaneInstance) window.SidePaneInstance.close();
     const hash = location.hash || '#dashboard';
     const moduleMap = {
       '#dashboard': Dashboard,
