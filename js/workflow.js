@@ -2767,7 +2767,6 @@ const Workflow = {
             assigneeWrap.appendChild(el('span', { text: 'Unassigned', style: 'color:var(--muted);font-style:italic;' }));
           }
           cellAssignee.appendChild(assigneeWrap);
-          cellAssignee.appendChild(this.renderTaskCoAssigneePicker(t, { primaryName: t.assigneeName || '', className: 'inline-coassignee-dropdown' }, isDraft));
         }
         rowEl.appendChild(cellAssignee);
 
