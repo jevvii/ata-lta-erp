@@ -2730,6 +2730,25 @@ const Workflow = {
 
           const assigneeWrap = el('div', { class: 'task-assignee-wrapper' });
           assigneeWrap.appendChild(gwDropdown);
+          // Show existing co-assignee chips above the add dropdown
+          const coNames = t.coAssignees || [];
+          if (coNames.length > 0) {
+            const chipsWrap = el('div', { class: 'co-assignee-chips', style: 'margin-bottom:4px;' });
+            coNames.forEach((name, idx) => {
+              const chip = el('span', { class: 'co-assignee-chip' + (isDraft ? '' : ' readonly'), text: name });
+              if (isDraft) {
+                const remove = el('span', { class: 'co-assignee-chip-remove', text: '×' });
+                remove.addEventListener('click', () => {
+                  const updated = coNames.filter((_, i) => i !== idx);
+                  DB.update('tasks', t.id, { coAssignees: updated, updatedAt: new Date().toISOString() });
+                  App.handleRoute();
+                });
+                chip.appendChild(remove);
+              }
+              chipsWrap.appendChild(chip);
+            });
+            assigneeWrap.appendChild(chipsWrap);
+          }
           assigneeWrap.appendChild(this.renderTaskCoAssigneePicker(t, { primaryName: t.assigneeName || '', className: 'inline-coassignee-dropdown' }, isDraft));
           cellAssignee.appendChild(assigneeWrap);
         } else {
