@@ -2381,7 +2381,7 @@ tbody tr:hover {
 
 /* Project Detail Redesign (Pixel Perfect Style) */
 .project-detail-v2 {
-  background: #f8fafc;
+  background: var(--bg);
   min-height: 100%;
 }
 
@@ -6215,18 +6215,63 @@ tbody tr:hover {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary), transparent 70%);
 }
 
+/* ─── Work Request Detail Redesign Tokens ───
+   Scoped to .project-detail-v2 so they match ERP_Work-Request_Redesign/index.html
+   one-to-one without altering the rest of the app theme. */
+.project-detail-v2 {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-warm: var(--surface);
+  --fg: #111111;
+  --fg-2: var(--fg);
+  --muted: #6b6b6b;
+  --meta: var(--muted);
+  --border: #e5e5e5;
+  --border-soft: var(--border);
+  --accent: #2f6feb;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #17a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-display: "Inter", -apple-system, system-ui, sans-serif;
+  --font-body: "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: -0.01em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  font-family: var(--font-body);
+  background: var(--bg);
+}
+
 /* ─── Task List Redesign Styles ─── */
 .task-list, .detail-panel, .task-list .task-row, .task-row-footer {
-  /* Token mapping to existing variables */
-  --surface: var(--color-surface);
-  --border: var(--color-border);
-  --bg: var(--color-bg);
-  --fg: var(--color-text);
-  --muted: var(--color-text-muted);
-  --accent: var(--color-primary);
-  --radius-md: var(--radius-md);
-  --radius-sm: var(--radius-sm);
-
   /* Spacing and helper tokens from redesign index.html */
   --space-1: 4px;
   --space-2: 8px;
@@ -6911,3 +6956,284 @@ tbody tr:hover {
 .text-sm { font-size: 14px; }
 .text-xs { font-size: 12px; }
 
+/* ─── Work Request Detail Redesign Overrides ─────────────────────────
+   These ensure all design tokens in the WR detail view are one-to-one
+   with ERP_Work-Request_Redesign/index.html. */
+
+.project-detail-v2 .identity-parent { color: var(--accent); }
+.project-detail-v2 .identity-title { color: var(--fg); }
+.project-detail-v2 .identity-sub { color: var(--muted); }
+.project-detail-v2 .identity-sub .dot { background: var(--border); }
+
+.project-detail-v2 .lifecycle-card {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+}
+.project-detail-v2 .lifecycle-label { color: var(--muted); }
+.project-detail-v2 .stage-tracker { padding-bottom: var(--space-3); margin-bottom: var(--space-4); }
+.project-detail-v2 .stage-dot {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+.project-detail-v2 .stage.active .stage-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-on);
+}
+.project-detail-v2 .stage.completed .stage-dot {
+  border-color: var(--success);
+  background: var(--success);
+  color: #fff;
+}
+.project-detail-v2 .stage-label { color: var(--muted); }
+.project-detail-v2 .stage.active .stage-label { color: var(--accent); }
+.project-detail-v2 .stage.completed .stage-label { color: var(--success); }
+.project-detail-v2 .stage-connector { background: var(--border); }
+.project-detail-v2 .stage-connector.completed { background: var(--success); }
+
+.project-detail-v2 .routing-block {
+  border-top-color: color-mix(in oklab, var(--warn), transparent 75%);
+}
+.project-detail-v2 .routing-block.blocked {
+  background: color-mix(in oklab, var(--warn), transparent 92%);
+  border-radius: var(--radius-sm);
+  border-top: none;
+}
+.project-detail-v2 .routing-block.ready {
+  background: color-mix(in oklab, var(--success), transparent 92%);
+  border-radius: var(--radius-sm);
+  border-top: none;
+}
+.project-detail-v2 .routing-title { color: var(--fg); }
+.project-detail-v2 .routing-list { color: var(--muted); }
+
+.project-detail-v2 .search-input {
+  border-color: var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.project-detail-v2 .search-input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.project-detail-v2 .task-view-toolbar {
+  background: transparent;
+}
+.project-detail-v2 .group-toggle {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: var(--radius-sm);
+}
+.project-detail-v2 .group-toggle button {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.project-detail-v2 .group-toggle button.active {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+.project-detail-v2 .filter-chips { gap: var(--space-2); }
+.project-detail-v2 .filter-chip {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.project-detail-v2 .filter-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.project-detail-v2 .filter-chip.active {
+  background: color-mix(in oklab, var(--accent), transparent 88%);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.project-detail-v2 .bulk-action-bar {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-raised);
+  transition: transform var(--motion-base) var(--ease-standard), opacity var(--motion-base) var(--ease-standard);
+}
+.project-detail-v2 .bulk-selection-label { color: var(--fg); }
+.project-detail-v2 .bulk-clear-link { color: var(--danger); }
+
+.project-detail-v2 .eod-banner {
+  border: 1px solid color-mix(in oklab, var(--accent), transparent 80%);
+  background: color-mix(in oklab, var(--accent), transparent 96%);
+  border-radius: var(--radius-sm);
+}
+.project-detail-v2 .eod-request-link { color: var(--muted); }
+.project-detail-v2 .eod-request-link:hover { color: var(--accent); }
+
+.project-detail-v2 .task-group-v2 {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+}
+.project-detail-v2 .task-group-header {
+  background: var(--bg);
+  color: var(--fg);
+}
+.project-detail-v2 .task-group-count,
+.project-detail-v2 .group-header-stats { color: var(--muted); }
+.project-detail-v2 .task-table-v2 th {
+  color: var(--muted);
+  border-bottom-color: var(--border);
+}
+.project-detail-v2 .task-table-v2 td {
+  border-bottom-color: var(--border);
+  font-size: var(--text-sm);
+}
+.project-detail-v2 .task-v2-title {
+  color: var(--fg);
+  font-weight: 600;
+}
+.project-detail-v2 .task-v2-title.completed { color: var(--muted); }
+.project-detail-v2 .task-group-footer {
+  color: var(--fg);
+  border-top-color: var(--border);
+}
+.project-detail-v2 .task-v2-checkbox {
+  border-color: var(--border);
+  border-radius: var(--radius-sm);
+}
+.project-detail-v2 .task-v2-checkbox.checked {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.project-detail-v2 .financials-grid { gap: var(--space-5); }
+.project-detail-v2 .financial-card {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+}
+.project-detail-v2 .financial-card h4 { font-size: var(--text-sm); color: var(--fg); }
+.project-detail-v2 .financial-row {
+  border-bottom-color: var(--border);
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+
+.project-detail-v2 .status-select {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--fg);
+}
+.project-detail-v2 .status-select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+
+/* ─── Work Request Detail card/badge token overrides ───────────────── */
+.project-detail-v2 .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  box-shadow: none;
+  margin-bottom: var(--space-5);
+}
+.project-detail-v2 .card-title {
+  font-size: var(--text-lg);
+  color: var(--fg);
+}
+
+.project-detail-v2 .badge-info {
+  background: color-mix(in oklab, var(--accent), transparent 88%);
+  color: var(--accent);
+}
+.project-detail-v2 .badge-success {
+  background: color-mix(in oklab, var(--success), transparent 88%);
+  color: var(--success);
+}
+.project-detail-v2 .badge-warning {
+  background: color-mix(in oklab, var(--warn), transparent 88%);
+  color: color-mix(in oklab, var(--warn), black 30%);
+}
+.project-detail-v2 .badge-danger {
+  background: color-mix(in oklab, var(--danger), transparent 88%);
+  color: var(--danger);
+}
+.project-detail-v2 .badge-muted {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.project-detail-v2 .btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-on);
+}
+.project-detail-v2 .btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.project-detail-v2 .btn-secondary {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}
+.project-detail-v2 .btn-ghost {
+  color: var(--muted);
+  border-color: transparent;
+}
+.project-detail-v2 .btn-ghost:hover {
+  color: var(--fg);
+  background: color-mix(in oklab, var(--fg), transparent 96%);
+}
+.project-detail-v2 .btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: transparent;
+}
+.project-detail-v2 .btn-danger:hover {
+  background: color-mix(in oklab, var(--danger), transparent 92%);
+}
+
+.project-detail-v2 .task-view-toolbar {
+  background: transparent;
+  border-bottom-color: var(--border);
+}
+
+.project-detail-v2 .card-compact {
+  padding: var(--space-4);
+}
+
+.project-detail-v2 .task-table-v2 tfoot td {
+  color: var(--fg);
+  border-top-color: var(--border);
+}
+
+.project-detail-v2 .task-row-checkbox {
+  accent-color: var(--accent);
+}
+
+.project-detail-v2 .btn-primary {
+  box-shadow: none;
+}
+
+.project-detail-v2 .detail-sub-header-v2 {
+  margin-bottom: var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.project-detail-v2 .detail-sub-header-v2 .detail-info-label {
+  color: var(--muted);
+}
+.project-detail-v2 .detail-sub-header-v2 .detail-info-value {
+  color: var(--fg);
+}
+.project-detail-v2 .page-title-bar-v2 {
+  margin-bottom: var(--space-3);
+}
