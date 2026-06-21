@@ -619,32 +619,53 @@ const Workflow = {
       const wr = DB.getById('workRequests', this.detailWrId);
       const isManagerial = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
       const isArchived = wr && wr.status === 'Cancelled';
-      const titleBar = el('div', { class: 'page-title-bar-v2' });
-      const h1 = el('h1', { class: 'breadcrumb-h1' });
-      const opLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Operations' });
-      opLink.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
-      h1.appendChild(opLink);
-      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-      h1.appendChild(document.createTextNode(wr?.title || 'Detail'));
-      titleBar.appendChild(h1);
+      // Identity Bar (Redesign pattern)
+      const identityBar = el('div', { class: 'identity-bar' });
+      const identityMain = el('div', { class: 'identity-main' });
       
-      const actions = el('div', { class: 'title-bar-actions' });
+      const identityParent = el('div', { class: 'identity-parent', text: 'Operations / Work Requests' });
+      identityParent.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
+      identityMain.appendChild(identityParent);
+      
+      identityMain.appendChild(el('h1', { class: 'identity-title', text: wr?.title || 'Detail' }));
+      
+      const identitySub = el('div', { class: 'identity-sub' });
+      identitySub.appendChild(el('span', { class: 'font-mono', text: wr?.id ? `WR-${wr.id.substring(0, 8).toUpperCase()}` : '' }));
+      const client = DB.getById('clients', wr?.clientId);
+      if (client?.name) {
+        identitySub.appendChild(el('span', { class: 'dot' }));
+        identitySub.appendChild(el('span', { text: client.name }));
+      }
+      identityMain.appendChild(identitySub);
+      identityBar.appendChild(identityMain);
+      
+      const identityBadges = el('div', { class: 'identity-badges' });
+      if (wr?.status) {
+        const statusBadgeClass = { 'Draft': 'badge-info', 'Completed': 'badge-success', 'Cancelled': 'badge-danger' }[wr.status] || 'badge-info';
+        identityBadges.appendChild(el('span', { class: `badge ${statusBadgeClass}`, text: wr.status }));
+      }
+      if (wr?.priority && wr.priority !== 'Normal') {
+        identityBadges.appendChild(el('span', { class: 'badge badge-muted', text: wr.priority }));
+      }
+      
+      // Action buttons
       if (isManagerial && wr && !isArchived) {
-        const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
+        const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task' });
         addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
-        actions.appendChild(addBtn);
+        identityBadges.appendChild(addBtn);
 
         if (wr.status === 'Draft') {
-          const editWrBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit Work Request', style: 'margin-right: var(--spacing-sm);' });
+          const editWrBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit Work Request' });
           editWrBtn.addEventListener('click', () => { this.view = 'form'; this.editingId = wr.id; App.handleRoute(); });
-          actions.appendChild(editWrBtn);
+          identityBadges.appendChild(editWrBtn);
         }
       }
-      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
+      const backBtn = el('button', { class: 'btn btn-ghost btn-sm', text: '← Back to List' });
       backBtn.addEventListener('click', () => { this.view = 'list'; this.detailWrId = null; App.handleRoute(); });
-      actions.appendChild(backBtn);
-      titleBar.appendChild(actions);
-      container.appendChild(titleBar);
+      identityBadges.appendChild(backBtn);
+      
+      identityBar.appendChild(identityBadges);
+      container.appendChild(identityBar);
     } else if (this.view === 'templates' || this.view === 'templateForm') {
         // Do nothing here, these views render their own breadcrumb title bar
     } else if (this.view !== 'archive') {
@@ -671,6 +692,10 @@ const Workflow = {
   init() {
     document.addEventListener('click', () => {
       document.querySelectorAll('.multi-select-menu.show').forEach(m => m.classList.remove('show'));
+      document.querySelectorAll('.action-menu-list').forEach(m => {
+        m.classList.add('hidden');
+        m.classList.remove('open');
+      });
     });
   },
 
@@ -1990,44 +2015,125 @@ const Workflow = {
     container.selectedTaskIds = new Set();
     container.groupBy = 'phase';
     container.activeFilters = new Set();
+    container.searchQuery = '';
 
-    // Beautified Sub-Header
-    const subHeader = el('div', { class: 'detail-sub-header-v2' });
+    // Finance & Document status badges (compact strip below identity bar)
+    const badgeStrip = el('div', { class: 'identity-badges', style: 'margin-bottom: 20px;' });
+    const finBadge = this.getFinanceBadgeForWr(wr);
+    const docBadge = this.getDocBadgeForWr(wr);
+    if (finBadge) badgeStrip.appendChild(finBadge);
+    if (docBadge) badgeStrip.appendChild(docBadge);
+    container.appendChild(badgeStrip);
+
+    // Lifecycle Card Redesign
+    const lifecycleCard = el('div', { class: 'lifecycle-card' });
+    const lifecycleHeader = el('div', { class: 'lifecycle-header' });
+    lifecycleHeader.appendChild(el('div', { class: 'lifecycle-label', text: 'Lifecycle' }));
+
+    const lifecycleActions = el('div', { class: 'lifecycle-actions' });
     
-    const infoItems = [
-      { label: 'Client', value: client?.name || '—' },
-      { label: 'Status', value: wr.status },
-      { label: 'Priority', value: wr.priority || 'Normal' }
-    ];
+    const ts = this.getPhaseTransitionStatus(wr.id);
+    const showRouteButton = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
+    const canCancel = isManagerial && wr.status !== 'Completed' && wr.status !== 'Cancelled';
+    const phaseColors = {
+      'Draft': '#94a3b8',
+      'Pre-processing': '#3b82f6',
+      'Processing': '#f59e0b',
+      'Billing': '#a855f7',
+      'Disbursement': '#6366f1',
+      'Completed': '#10b981',
+      'Cancelled': '#ef4444'
+    };
 
-    infoItems.forEach(item => {
-      const div = el('div', { class: 'detail-info-item' });
-      div.appendChild(el('span', { class: 'detail-info-label', text: item.label }));
-      div.appendChild(el('span', { class: 'detail-info-value', text: item.value }));
-      subHeader.appendChild(div);
-    });
+    if (canCancel) {
+      const cancelWrBtn = el('button', {
+        class: 'btn btn-sm btn-danger',
+        text: 'Cancel Work Request',
+        style: 'font-weight: 600; cursor: pointer;'
+      });
+      cancelWrBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.cancelWorkRequest(wr.id);
+      });
+      lifecycleActions.appendChild(cancelWrBtn);
+    }
 
-    const finDiv = el('div', { class: 'detail-info-item' });
-    finDiv.appendChild(el('span', { class: 'detail-info-label', text: 'Finance Status' }));
-    const finVal = el('span', { class: 'detail-info-value' });
-    finVal.appendChild(this.getFinanceBadgeForWr(wr));
-    finDiv.appendChild(finVal);
-    subHeader.appendChild(finDiv);
+    if (showRouteButton) {
+      const routeColor = phaseColors[ts.nextPhase] || '#94a3b8';
+      const routeBtn = el('button', {
+        class: 'btn btn-sm btn-primary',
+        text: `Route to ${ts.nextPhase}`,
+        style: `font-weight: 600; cursor: ${ts.canTransition ? 'pointer' : 'not-allowed'};`,
+        disabled: !ts.canTransition
+      });
+      if (ts.canTransition) {
+        routeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.transitionWorkRequest(wr.id);
+        });
+      }
+      lifecycleActions.appendChild(routeBtn);
+    }
 
-    const docDiv = el('div', { class: 'detail-info-item' });
-    docDiv.appendChild(el('span', { class: 'detail-info-label', text: 'Documents Status' }));
-    const docVal = el('span', { class: 'detail-info-value' });
-    docVal.appendChild(this.getDocBadgeForWr(wr));
-    docDiv.appendChild(docVal);
-    subHeader.appendChild(docDiv);
-
-    container.appendChild(subHeader);
+    lifecycleHeader.appendChild(lifecycleActions);
+    lifecycleCard.appendChild(lifecycleHeader);
 
     // Modern Centered Progress Indicator
-    container.appendChild(this.renderModernProgressBar(wr.status));
+    lifecycleCard.appendChild(this.renderModernProgressBar(wr.status));
 
-    // Task List (Grouped table design)
-    const listWrapper = el('div', { class: 'task-list-v2' });
+    // Routing dependency checklist — shows blockers + actionable hints
+    if (ts && !ts.canTransition && ts.missing && ts.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+      const blockWrapper = el('div', { class: 'routing-block blocked' });
+      const depPanel = el('div', { style: 'width: 100%;' });
+      depPanel.appendChild(el('div', {
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> <strong>Routing blocked</strong> — Resolve these to route to ' + (ts.nextPhase || 'next phase') + ':',
+        class: 'routing-title',
+        style: 'color:#92400e;'
+      }));
+      const depList = el('ul', { class: 'routing-list', style: 'color:#78350f;' });
+      ts.missing.forEach(m => {
+        const li = el('li');
+        li.appendChild(el('span', { text: m, style: 'font-weight:600;' }));
+        const hint = this.getRoutingHint(m);
+        if (hint) {
+          const hintEl = el('span', { style: 'font-size:11px;color:#b45309;margin-left:8px;display:inline-block;' });
+          hintEl.appendChild(el('span', { text: '→ ' + hint.text, style: 'font-style:italic;' }));
+          if (hint.route) {
+            const goBtn = el('button', {
+              text: 'Go',
+              class: 'btn btn-xs',
+              style: 'margin-left:6px;padding:1px 6px;font-size:10px;background:rgba(245,158,11,0.15);color:#92400e;border:none;border-radius:4px;cursor:pointer;font-weight:600;'
+            });
+            goBtn.addEventListener('click', () => {
+              if (hint.route === '#billing') { Billing.view = 'list'; Billing.detailId = null; }
+              if (hint.route === '#disbursement') { Disbursement.view = 'list'; Disbursement.detailId = null; }
+              location.hash = hint.route;
+            });
+            hintEl.appendChild(goBtn);
+          }
+          li.appendChild(hintEl);
+        }
+        depList.appendChild(li);
+      });
+      depPanel.appendChild(depList);
+      blockWrapper.appendChild(depPanel);
+      lifecycleCard.appendChild(blockWrapper);
+    } else if (ts && ts.canTransition && ts.nextPhase && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+      const readyWrapper = el('div', { class: 'routing-block' });
+      const readyPanel = el('div', { style: 'width: 100%;' });
+      readyPanel.appendChild(el('div', {
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> <strong>Ready to route</strong> — All requirements met. Click "Route to ' + ts.nextPhase + '" above to proceed.',
+        class: 'routing-title',
+        style: 'color:#166534;'
+      }));
+      readyWrapper.appendChild(readyPanel);
+      lifecycleCard.appendChild(readyWrapper);
+    }
+
+    container.appendChild(lifecycleCard);
+
+    // Task List (Grouped div redesign)
+    const listWrapper = el('div', { class: 'task-list', id: 'taskList' });
     
     // Default Sorting: Priority > Due Date > Completed at bottom
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -2113,10 +2219,11 @@ const Workflow = {
     ['phase', 'assignee', 'flat'].forEach(mode => {
       const btn = el('button', {
         type: 'button',
-        class: 'btn btn-sm' + (container.groupBy === mode ? ' active' : ''),
-        text: mode === 'phase' ? 'Phase' : mode === 'assignee' ? 'Assignee' : 'Flat list'
+        text: mode === 'phase' ? 'Phase' : mode === 'assignee' ? 'Assignee' : 'Flat List'
       });
+      if (container.groupBy === mode) btn.classList.add('active');
       groupButtons[mode] = btn;
+      btn.dataset.group = mode;
       btn.addEventListener('click', () => {
         if (container.groupBy === mode) return;
         container.groupBy = mode;
@@ -2127,14 +2234,43 @@ const Workflow = {
     });
     toolbar.appendChild(groupToggle);
 
+    // Compute filter counts from tasks
+    const todayStrChip = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' })).toISOString().slice(0, 10);
+    const filterCounts = {
+      'Missing logs': sortedTasks.filter(t => {
+        if (t.status === 'Completed' || t.status === 'Cancelled') return false;
+        const taskIsGround = t.assigneeName && !t.assigneeId;
+        if (taskIsGround && !(t.timeLogs || []).some(l => l.date === todayStrChip)) return true;
+        return (t.checklist || []).some(item => item.assigneeName && !item.assigneeId && !(item.timeLogs || []).some(l => l.date === todayStrChip));
+      }).length,
+      'Blocked': sortedTasks.filter(t => {
+        const preds = t.predecessors || [];
+        if (preds.some(pid => { const pt = DB.getById('tasks', pid); return pt && pt.status !== 'Completed'; })) return true;
+        return (t.checklist || []).some(item => isChecklistBlocked(item, t.checklist));
+      }).length,
+      'Incomplete checklist': sortedTasks.filter(t => {
+        const comp = getTaskChecklistCompletion(t);
+        return comp.total > 0 && comp.done < comp.total;
+      }).length,
+      'Mine': sortedTasks.filter(t => {
+        if (t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id) return true;
+        if (t.assigneeName && Auth.user?.name && t.assigneeName === Auth.user.name) return true;
+        return false;
+      }).length
+    };
+
     const filterChips = el('div', { class: 'filter-chips' });
     const filterButtons = {};
     ['Missing logs', 'Blocked', 'Incomplete checklist', 'Mine'].forEach(filter => {
       const chip = el('button', {
         type: 'button',
-        class: 'filter-chip' + (container.activeFilters.has(filter) ? ' active' : ''),
-        text: filter
+        class: 'filter-chip' + (container.activeFilters.has(filter) ? ' active' : '')
       });
+      const count = filterCounts[filter] || 0;
+      if (count > 0) {
+        chip.appendChild(el('span', { class: 'count', text: String(count) }));
+      }
+      chip.appendChild(document.createTextNode(filter));
       filterButtons[filter] = chip;
       chip.addEventListener('click', () => {
         if (container.activeFilters.has(filter)) {
@@ -2158,6 +2294,21 @@ const Workflow = {
       });
     };
 
+    const actionsWrap = el('div', {
+      style: 'margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;'
+    });
+
+    const searchInput = el('input', {
+      type: 'search',
+      class: 'search-input form-control',
+      placeholder: 'Search tasks, assignees, records…',
+      id: 'taskSearch'
+    });
+    searchInput.addEventListener('input', (e) => {
+      container.searchQuery = e.target.value.toLowerCase();
+      renderGroups();
+    });
+
     const addTaskBtn = el('button', {
       type: 'button',
       class: 'btn btn-primary btn-sm',
@@ -2166,7 +2317,10 @@ const Workflow = {
     addTaskBtn.addEventListener('click', () => {
       this.showAddTaskModal(wr.id, () => App.handleRoute());
     });
-    toolbar.appendChild(addTaskBtn);
+
+    actionsWrap.appendChild(searchInput);
+    actionsWrap.appendChild(addTaskBtn);
+    toolbar.appendChild(actionsWrap);
 
     container.appendChild(toolbar);
 
@@ -2408,7 +2562,22 @@ const Workflow = {
       const todayStr = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' })).toISOString().slice(0, 10);
 
       const activeFilters = Array.from(container.activeFilters);
+      const query = (container.searchQuery || '').trim();
       const filteredTasks = sortedTasks.filter(t => {
+        if (query) {
+          const titleText = (t.title || '').toLowerCase();
+          const assigneeText = (t.assigneeName || '').toLowerCase();
+          const coAssigneeText = (t.coAssignees || []).map(name => (name || '').toLowerCase());
+          
+          const matchTitle = titleText.includes(query);
+          const matchAssignee = assigneeText.includes(query);
+          const matchCoAssignees = coAssigneeText.some(name => name.includes(query));
+          
+          if (!matchTitle && !matchAssignee && !matchCoAssignees) {
+            return false;
+          }
+        }
+
         if (activeFilters.length === 0) return true;
 
         const checks = {
@@ -2467,170 +2636,68 @@ const Workflow = {
         const groupEl = el('div', { class: 'task-group-v2' });
         const groupHeader = el('div', { class: 'task-group-header' });
         groupHeader.appendChild(el('span', { text: groupName }));
-
         const totalCheckDone = groupTasks.reduce((sum, t) => sum + getTaskChecklistCompletion(t).done, 0);
         const totalCheckTotal = groupTasks.reduce((sum, t) => sum + getTaskChecklistCompletion(t).total, 0);
         const groupHours = groupTasks.reduce((sum, t) => sum + getTaskTotalHours(t), 0);
         const statsText = `${groupTasks.length} tasks${totalCheckTotal > 0 ? ` • ${totalCheckDone}/${totalCheckTotal} items done` : ''}${groupHours > 0 ? ` • ${groupHours} hrs` : ''}`;
         groupHeader.appendChild(el('span', { class: 'task-group-count group-header-stats', text: statsText }));
 
-      // Action Buttons: Route + Cancel Work Request
-      if (wr) {
-        const ts = this.getPhaseTransitionStatus(wr.id);
-        const showRouteButton = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
-        const canCancel = isManagerial && wr.status !== 'Completed' && wr.status !== 'Cancelled';
-        const phaseColors = {
-          'Draft': '#94a3b8',
-          'Pre-processing': '#3b82f6',
-          'Processing': '#f59e0b',
-          'Billing': '#a855f7',
-          'Disbursement': '#6366f1',
-          'Completed': '#10b981',
-          'Cancelled': '#ef4444'
-        };
-
-        if (showRouteButton || canCancel) {
-          const actionsWrap = el('div', { style: 'display:flex; gap:8px; margin-left:auto; align-items:center;' });
-
-          if (canCancel) {
-            const cancelWrBtn = el('button', {
-              class: 'btn btn-sm',
-              text: 'Cancel Work Request',
-              style: 'background: transparent; border: none; color: var(--color-danger); font-weight: 600; padding: 4px 8px; cursor: pointer;'
-            });
-            cancelWrBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              this.cancelWorkRequest(wr.id);
-            });
-            actionsWrap.appendChild(cancelWrBtn);
-          }
-
-          if (showRouteButton) {
-            const routeColor = phaseColors[ts.nextPhase] || '#94a3b8';
-            const routeBtn = el('button', {
-              class: 'btn btn-sm',
-              text: `Route to ${ts.nextPhase}`,
-              style: `background: transparent; border: none; color: ${routeColor}; font-weight: 600; padding: 4px 8px; cursor: ${ts.canTransition ? 'pointer' : 'not-allowed'}; opacity: ${ts.canTransition ? '1' : '0.5'};`,
-              disabled: !ts.canTransition
-            });
-            if (ts.canTransition) {
-              routeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.transitionWorkRequest(wr.id);
-              });
-            }
-            actionsWrap.appendChild(routeBtn);
-          }
-
-          groupHeader.appendChild(actionsWrap);
-        }
-
-        // Routing dependency checklist — shows blockers + actionable hints
-        if (ts && !ts.canTransition && ts.missing && ts.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-          const blockWrapper = el('div', {
-            style: 'width:100%; display:flex; justify-content:flex-end; margin-top:8px;'
-          });
-          const depPanel = el('div', {
-            style: 'background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;padding:10px 14px;font-size:12px;max-width:65%;'
-          });
-          depPanel.appendChild(el('div', {
-            html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> <strong>Routing blocked</strong> — Resolve these to route to ' + (ts.nextPhase || 'next phase') + ':',
-            style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#92400e;font-weight:500;'
-          }));
-          const depList = el('ul', { style: 'margin:0;padding-left:24px;color:#78350f;' });
-          ts.missing.forEach(m => {
-            const li = el('li', { style: 'margin-bottom:4px;' });
-            li.appendChild(el('div', { text: m, style: 'font-weight:500;' }));
-            const hint = this.getRoutingHint(m);
-            if (hint) {
-              const hintEl = el('div', { style: 'font-size:11px;color:#b45309;margin-top:2px;' });
-              hintEl.appendChild(el('span', { text: '→ ' + hint.text, style: 'font-style:italic;' }));
-              if (hint.route) {
-                const goBtn = el('button', {
-                  text: 'Go',
-                  class: 'btn btn-xs',
-                  style: 'margin-left:6px;padding:1px 6px;font-size:10px;background:rgba(245,158,11,0.15);color:#92400e;border:none;border-radius:4px;cursor:pointer;font-weight:600;'
-                });
-                goBtn.addEventListener('click', () => {
-                  if (hint.route === '#billing') { Billing.view = 'list'; Billing.detailId = null; }
-                  if (hint.route === '#disbursement') { Disbursement.view = 'list'; Disbursement.detailId = null; }
-                  location.hash = hint.route;
-                });
-                hintEl.appendChild(goBtn);
-              }
-              li.appendChild(hintEl);
-            }
-            depList.appendChild(li);
-          });
-          depPanel.appendChild(depList);
-          blockWrapper.appendChild(depPanel);
-          groupHeader.appendChild(blockWrapper);
-        } else if (ts && ts.canTransition && ts.nextPhase && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-          const readyWrapper = el('div', {
-            style: 'width:100%; display:flex; justify-content:flex-end; margin-top:8px;'
-          });
-          const readyPanel = el('div', {
-            style: 'background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);border-radius:8px;padding:10px 14px;font-size:12px;max-width:65%;'
-          });
-          readyPanel.appendChild(el('div', {
-            html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> <strong>Ready to route</strong> — All requirements met. Click "Route to ' + ts.nextPhase + '" above to proceed.',
-            style: 'display:flex;align-items:center;gap:6px;color:#166534;font-weight:500;'
-          }));
-          readyWrapper.appendChild(readyPanel);
-          groupHeader.appendChild(readyWrapper);
-        }
-      }
-
       groupEl.appendChild(groupHeader);
 
-      const table = el('table', { class: 'task-table-v2' });
-      const thead = el('thead');
-      const thr = el('tr');
-      ['Task', 'Assigned To', 'Due Date', 'Status', 'Checklist', 'Linked Records', 'Time', 'Actions'].forEach(h => {
-        thr.appendChild(el('th', { text: h }));
+      const tableHeader = el('div', { class: 'table-header' });
+      ['', 'Task', 'Assigned To', 'Due Date', 'Status', 'Checklist', 'Linked Records', 'Time', 'Actions'].forEach(h => {
+        tableHeader.appendChild(el('span', { text: h }));
       });
-      thead.appendChild(thr);
-      table.appendChild(thead);
+      groupEl.appendChild(tableHeader);
 
-      const tbody = el('tbody');
       let totalHours = 0;
 
       groupTasks.forEach(t => {
         const assignee = t.assigneeName
           ? { name: t.assigneeName }
           : DB.getById('users', t.assigneeId || t.assignedTo);
-        const tr = el('tr', { class: 'task-row-v2 task-expand' });
-
-        // Totals calculation
         const hours = getTaskTotalHours(t);
         totalHours += hours;
 
-        // Task Title Cell (With collapsible indicator + selection checkbox)
-        const tdTitle = el('td');
-        const titleWrap = el('div', { class: 'task-v2-title-cell', style: 'display: flex; align-items: flex-start; gap: 8px;' });
+        const expanded = false;
+        const selected = container.selectedTaskIds.has(t.id);
+        const rowEl = el('div', { class: 'task-row' + (expanded ? ' expanded' : '') + (selected ? ' selected' : '') });
+        rowEl.dataset.id = t.id;
 
-        // Row selection checkbox
+        // 1. Checkbox cell
+        const cellCheckbox = el('div', { class: 'cell' });
+        cellCheckbox.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
         const rowCheckbox = el('input', {
           type: 'checkbox',
-          class: 'task-row-checkbox',
+          class: 'row-check',
           title: 'Select task'
         });
-        rowCheckbox.checked = container.selectedTaskIds.has(t.id);
+        rowCheckbox.checked = selected;
         rowCheckbox.addEventListener('click', (e) => {
           e.stopPropagation();
           if (rowCheckbox.checked) {
             container.selectedTaskIds.add(t.id);
+            rowEl.classList.add('selected');
           } else {
             container.selectedTaskIds.delete(t.id);
+            rowEl.classList.remove('selected');
           }
           updateBulkBar();
         });
-        titleWrap.appendChild(rowCheckbox);
+        cellCheckbox.appendChild(rowCheckbox);
+        rowEl.appendChild(cellCheckbox);
 
-        titleWrap.appendChild(el('span', { class: 'task-v2-row-caret', text: '›', style: 'margin-top: 2px;' }));
+        // 2. Title cell
+        const cellTitle = el('div', { class: 'cell cell-title' });
+        const caret = el('span', { class: 'caret', text: '›' });
+        cellTitle.appendChild(caret);
 
-        const titleAndDeps = el('div', { style: 'display: flex; flex-direction: column;' });
-        titleAndDeps.appendChild(el('div', { class: 'task-v2-title' + (t.status === 'Completed' ? ' completed' : ''), text: t.title }));
+        const titleStack = el('div', { class: 'title-stack' });
+        const titleMain = el('span', {
+          class: 'title-main' + (t.status === 'Completed' ? ' done' : ''),
+          text: t.title
+        });
+        titleStack.appendChild(titleMain);
 
         // Show dependencies if they exist
         const preds = t.predecessors || [];
@@ -2641,20 +2708,18 @@ const Workflow = {
           }).filter(Boolean);
           if (predTitles.length > 0) {
             const depLabel = el('span', {
-              text: 'Blocking dependencies: ' + predTitles.join(', '),
-              style: 'font-size: 11px; color: var(--color-text-muted, #7c7c8a); margin-top: 2px; font-style: italic;'
+              class: 'title-sub',
+              text: 'Blocking dependencies: ' + predTitles.join(', ')
             });
-            titleAndDeps.appendChild(depLabel);
+            titleStack.appendChild(depLabel);
           }
         }
-        titleWrap.appendChild(titleAndDeps);
+        cellTitle.appendChild(titleStack);
+        rowEl.appendChild(cellTitle);
 
-        tdTitle.appendChild(titleWrap);
-        tr.appendChild(tdTitle);
-
-        // Assigned To
-        const tdAssignee = el('td');
-        tdAssignee.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
+        // 3. Assignee cell
+        const cellAssignee = el('div', { class: 'cell assignee-cell' });
+        cellAssignee.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
 
         const allAssigneeNames = getTaskAllAssigneeNames(t);
 
@@ -2679,7 +2744,7 @@ const Workflow = {
           const assigneeWrap = el('div', { class: 'task-assignee-wrapper' });
           assigneeWrap.appendChild(gwDropdown);
           assigneeWrap.appendChild(this.renderTaskCoAssigneePicker(t, { primaryName: t.assigneeName || '', className: 'inline-coassignee-dropdown' }, isDraft));
-          tdAssignee.appendChild(assigneeWrap);
+          cellAssignee.appendChild(assigneeWrap);
         } else {
           const assigneeWrap = el('div', { class: 'assignee-avatars' });
           const displayNames = allAssigneeNames.slice(0, 3);
@@ -2699,19 +2764,23 @@ const Workflow = {
           if (allAssigneeNames.length === 0) {
             assigneeWrap.appendChild(el('span', { text: 'Unassigned', style: 'color:var(--color-text-muted);font-style:italic;' }));
           }
-          tdAssignee.appendChild(assigneeWrap);
-          tdAssignee.appendChild(this.renderTaskCoAssigneePicker(t, { primaryName: t.assigneeName || '', className: 'inline-coassignee-dropdown' }, isDraft));
+          cellAssignee.appendChild(assigneeWrap);
+          cellAssignee.appendChild(this.renderTaskCoAssigneePicker(t, { primaryName: t.assigneeName || '', className: 'inline-coassignee-dropdown' }, isDraft));
         }
-        tr.appendChild(tdAssignee);
+        rowEl.appendChild(cellAssignee);
 
-        // Due Date
-        tr.appendChild(el('td', { text: t.dueDate ? formatDate(t.dueDate) : 'N/A' }));
+        // 4. Due Date cell
+        const cellDueDate = el('div', {
+          class: 'cell time-cell',
+          text: t.dueDate ? formatDate(t.dueDate) : 'N/A'
+        });
+        rowEl.appendChild(cellDueDate);
 
-        // Progress Status (Dropdown with Left Arrow)
-        const tdStatus = el('td');
+        // 5. Status cell
+        const cellStatus = el('div', { class: 'cell' });
+        cellStatus.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
         const statusWrapper = el('div', { class: 'status-dropdown-wrapper-v2' });
-        const statusSel = el('select', { class: 'form-select status-dropdown-v2' });
-        statusSel.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
+        const statusSel = el('select', { class: 'status-select' });
 
         const validStatuses = this.getValidNextStatuses(t);
         const flow = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
@@ -2770,13 +2839,32 @@ const Workflow = {
             }
           }
         });
-
         statusWrapper.appendChild(statusSel);
-        tdStatus.appendChild(statusWrapper);
-        tr.appendChild(tdStatus);
+        cellStatus.appendChild(statusWrapper);
+        rowEl.appendChild(cellStatus);
 
-        // Linked Records Column
-        const tdLinked = el('td');
+        // 6. Checklist cell
+        const cellChecklist = el('div', { class: 'cell checklist-cell' });
+        if (checklistCompletion.total === 0) {
+          cellChecklist.appendChild(el('span', { text: 'N/A', class: 'text-muted' }));
+        } else {
+          const radius = 8;
+          const circumference = 2 * Math.PI * radius; // ~50.27
+          const offset = circumference - (checklistCompletion.percent / 100) * circumference;
+          const ring = el('div', {
+            class: 'progress-ring-wrapper',
+            html: `<svg class="progress-ring" viewBox="0 0 20 20" style="width:18px; height:18px;"><circle cx="10" cy="10" r="${radius}" fill="none" stroke="var(--color-border)" stroke-width="3" /><circle cx="10" cy="10" r="${radius}" fill="none" stroke="var(--color-success)" stroke-width="3" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" stroke-linecap="round" transform="rotate(-90 10 10)" /></svg>`
+          });
+          const progressText = el('span', { class: 'progress-text', text: `${checklistCompletion.done}/${checklistCompletion.total}` });
+          const incompleteNames = getIncompleteChecklistNames(t);
+          cellChecklist.title = incompleteNames.length > 0 ? `Remaining: ${incompleteNames.join(', ')}` : 'All checklist items complete';
+          cellChecklist.appendChild(ring);
+          cellChecklist.appendChild(progressText);
+        }
+        rowEl.appendChild(cellChecklist);
+
+        // 7. Linked Records cell
+        const cellLinked = el('div', { class: 'cell' });
         const linkedWrap = el('div', { style: 'display:flex; flex-direction:column; gap:4px;' });
         
         let linkedInv = DB.getWhere('invoices', inv => inv.linkedTaskId === t.id)[0];
@@ -2802,7 +2890,6 @@ const Workflow = {
           linkedWrap.appendChild(badge);
         });
         
-        // Show actionable link hints for routing-critical tasks
         const needsInvoice = t.title.toLowerCase().includes('invoice') || t.title.toLowerCase().includes('bill');
         const needsDisbursement = t.title.toLowerCase().includes('expense') || t.title.toLowerCase().includes('disburse') || t.title.toLowerCase().includes('payment') || t.title.toLowerCase().includes('reimburse');
         if (!isArchived && needsInvoice && !linkedInv) {
@@ -2825,47 +2912,72 @@ const Workflow = {
         if (!linkedInv && linkedDisb.length === 0 && !needsInvoice && !needsDisbursement) {
           linkedWrap.appendChild(el('span', { text: 'N/A', style: 'color:var(--color-text-muted);' }));
         }
-        tdLinked.appendChild(linkedWrap);
-        tr.appendChild(tdLinked);
+        cellLinked.appendChild(linkedWrap);
+        rowEl.appendChild(cellLinked);
 
-        // Checklist column
-        const tdChecklist = el('td');
-        const checklistComp = getTaskChecklistCompletion(t);
-        if (checklistComp.total === 0) {
-          tdChecklist.appendChild(el('span', { text: 'N/A', style: 'color:var(--color-text-muted);' }));
-        } else {
-          const checklistMini = el('div', { class: 'checklist-progress-mini' });
-          const radius = 10;
-          const circumference = 2 * Math.PI * radius;
-          const offset = circumference - (checklistComp.percent / 100) * circumference;
-          const ring = el('div', {
-            class: 'checklist-progress-ring',
-            html: `<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="3" /><circle cx="12" cy="12" r="${radius}" fill="none" stroke="#10b981" stroke-width="3" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" stroke-linecap="round" transform="rotate(-90 12 12)" /></svg>`
+        // 8. Time cell
+        const cellTime = el('div', {
+          class: 'cell time-cell font-mono',
+          text: hours > 0 ? `${hours}h` : 'N/A'
+        });
+        rowEl.appendChild(cellTime);
+
+        // 9. Actions cell
+        const cellActions = el('div', { class: 'cell actions-cell' });
+        cellActions.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
+
+        // Log Time button
+        const logTimeBtn = el('button', {
+          class: 'action-icon primary',
+          title: 'Log Time',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
+        });
+        logTimeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.showAddTimeLogModal(t.id);
+        });
+
+        // More Actions button and its dropdown menu
+        const actionMenu = el('div', { class: 'action-menu' });
+
+        const moreActionsBtn = el('button', {
+          class: 'action-icon action-menu-toggle',
+          title: 'More actions',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`
+        });
+
+        const menuList = el('div', { class: 'action-menu-list hidden' });
+
+        // Bind click event to toggle classes
+        moreActionsBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.action-menu-list').forEach(m => {
+            if (m !== menuList) {
+              m.classList.add('hidden');
+              m.classList.remove('open');
+            }
           });
-          const progressText = el('span', { class: 'checklist-progress-text', text: `${checklistComp.done}/${checklistComp.total} ✓` });
-          const incompleteNames = getIncompleteChecklistNames(t);
-          checklistMini.title = incompleteNames.length > 0 ? `Remaining: ${incompleteNames.join(', ')}` : 'All checklist items complete';
-          checklistMini.appendChild(ring);
-          checklistMini.appendChild(progressText);
-          tdChecklist.appendChild(checklistMini);
-        }
-        tr.appendChild(tdChecklist);
+          if (menuList.classList.contains('hidden')) {
+            menuList.classList.remove('hidden');
+            setTimeout(() => {
+              menuList.classList.add('open');
+            }, 10);
+          } else {
+            menuList.classList.remove('open');
+            menuList.classList.add('hidden');
+          }
+        });
 
-        // Time column
-        tr.appendChild(el('td', { text: hours > 0 ? `${hours}h` : 'N/A' }));
-
-        // Actions column
-        const tdActions = el('td');
-        const actionsWrap = el('div', { class: 'task-actions-cell' });
+        // Request Log item
         if (t.assigneeName && !t.assigneeId) {
-          const requestLogBtn = el('button', {
-            type: 'button',
-            class: 'btn btn-ghost btn-xs',
-            html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Request Log',
-            style: 'font-size:11px;padding:2px 8px;'
+          const reqLogItem = el('button', {
+            class: 'action-menu-item',
+            html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Request Log`
           });
-          requestLogBtn.addEventListener('click', (e) => {
+          reqLogItem.addEventListener('click', (e) => {
             e.stopPropagation();
+            menuList.classList.remove('open');
+            menuList.classList.add('hidden');
             const text = `Subject: Time Log Request: ${t.title}\n\nHi ${t.assigneeName},\n\nPlease reply with your time log for today for the task: ${t.title} (Work Request: ${wr.title}).\n\nPlease include:\n- Start Time:\n- End Time:\n- Brief description of what you accomplished:\n\nThank you!`;
             navigator.clipboard.writeText(text).then(() => {
               this.showMessage('Copied', `Time log request copied for ${t.assigneeName}.`, 'success');
@@ -2873,36 +2985,70 @@ const Workflow = {
               this.showMessage('Error', 'Could not copy to clipboard.', 'danger');
             });
           });
-          actionsWrap.appendChild(requestLogBtn);
+          menuList.appendChild(reqLogItem);
         }
-        const logTimeBtn = el('button', {
-          type: 'button',
-          class: 'btn btn-secondary btn-xs',
-          text: 'Log Time',
-          style: 'font-size:11px;padding:2px 8px;'
+
+        // Link Record item
+        const linkRecordItem = el('button', {
+          class: 'action-menu-item',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Link Record`
         });
-        logTimeBtn.addEventListener('click', (e) => {
+        linkRecordItem.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.showAddTimeLogModal(t.id);
+          menuList.classList.remove('open');
+          menuList.classList.add('hidden');
+          this.showLinkFinancialModal(t.id);
         });
-        actionsWrap.appendChild(logTimeBtn);
-        tdActions.appendChild(actionsWrap);
-        tr.appendChild(tdActions);
+        menuList.appendChild(linkRecordItem);
 
-        tbody.appendChild(tr);
+        // Edit Task item
+        const editTaskItem = el('button', {
+          class: 'action-menu-item',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit Task`
+        });
+        editTaskItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menuList.classList.remove('open');
+          menuList.classList.add('hidden');
+          this.showEditTaskModal(t.id, () => App.handleRoute());
+        });
+        menuList.appendChild(editTaskItem);
 
-        // Accordion Details Row
-        const detailsTr = el('tr', { class: 'task-details-row hidden accordion-panel collapsed' });
-        const detailsTd = el('td', { colspan: 8 });
-        const detailsContainer = el('div', { class: 'task-details-container' });
+        // Delete item
+        const deleteItem = el('button', {
+          class: 'action-menu-item danger',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete`
+        });
+        deleteItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menuList.classList.remove('open');
+          menuList.classList.add('hidden');
+          this.showConfirm('Delete Task', 'Are you sure you want to delete this task? This will remove the task and all its checklist items.', () => {
+            DB.delete('tasks', t.id);
+            App.handleRoute();
+          }, 'danger');
+        });
+        menuList.appendChild(deleteItem);
+
+        actionMenu.appendChild(moreActionsBtn);
+        actionMenu.appendChild(menuList);
+
+        cellActions.appendChild(logTimeBtn);
+        cellActions.appendChild(actionMenu);
+        rowEl.appendChild(cellActions);
+
+        groupEl.appendChild(rowEl);
+
+        // Accordion Details Row (div layout)
+        const detailsDiv = el('div', { class: 'detail-panel hidden accordion-panel collapsed' });
         
-        const detailsPanes = el('div', { class: 'task-details-panes' });
-        const leftPane = el('div', { class: 'task-details-left' });
-        const rightPane = el('div', { class: 'task-details-right' });
+        // Two-pane layout direct children of detail-panel
+        const leftPane = el('div');
+        const rightPane = el('div', { class: 'detail-pane' });
 
         // --- Left Pane: Requirements Checklist ---
         const checklistSection = el('div', { class: 'task-details-col' });
-        const checklistHeader = el('div', { class: 'details-section-title' });
+        const checklistHeader = el('div', { class: 'detail-section-title' });
         checklistHeader.appendChild(el('span', { text: 'Requirements Checklist' }));
         checklistSection.appendChild(checklistHeader);
 
@@ -2920,13 +3066,17 @@ const Workflow = {
             normalizedChecklist.forEach((item, idx) => {
               const blocked = isChecklistBlocked(item, normalizedChecklist);
               const prereq = normalizedChecklist.find(c => c.id === item.dependsOn);
-              const row = el('div', { class: 'checklist-item-row' + (blocked ? ' blocked' : '') });
-              const cb = el('input', { type: 'checkbox', class: 'checklist-item-checkbox' });
+              const row = el('div', { class: 'checklist-item' + (blocked ? ' locked' : '') });
+              const cb = el('input', { type: 'checkbox' });
               cb.checked = !!item.completed;
               cb.disabled = blocked;
-              const textClass = 'checklist-item-text' + (item.completed ? ' completed' : '');
+              
               const textValue = blocked ? ('🔒 Waiting for: ' + (prereq ? prereq.text : 'Unknown')) : item.text;
-              const text = el('span', { class: textClass, text: textValue });
+              
+              // Wrapping text in checklist-text span/div structure
+              const textWrap = el('div', { class: 'checklist-text' });
+              textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '' }));
+              
               cb.addEventListener('change', (e) => {
                 e.stopPropagation();
                 const now = new Date().toISOString();
@@ -2942,7 +3092,7 @@ const Workflow = {
                 renderChecklist();
               });
               row.appendChild(cb);
-              row.appendChild(text);
+              row.appendChild(textWrap);
 
               const assigneeDropdown = this.createGroundWorkerDropdown({
                 selectedGroundWorkerName: item.assigneeName,
@@ -2958,18 +3108,19 @@ const Workflow = {
               });
               row.appendChild(assigneeDropdown);
 
-              const hours = getChecklistItemTotalHours(item);
-              const timePill = el('span', { class: 'checklist-time-pill', text: hours + 'h' });
+              const itemHours = getChecklistItemTotalHours(item);
+              const timePill = el('span', { class: 'hours-pill', text: itemHours + 'h' });
               row.appendChild(timePill);
 
-              const logBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Log Time' });
+              const checklistActions = el('div', { style: 'display:flex;gap:var(--space-1);' });
+              const logBtn = el('button', { type: 'button', class: 'action-btn', text: 'Log Time' });
               logBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showAddTimeLogModal(t.id, item.id);
               });
-              row.appendChild(logBtn);
+              checklistActions.appendChild(logBtn);
 
-              const delBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: '×' });
+              const delBtn = el('button', { type: 'button', class: 'action-btn', text: '×', style: 'border-color:transparent;color:var(--muted);' });
               delBtn.title = 'Delete checklist item';
               delBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -3006,16 +3157,17 @@ const Workflow = {
                   });
                 }
               });
-              row.appendChild(delBtn);
+              checklistActions.appendChild(delBtn);
+              row.appendChild(checklistActions);
 
               checklistList.appendChild(row);
             });
           }
         };
 
-        const addChecklistRow = el('div', { class: 'checklist-add-row' });
-        const newItemInput = el('input', { type: 'text', placeholder: 'Add checklist item...', style: 'flex:1; font-size:0.85rem;' });
-        const prereqSelect = el('select', { style: 'font-size:0.85rem;' });
+        const addChecklistRow = el('div', { class: 'add-checklist' });
+        const newItemInput = el('input', { type: 'text', placeholder: 'Add checklist item...', id: 'newCheckInput' });
+        const prereqSelect = el('select', { id: 'newCheckDep' });
         const populatePrereqSelect = () => {
           prereqSelect.innerHTML = '';
           prereqSelect.appendChild(el('option', { value: '', text: '— None —' }));
@@ -3024,7 +3176,7 @@ const Workflow = {
           });
         };
         populatePrereqSelect();
-        const addItemBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Add' });
+        const addItemBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Add' });
         addItemBtn.addEventListener('click', () => {
           const val = newItemInput.value.trim();
           if (!val) return;
@@ -3036,37 +3188,69 @@ const Workflow = {
           prereqSelect.value = '';
           renderChecklist();
         });
-        newItemInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            addItemBtn.click();
-          }
-        });
         addChecklistRow.appendChild(newItemInput);
         addChecklistRow.appendChild(prereqSelect);
         addChecklistRow.appendChild(addItemBtn);
 
-        checklistSection.appendChild(checklistList);
+        const checklistCard = el('div', { class: 'card card-compact', style: 'padding:0;' });
+        checklistCard.appendChild(checklistList);
+        checklistSection.appendChild(checklistCard);
         checklistSection.appendChild(addChecklistRow);
         leftPane.appendChild(checklistSection);
         renderChecklist();
 
         // --- Right Pane: Attached Documents, Time Logs, Dependencies ---
-        const isAdmin = Auth.user.role === 'Admin';
-        const isDocStaff = Auth.user.role === 'Staff' && Auth.can('dms:handover');
+        const detailHeaderActions = el('div', { class: 'detail-header-actions' });
+        
+        const logTimeHeaderBtn = el('button', {
+          class: 'btn btn-primary btn-xs',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Log Time`
+        });
+        logTimeHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddTimeLogModal(t.id); });
+        detailHeaderActions.appendChild(logTimeHeaderBtn);
 
-        // Attached Documents Section (preserved with per-document comments)
-        const docsSection = el('div', { class: 'task-details-col' });
-        const docsHeader = el('div', { class: 'details-section-title' });
+        if (t.assigneeName && !t.assigneeId) {
+          const reqLogHeaderBtn = el('button', {
+            class: 'btn btn-secondary btn-xs',
+            html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Request Log`
+          });
+          reqLogHeaderBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const text = `Subject: Time Log Request: ${t.title}\n\nHi ${t.assigneeName},\n\nPlease reply with your time log for today for the task: ${t.title} (Work Request: ${wr.title}).\n\nPlease include:\n- Start Time:\n- End Time:\n- Brief description of what you accomplished:\n\nThank you!`;
+            navigator.clipboard.writeText(text).then(() => {
+              this.showMessage('Copied', `Time log request copied for ${t.assigneeName}.`, 'success');
+            }).catch(() => {
+              this.showMessage('Error', 'Could not copy to clipboard.', 'danger');
+            });
+          });
+          detailHeaderActions.appendChild(reqLogHeaderBtn);
+        }
+
+        const linkRecordHeaderBtn = el('button', {
+          class: 'btn btn-secondary btn-xs',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Link Record`
+        });
+        linkRecordHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
+        detailHeaderActions.appendChild(linkRecordHeaderBtn);
+
+        const editTaskHeaderBtn = el('button', {
+          class: 'btn btn-ghost btn-xs',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`
+        });
+        editTaskHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showEditTaskModal(t.id, () => App.handleRoute()); });
+        detailHeaderActions.appendChild(editTaskHeaderBtn);
+
+        rightPane.appendChild(detailHeaderActions);
+
+        // Attached Documents Section
+        const docsSection = el('div', { class: 'detail-block' });
+        const docsHeader = el('div', { class: 'detail-section-title' });
         docsHeader.appendChild(el('span', { text: 'Attached Documents' }));
-
-        // Only Documentation Staff can upload (disabled in archive)
         if (isDocStaff && !isArchived) {
           const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload Scanned' });
           addDocBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddDocumentModal(t.id); });
           docsHeader.appendChild(addDocBtn);
         }
-
         docsSection.appendChild(docsHeader);
 
         const docsList = el('div', { class: 'details-content-list' });
@@ -3076,15 +3260,10 @@ const Workflow = {
           t.taskDocuments.forEach((d, dIdx) => {
             const item = el('div', { class: 'detail-item-v2', style: 'display:flex; justify-content:space-between; align-items:center;' });
             const leftSide = el('div', { style: 'display:flex; flex-direction:column;' });
-
             const fName = d.fileName || d.filename;
 
-            // Only Admin can click to view actual file
             if (isAdmin) {
-              const dmsDoc = DB.getWhere('documents', doc =>
-                (doc.fileName === fName) && doc.workRequestId === wr.id
-              )[0];
-
+              const dmsDoc = DB.getWhere('documents', doc => (doc.fileName === fName) && doc.workRequestId === wr.id)[0];
               if (dmsDoc && dmsDoc.dataUrl) {
                 const link = el('a', {
                   href: '#',
@@ -3095,71 +3274,49 @@ const Workflow = {
                   e.preventDefault();
                   e.stopPropagation();
                   const win = window.open();
-                  if (win) {
-                    win.document.write('<iframe src="' + dmsDoc.dataUrl + '" frameborder="0" style="position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;" allowfullscreen></iframe>');
-                  }
+                  if (win) win.document.write('<iframe src="' + dmsDoc.dataUrl + '" frameborder="0" style="position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;" allowfullscreen></iframe>');
                 });
                 leftSide.appendChild(link);
               } else {
                 leftSide.appendChild(el('span', { text: fName }));
               }
             } else {
-              // Non-admins see the name but cannot click/view
               leftSide.appendChild(el('span', { text: fName }));
             }
-
             leftSide.appendChild(el('span', { class: 'kpi-label', text: formatDate(d.uploadDate) }));
             item.appendChild(leftSide);
 
-            // Delete Button: Documentation Staff and Admin can remove
             if (isDocStaff || isAdmin) {
-              const delBtn = el('button', {
-                class: 'btn btn-ghost btn-xs',
-                text: '×',
-                style: 'color:var(--color-danger); font-size:1.2rem; padding:0 4px; line-height:1;'
-              });
+              const delBtn = el('button', { class: 'btn btn-ghost btn-xs', text: '×', style: 'color:var(--color-danger); font-size:1.2rem; padding:0 4px; line-height:1;' });
               delBtn.title = 'Remove Attachment';
               delBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showConfirm('Confirm Removal', `Are you sure you want to remove "${fName}" from this task?`, () => {
                   const updatedTaskDocs = t.taskDocuments.filter((_, i) => i !== dIdx);
                   DB.update('tasks', t.id, { taskDocuments: updatedTaskDocs });
-                  const dmsMatch = DB.getWhere('documents', doc =>
-                    doc.fileName === fName && doc.workRequestId === wr.id
-                  )[0];
+                  const dmsMatch = DB.getWhere('documents', doc => doc.fileName === fName && doc.workRequestId === wr.id)[0];
                   if (dmsMatch) DB.delete('documents', dmsMatch.id);
                   App.handleRoute();
                 }, 'danger');
               });
               item.appendChild(delBtn);
             }
-
             docsList.appendChild(item);
 
-            // --- Start of Comment Section ---
-            const commentToggle = el('button', {
-              class: 'btn btn-ghost btn-xs',
-              text: '💬 Comments' + (d.comments?.length ? ` (${d.comments.length})` : ''),
-              style: 'margin-left: 10px; font-size: 0.75rem; color: var(--color-text-muted);'
-            });
+            // Comments
+            const commentToggle = el('button', { class: 'btn btn-ghost btn-xs', text: '💬 Comments' + (d.comments?.length ? ` (${d.comments.length})` : ''), style: 'margin-left: 10px; font-size: 0.75rem; color: var(--color-text-muted);' });
             const commentContainer = el('div', { class: 'doc-comments-container hidden', style: 'margin: 8px 0 16px 20px; padding: 12px; background: #f8fafc; border-radius: 8px; border-left: 3px solid #cbd5e1;' });
-
-            commentToggle.addEventListener('click', (e) => {
-              e.stopPropagation();
-              commentContainer.classList.toggle('hidden');
-            });
+            commentToggle.addEventListener('click', (e) => { e.stopPropagation(); commentContainer.classList.toggle('hidden'); });
 
             const renderComments = () => {
               commentContainer.innerHTML = '';
               const list = el('div', { style: 'display:flex; flex-direction:column; gap:8px;' });
-
               if (!d.comments || d.comments.length === 0) {
                 list.appendChild(el('div', { class: 'empty-state', text: 'No comments for this document.', style: 'padding: 4px 0;' }));
               } else {
                 d.comments.forEach((c, cIdx) => {
                   const commentRow = el('div', { style: 'background:white; padding:8px 12px; border-radius:6px; border: 1px solid #e2e8f0; position:relative;' });
                   const cUser = DB.getById('users', c.userId);
-
                   const header = el('div', { style: 'display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.75rem;' });
                   header.appendChild(el('span', { text: cUser?.name || 'Unknown', style: 'font-weight:600; color:var(--color-primary);' }));
                   header.appendChild(el('span', { text: formatDate(c.date), style: 'color:var(--color-text-muted);' }));
@@ -3169,10 +3326,8 @@ const Workflow = {
                   contentArea.textContent = c.text;
                   commentRow.appendChild(contentArea);
 
-                  // Admin Actions: Edit/Delete (disabled in archive)
                   if (isAdmin && !isArchived) {
                     const cActions = el('div', { style: 'display:flex; gap:8px; margin-top:8px; border-top:1px solid #f1f5f9; padding-top:4px;' });
-
                     const editBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Edit', style: 'padding:0; font-size:0.7rem;' });
                     editBtn.addEventListener('click', (e) => {
                       e.stopPropagation();
@@ -3180,12 +3335,10 @@ const Workflow = {
                       contentArea.innerHTML = '';
                       const editInput = el('textarea', { class: 'form-control', style: 'width:100%; min-height:40px; font-size:0.875rem;', text: originalText });
                       contentArea.appendChild(editInput);
-
                       cActions.classList.add('hidden');
                       const editActions = el('div', { style: 'display:flex; gap:8px; margin-top:4px;' });
                       const saveEditBtn = el('button', { class: 'btn btn-primary btn-xs', text: 'Save' });
                       const cancelEditBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Cancel' });
-
                       saveEditBtn.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         const newText = editInput.value.trim();
@@ -3196,19 +3349,13 @@ const Workflow = {
                           renderComments();
                         }
                       });
-
-                      cancelEditBtn.addEventListener('click', (ev) => {
-                        ev.stopPropagation();
-                        renderComments();
-                      });
-
+                      cancelEditBtn.addEventListener('click', (ev) => { ev.stopPropagation(); renderComments(); });
                       editActions.appendChild(saveEditBtn);
                       editActions.appendChild(cancelEditBtn);
                       contentArea.appendChild(editActions);
                     });
-
-                    const delBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Delete', style: 'padding:0; font-size:0.7rem; color:var(--color-danger);' });
-                    delBtn.addEventListener('click', (e) => {
+                    const delCommentBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Delete', style: 'padding:0; font-size:0.7rem; color:var(--color-danger);' });
+                    delCommentBtn.addEventListener('click', (e) => {
                       e.stopPropagation();
                       this.showConfirm('Delete Comment', 'Are you sure you want to delete this comment?', () => {
                         d.comments.splice(cIdx, 1);
@@ -3217,9 +3364,8 @@ const Workflow = {
                         commentToggle.textContent = '💬 Comments' + (d.comments?.length ? ` (${d.comments.length})` : '');
                       }, 'danger');
                     });
-
                     cActions.appendChild(editBtn);
-                    cActions.appendChild(delBtn);
+                    cActions.appendChild(delCommentBtn);
                     commentRow.appendChild(cActions);
                   }
                   list.appendChild(commentRow);
@@ -3232,7 +3378,6 @@ const Workflow = {
                 const addInput = el('textarea', { placeholder: 'Write a comment...', class: 'form-control', style: 'width:100%; min-height:50px; font-size:0.875rem;' });
                 const addBtnRow = el('div', { style: 'display:flex; gap:8px; margin-top:8px;' });
                 const saveNewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Save Comment' });
-
                 saveNewBtn.addEventListener('click', (e) => {
                   e.stopPropagation();
                   const text = addInput.value.trim();
@@ -3245,26 +3390,23 @@ const Workflow = {
                     commentToggle.textContent = '💬 Comments' + (d.comments?.length ? ` (${d.comments.length})` : '');
                   }
                 });
-
                 addBtnRow.appendChild(saveNewBtn);
                 addForm.appendChild(addInput);
                 addForm.appendChild(addBtnRow);
                 commentContainer.appendChild(addForm);
               }
             };
-
             renderComments();
             docsList.appendChild(commentToggle);
             docsList.appendChild(commentContainer);
-            // --- End of Comment Section ---
           });
         }
         docsSection.appendChild(docsList);
         rightPane.appendChild(docsSection);
 
         // Time Log History Section
-        const timeSection = el('div', { class: 'task-details-col' });
-        const timeHeader = el('div', { class: 'details-section-title' });
+        const timeSection = el('div', { class: 'detail-block' });
+        const timeHeader = el('div', { class: 'detail-section-title' });
         timeHeader.appendChild(el('span', { text: 'Time Log History' }));
         const logTimeTopBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Log Time' });
         logTimeTopBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddTimeLogModal(t.id); });
@@ -3275,13 +3417,10 @@ const Workflow = {
         const logs = t.timeLogs || [];
         const checklistLogGroups = [];
         (t.checklist || []).forEach(item => {
-          if (item.timeLogs && item.timeLogs.length > 0) {
-            checklistLogGroups.push({ item, logs: item.timeLogs });
-          }
+          if (item.timeLogs && item.timeLogs.length > 0) checklistLogGroups.push({ item, logs: item.timeLogs });
         });
         if (logs.length === 0 && checklistLogGroups.length === 0) {
-          const emptyText = isArchived ? 'Archived — time logging disabled.' : 'No logs recorded.';
-          timeList.appendChild(el('div', { class: 'empty-state', text: emptyText }));
+          timeList.appendChild(el('div', { class: 'empty-state', text: isArchived ? 'Archived — time logging disabled.' : 'No logs recorded.' }));
         } else {
           const buildTimeLogEntry = (l) => {
             const [y, m, d] = l.date.split('-').map(Number);
@@ -3289,82 +3428,85 @@ const Workflow = {
             const dateStr = logDate.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
             const workerLabel = l.workerName || (DB.getById('users', l.userId)?.name || l.userId || 'Unknown');
             const noteText = l.note ? ` — ${l.note}` : '';
-            return el('div', { class: 'time-log-entry' }, [
-              el('span', { text: `${workerLabel} • ${dateStr} • ${l.startTime}–${l.endTime}${noteText}` }),
-              el('span', { text: `${l.hours}h` })
+            return el('div', { class: 'history-item' }, [
+              el('div', {}, [
+                el('strong', { text: workerLabel }),
+                el('span', { text: noteText }),
+                el('div', { class: 'history-meta', text: `${dateStr} • ${l.startTime}–${l.endTime}` })
+              ]),
+              el('span', { class: 'font-mono', text: `${l.hours}h` })
             ]);
           };
-
           const taskLevelLogs = logs.filter(l => !l.checklistItemId);
           if (taskLevelLogs.length > 0) {
-            const taskGroup = el('div', { class: 'time-log-group' });
-            taskGroup.appendChild(el('div', { class: 'time-log-group-title', text: 'Task-level logs' }));
             const sorted = [...taskLevelLogs].sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
-            sorted.forEach(l => taskGroup.appendChild(buildTimeLogEntry(l)));
-            timeList.appendChild(taskGroup);
+            sorted.forEach(l => timeList.appendChild(buildTimeLogEntry(l)));
           }
-
           checklistLogGroups.forEach(({ item, logs: itemLogs }) => {
-            const group = el('div', { class: 'time-log-group' });
-            group.appendChild(el('div', { class: 'time-log-group-title', text: item.text }));
             const sorted = [...itemLogs].sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
-            sorted.forEach(l => group.appendChild(buildTimeLogEntry(l)));
-            timeList.appendChild(group);
+            sorted.forEach(l => timeList.appendChild(buildTimeLogEntry(l)));
           });
         }
         timeSection.appendChild(timeList);
         rightPane.appendChild(timeSection);
 
-        // Dependency Mini-Map Section
-        const depSection = el('div', { class: 'task-details-col' });
-        const depHeader = el('div', { class: 'details-section-title' });
-        depHeader.appendChild(el('span', { text: 'Dependencies' }));
+        // Dependency map section
+        const depSection = el('div', { class: 'detail-block' });
+        const depHeader = el('div', { class: 'detail-section-title' });
+        depHeader.appendChild(el('span', { text: 'Dependency Map' }));
         depSection.appendChild(depHeader);
 
-        const depContent = el('div', { class: 'dependency-mini-map' });
+        const depContent = el('div', { class: 'dep-list' });
         const taskPreds = t.predecessors || [];
         const checklistDeps = (t.checklist || []).filter(item => item.dependsOn);
         if (taskPreds.length === 0 && checklistDeps.length === 0) {
-          depContent.appendChild(el('div', { text: 'No dependencies' }));
+          depContent.appendChild(el('div', { class: 'empty-state', text: 'No dependencies.' }));
         } else {
           taskPreds.forEach(pid => {
             const pTask = DB.getById('tasks', pid);
-            depContent.appendChild(el('div', { class: 'dep-chain', text: 'Task depends on: ' + (pTask ? pTask.title : 'Unknown') }));
+            const depItem = el('div', { class: 'dep-item' });
+            depItem.appendChild(el('span', { text: pTask ? pTask.title : 'Unknown' }));
+            depItem.appendChild(el('span', { class: 'dep-arrow', text: '→' }));
+            depItem.appendChild(el('span', { class: 'text-muted', text: t.title }));
+            depContent.appendChild(depItem);
           });
           checklistDeps.forEach(item => {
             const prereq = (t.checklist || []).find(c => c.id === item.dependsOn);
-            depContent.appendChild(el('div', { class: 'dep-chain', text: `${item.text} depends on ${prereq ? prereq.text : 'Unknown'}` }));
+            const depItem = el('div', { class: 'dep-item' });
+            depItem.appendChild(el('span', { text: prereq ? prereq.text : 'Unknown' }));
+            depItem.appendChild(el('span', { class: 'dep-arrow', text: '→' }));
+            depItem.appendChild(el('span', { class: 'text-muted', text: `${t.title}: ${item.text}` }));
+            depContent.appendChild(depItem);
           });
         }
         depSection.appendChild(depContent);
         rightPane.appendChild(depSection);
 
-        detailsPanes.appendChild(leftPane);
-        detailsPanes.appendChild(rightPane);
-        detailsContainer.appendChild(detailsPanes);
+        detailsDiv.appendChild(leftPane);
+        detailsDiv.appendChild(rightPane);
+        groupEl.appendChild(detailsDiv);
 
-        detailsTd.appendChild(detailsContainer);
-        detailsTr.appendChild(detailsTd);
-        tbody.appendChild(detailsTr);
-
-        tr.addEventListener('click', () => {
-          tr.classList.toggle('expanded');
-          detailsTr.classList.toggle('hidden');
-          detailsTr.classList.toggle('collapsed');
+        // Row expand listener
+        rowEl.addEventListener('click', (e) => {
+          if (e.target.closest('input, select, button, .actions-cell, .inline-coassignee-dropdown, .inline-ground-worker-autocomplete')) return;
+          rowEl.classList.toggle('expanded');
+          detailsDiv.classList.toggle('hidden');
+          detailsDiv.classList.toggle('collapsed');
         });
       });
-      table.appendChild(tbody);
 
-      // Aligned Footer Totals
-      const tfoot = el('tfoot');
-      const footTr = el('tr', { style: 'font-weight: bold;' });
-      for(let i=0; i<6; i++) footTr.appendChild(el('td')); // Empty placeholders (columns 1 to 6)
-      footTr.appendChild(el('td', { text: `${totalHours} hrs` })); // Time column total
-      footTr.appendChild(el('td')); // Actions column empty
-      tfoot.appendChild(footTr);
-      table.appendChild(tfoot);
+      // Footer totals row
+      const footerRow = el('div', {
+        class: 'task-row-footer',
+        style: 'display: grid; grid-template-columns: 36px 1.6fr 1.3fr 110px 120px 120px 90px 110px 110px; font-weight: bold; border-top: 2px solid var(--color-border); padding: 12px 16px;'
+      });
+      for (let i = 0; i < 7; i++) {
+        footerRow.appendChild(el('div'));
+      }
+      footerRow.appendChild(el('div', { text: `${totalHours} hrs` }));
+      footerRow.appendChild(el('div'));
+      groupEl.appendChild(footerRow);
 
-      groupEl.appendChild(table);
       listWrapper.appendChild(groupEl);
     }
 
@@ -3375,11 +3517,13 @@ const Workflow = {
 
     container.appendChild(listWrapper);
 
-    // Related Records Panel (Section 3B.7)
-    const relatedSection = el('div', { class: 'form-section', style: 'margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 24px;' });
-    relatedSection.appendChild(el('h3', { text: 'Related Financials & Documents' }));
+    // Related Financials & Documents (Redesign card pattern)
+    const relatedSection = el('div', { class: 'card', style: 'margin-top: 32px;' });
+    const relatedHeader = el('div', { class: 'card-header' });
+    relatedHeader.appendChild(el('div', { class: 'card-title', text: 'Related Financials & Documents' }));
+    relatedSection.appendChild(relatedHeader);
 
-    const grid = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px;' });
+    const grid = el('div', { class: 'financials-grid' });
 
     // Fetch related records
     const approvedInvs = DB.getWhere('invoices', inv => inv.workRequestId === wr.id || wr.linkedInvoiceId === inv.id);
@@ -3407,8 +3551,8 @@ const Workflow = {
     const transmittals = DB.getWhere('transmittals', t => t.workRequestId === wr.id || (wr.linkedTransmittalIds || []).includes(t.id));
 
     // Invoices Column
-    const invCol = el('div', { class: 'card', style: 'padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: white;' });
-    invCol.appendChild(el('h4', { text: '📄 Invoices / Billings', style: 'margin-bottom: 12px; color: #1e3a8a; font-size: 0.95rem; font-weight: 600; border-bottom: 2px solid #3b82f6; padding-bottom: 6px;' }));
+    const invCol = el('div', { class: 'financial-card' });
+    invCol.appendChild(el('h4', { text: '📄 Invoices / Billings' }));
     if (invoices.length === 0) {
       invCol.appendChild(el('p', { text: 'No linked invoices.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
     } else {
@@ -3465,8 +3609,8 @@ const Workflow = {
     grid.appendChild(invCol);
 
     // Disbursements Column
-    const disbCol = el('div', { class: 'card', style: 'padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: white;' });
-    disbCol.appendChild(el('h4', { text: '💸 Expenses / Disbursements', style: 'margin-bottom: 12px; color: #b45309; font-size: 0.95rem; font-weight: 600; border-bottom: 2px solid #f59e0b; padding-bottom: 6px;' }));
+    const disbCol = el('div', { class: 'financial-card' });
+    disbCol.appendChild(el('h4', { text: '💸 Expenses / Disbursements' }));
     if (disbursements.length === 0) {
       disbCol.appendChild(el('p', { text: 'No linked disbursements.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
     } else {
@@ -3502,8 +3646,8 @@ const Workflow = {
     grid.appendChild(disbCol);
 
     // Transmittals Column
-    const transCol = el('div', { class: 'card', style: 'padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: white;' });
-    transCol.appendChild(el('h4', { text: '📦 Transmittals', style: 'margin-bottom: 12px; color: #065f46; font-size: 0.95rem; font-weight: 600; border-bottom: 2px solid #10b981; padding-bottom: 6px;' }));
+    const transCol = el('div', { class: 'financial-card' });
+    transCol.appendChild(el('h4', { text: '📦 Transmittals' }));
     if (transmittals.length === 0) {
       transCol.appendChild(el('p', { text: 'No linked transmittals.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
     } else {
@@ -4180,57 +4324,41 @@ const Workflow = {
   renderModernProgressBar(status) {
     const stages = ['Work Request', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Documentation'];
     const map = { 'Draft': 0, 'Pre-processing': 1, 'Processing': 2, 'Billing': 3, 'Disbursement': 4, 'Completed': 5, 'Cancelled': 5 };
-    const current = map[status] ?? 0;
+    const currentIdx = map[status] ?? 0;
 
-    const phaseColors = {
-      'Draft': '#94a3b8',
-      'Pre-processing': '#3b82f6',
-      'Processing': '#f59e0b',
-      'Billing': '#a855f7',
-      'Disbursement': '#6366f1',
-      'Completed': '#10b981',
-      'Cancelled': '#ef4444'
-    };
-    const activeColor = phaseColors[status] || '#94a3b8';
+    const tracker = el('div', { class: 'stage-tracker', 'aria-label': 'Work request stage' });
 
-    const wrapper = el('div', { class: 'modern-progress-wrapper' });
-    const track = el('div', { class: 'modern-progress-track' });
-
-    // Calculate fill width
-    const fillPercent = (current / (stages.length - 1)) * 100;
-    const fill = el('div', { class: 'modern-progress-fill', style: `width: ${fillPercent}%; background: ${activeColor};` });
-    track.appendChild(fill);
-
-    stages.forEach((s, i) => {
-      const step = el('div', { class: 'modern-progress-step' });
-      const dot = el('div', { class: 'modern-progress-dot' });
-      if (i <= current) {
-        dot.classList.add('completed');
-        dot.style.background = activeColor;
-        dot.style.borderColor = activeColor;
-      }
-      if (i === current) {
-        dot.classList.add('active');
-        dot.style.borderColor = activeColor;
-        dot.style.boxShadow = `0 0 0 4px ${activeColor}33`;
+    stages.forEach((stageName, i) => {
+      let stageClass = 'stage';
+      if (i < currentIdx) {
+        stageClass = 'stage completed';
+      } else if (i === currentIdx) {
+        stageClass = 'stage active';
       }
 
-      const label = el('div', { class: 'modern-progress-label', text: s });
-      if (i === current) {
-        label.classList.add('active');
-        label.style.color = activeColor;
+      const stageEl = el('div', { class: stageClass });
+      
+      const dotEl = i < currentIdx 
+        ? el('div', { class: 'stage-dot', html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>` })
+        : el('div', { class: 'stage-dot', text: String(i + 1) });
+
+      const labelEl = el('span', { class: 'stage-label', text: stageName });
+
+      stageEl.appendChild(dotEl);
+      stageEl.appendChild(labelEl);
+      tracker.appendChild(stageEl);
+
+      if (i < stages.length - 1) {
+        let connClass = 'stage-connector';
+        if (i < currentIdx) {
+          connClass = 'stage-connector completed';
+        }
+        const connectorEl = el('div', { class: connClass });
+        tracker.appendChild(connectorEl);
       }
-
-      step.appendChild(dot);
-      step.appendChild(label);
-
-      // Position the step evenly
-      step.style.left = `${(i / (stages.length - 1)) * 100}%`;
-      track.appendChild(step);
     });
 
-    wrapper.appendChild(track);
-    return wrapper;
+    return tracker;
   },
 
   renderTaskActivity(tasks) {

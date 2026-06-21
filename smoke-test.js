@@ -163,7 +163,7 @@ async function runTests() {
   if (wrCard) {
     await wrCard.click();
     await page.waitForTimeout(800);
-    const expandRows = await page.$$('tr.task-expand');
+    const expandRows = await page.$$('.task-row');
     const accordions = await page.$$('.accordion-panel');
     const collapsedPanels = await page.$$('.accordion-panel.collapsed');
     await log('Task Accordion Panels (#15, #19)', expandRows.length > 0 && accordions.length >= 3, `expand rows=${expandRows.length}, accordion panels=${accordions.length}, collapsed=${collapsedPanels.length}`);
