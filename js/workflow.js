@@ -321,6 +321,13 @@ const Workflow = {
    * Returns the overlay element so callers can remove it.
    */
   showModal(title, bodyEl, onClose) {
+    // Prevent duplicate modals with the same title
+    const existing = Array.from(document.querySelectorAll('.modal-overlay')).find(o => {
+      const titleEl = o.querySelector('.modal-title');
+      return titleEl && titleEl.textContent.trim() === title.trim();
+    });
+    if (existing) return existing;
+
     const overlay = el('div', { class: 'modal-overlay' });
     const modal = el('div', { class: 'modal' });
     const header = el('div', { class: 'modal-header' });
