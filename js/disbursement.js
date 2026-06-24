@@ -1348,7 +1348,7 @@ const Disbursement = {
         </div>` : `
         <div class="logo-box">
           <img class="logo-img" src="ERP_Assets/${entity === 'LTA' ? 'LTA-LOGO.jpg' : 'ATA-LOGO.jpg'}" alt="${entity} Logo">
-          ${entity === 'ATA' ? `<span style="font-size: 14pt; font-weight: 700; color: #0f172a; letter-spacing: 0.5px; white-space: nowrap;">ATA Accounting Services Firm</span>` : ''}
+          <span style="font-size: 14pt; font-weight: 700; color: #0f172a; letter-spacing: 0.5px; white-space: nowrap;">${entity} Accounting Services Firm</span>
         </div>
         <div class="title-box">
           <h1 class="doc-title">Expense Report</h1>
@@ -1609,7 +1609,7 @@ const Disbursement = {
         </div>` : `
         <div class="logo-box">
           <img class="logo-img" src="ERP_Assets/${entity === 'LTA' ? 'LTA-LOGO.jpg' : 'ATA-LOGO.jpg'}" alt="${entity} Logo">
-          ${entity === 'ATA' ? `<span style="font-size: 14pt; font-weight: 700; color: #0f172a; letter-spacing: 0.5px; white-space: nowrap;">ATA Accounting Services Firm</span>` : ''}
+          <span style="font-size: 14pt; font-weight: 700; color: #0f172a; letter-spacing: 0.5px; white-space: nowrap;">${entity} Accounting Services Firm</span>
         </div>
         <div class="title-box">
           <h1 class="doc-title">Payment Voucher</h1>
