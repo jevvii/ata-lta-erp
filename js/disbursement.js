@@ -1251,7 +1251,7 @@ const Disbursement = {
       @page { size: A4; margin: 15mm 20mm; }
       body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; line-height: 1.5; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 0; }
       .header-container { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; border-bottom: 2px solid #1e293b; padding-bottom: 12px; }
-      .logo-box { max-height: 55px; }
+      .logo-box { display: flex; align-items: center; gap: 12px; max-height: 55px; }
       .logo-img { ${entity === 'LTA' ? 'height: 42px; margin-bottom: 5px;' : 'height: 55px;'} display: block; }
       .title-box { text-align: right; }
       .doc-title { font-size: 18pt; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #0f172a; margin: 0; }
@@ -1348,6 +1348,7 @@ const Disbursement = {
         </div>` : `
         <div class="logo-box">
           <img class="logo-img" src="ERP_Assets/${entity === 'LTA' ? 'LTA-LOGO.jpg' : 'ATA-LOGO.jpg'}" alt="${entity} Logo">
+          ${entity === 'ATA' ? `<span style="font-size: 14pt; font-weight: 700; color: #0f172a; letter-spacing: 0.5px; white-space: nowrap;">ATA Accounting Services Firm</span>` : ''}
         </div>
         <div class="title-box">
           <h1 class="doc-title">Expense Report</h1>
@@ -1480,7 +1481,7 @@ const Disbursement = {
       @page { size: A4; margin: 15mm 20mm; }
       body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; line-height: 1.5; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 0; }
       .header-container { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; border-bottom: 2px solid #1e293b; padding-bottom: 12px; }
-      .logo-box { max-height: 55px; }
+      .logo-box { display: flex; align-items: center; gap: 12px; max-height: 55px; }
       .logo-img { ${entity === 'LTA' ? 'height: 42px; margin-bottom: 5px;' : 'height: 55px;'} display: block; }
       .title-box { text-align: right; }
       .doc-title { font-size: 18pt; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #0f172a; margin: 0; }
@@ -1608,6 +1609,7 @@ const Disbursement = {
         </div>` : `
         <div class="logo-box">
           <img class="logo-img" src="ERP_Assets/${entity === 'LTA' ? 'LTA-LOGO.jpg' : 'ATA-LOGO.jpg'}" alt="${entity} Logo">
+          ${entity === 'ATA' ? `<span style="font-size: 14pt; font-weight: 700; color: #0f172a; letter-spacing: 0.5px; white-space: nowrap;">ATA Accounting Services Firm</span>` : ''}
         </div>
         <div class="title-box">
           <h1 class="doc-title">Payment Voucher</h1>
