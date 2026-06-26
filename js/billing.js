@@ -1738,11 +1738,11 @@ const Billing = {
       .payment-details-row {
         display: flex;
         margin-bottom: 6px;
-        align-items: flex-end;
+        align-items: baseline;
       }
       .payment-details-row span:first-child {
         width: 130px;
-        text-align: right;
+        text-align: left;
         margin-right: 8px;
         white-space: nowrap;
         flex-shrink: 0;
@@ -1750,7 +1750,6 @@ const Billing = {
       .fill-line {
         flex-grow: 1;
         border-bottom: 1px dotted #000;
-        height: 12px;
       }
       .total-box-container {
         width: 50%;
