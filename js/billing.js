@@ -1747,7 +1747,9 @@ const Billing = {
       .fill-line {
         flex-grow: 1;
         border-bottom: 1px dotted #000;
-        height: 12px;
+        min-height: 12px;
+        margin-right: 15px;
+        padding-bottom: 1px;
       }
       .total-box-container {
         width: 50%;
