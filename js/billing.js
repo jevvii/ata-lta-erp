@@ -1741,8 +1741,11 @@ const Billing = {
         align-items: flex-end;
       }
       .payment-details-row span:first-child {
-        margin-right: 5px;
+        width: 130px;
+        text-align: right;
+        margin-right: 8px;
         white-space: nowrap;
+        flex-shrink: 0;
       }
       .fill-line {
         flex-grow: 1;
@@ -1965,7 +1968,7 @@ const Billing = {
       balanceForwardRow = `
         <tr>
           <td></td>
-          <td style="font-weight: bold;">BALANCE FORWARD:</td>
+          <td style="font-weight: bold; text-align: right;">BALANCE FORWARD:</td>
           <td></td>
         </tr>
       `;
@@ -1973,7 +1976,7 @@ const Billing = {
       balanceForwardRow = `
         <tr>
           <td></td>
-          <td style="font-weight: bold;">BALANCE FORWARD:</td>
+          <td style="font-weight: bold; text-align: right;">BALANCE FORWARD:</td>
           <td></td>
           <td></td>
         </tr>
@@ -2066,7 +2069,7 @@ const Billing = {
           <div class="payment-details-title">PAYMENT DETAILS:</div>
           <div class="payment-details-row"><span>DATE:</span><span class="fill-line" style="padding-left: 5px; font-weight: bold;">${dateVal}</span></div>
           <div class="payment-details-row"><span>CASH:</span><span class="fill-line" style="padding-left: 5px; font-weight: bold;">${cashVal}</span></div>
-          <div class="payment-details-row"><span>DATE/CHECK NO.</span><span class="fill-line" style="padding-left: 5px; font-weight: bold;">${checkVal}</span></div>
+          <div class="payment-details-row"><span>DATE/CHECK NO.:</span><span class="fill-line" style="padding-left: 5px; font-weight: bold;">${checkVal}</span></div>
           <div class="payment-details-row"><span>BANK/BRANCH:</span><span class="fill-line" style="padding-left: 5px; font-weight: bold;">${bankVal}</span></div>
         </div>
         <div class="total-box-container" style="width: 50%;">
