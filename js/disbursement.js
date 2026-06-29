@@ -1369,11 +1369,6 @@ const Disbursement = {
     const amountInWords = this._numberToWords(d.amount) + ' PESOS ONLY';
     const cleanAmountString = formatPHP(d.amount).replace('₱', '').trim();
 
-    const thankYouText = 'THANK YOU !!!';
-    const entityFooterContact = entity === 'LTA' 
-      ? 'Should you have any enquiries concerning this statement, please contact us on 742-8582/404-4928.<br>' 
-      : '';
-
     doc.body.innerHTML = `
       <div class="header-container" style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; border-bottom: 2px solid #1e293b; padding-bottom: 12px;">
         <div class="logo-box">
@@ -1472,13 +1467,6 @@ const Disbursement = {
             <span>Released By / Date</span>
           </div>
         </div>
-      </div>
-
-      <div class="footer">
-        <div class="thank-you">${thankYouText}</div>
-        ${noLogo ? '' : entityFooterContact}
-        This Expense Report is issued for internal audit and reimbursement tracking purposes.<br>
-        <span style="font-weight: 600; text-transform: uppercase; font-size: 7.5pt; letter-spacing: 0.5px; color: #475569; display: block; margin-top: 4px;">This document is not valid for claim of input tax.</span>
       </div>
     `;
 
