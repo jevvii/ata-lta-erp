@@ -261,6 +261,13 @@ async function runTests() {
   await page.click('.side-pane-form-footer button:has-text("Cancel")');
   await page.waitForTimeout(300);
 
+  const sidePaneOpen = await page.$('#global-side-pane.open');
+  const isSidePaneVisible = sidePaneOpen !== null;
+  await log('Disbursement side pane closed after Cancel (#2)', !isSidePaneVisible);
+  if (isSidePaneVisible) {
+    throw new Error('Disbursement side pane is still visible after clicking footer Cancel');
+  }
+
   // ─── TEST 16: Reports month filter ──────────────────────────────
   await logout();
   await loginAs(SEED_USERS[0]);
