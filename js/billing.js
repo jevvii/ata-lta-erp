@@ -62,10 +62,6 @@ const Billing = {
       container.appendChild(titleBar);
     } else {
       container.classList.add('billing-tab-page');
-      const viewMode = App.getPreferredViewMode('billing') || 'table';
-      if (this.view === 'list' && viewMode === 'board') {
-        container.classList.add('billing-board-view');
-      }
       // Tab views: list, templates, aging, trash
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       titleBar.appendChild(el('h1', { text: 'Billing' }));
@@ -108,6 +104,13 @@ const Billing = {
       tabNavHeight = tabNav.getBoundingClientRect().height;
     }
     document.documentElement.style.setProperty('--billing-tab-nav-height', `${tabNavHeight}px`);
+
+    const toolbar = document.querySelector('.billing-tab-page .toolbar-sticky-container');
+    let toolbarHeight = 0;
+    if (toolbar) {
+      toolbarHeight = toolbar.getBoundingClientRect().height;
+    }
+    document.documentElement.style.setProperty('--billing-toolbar-height', `${toolbarHeight}px`);
   },
 
   renderTabNav() {

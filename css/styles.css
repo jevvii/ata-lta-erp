@@ -1139,17 +1139,17 @@ tbody tr:hover {
   margin-top: -8px;
 }
 
-.billing-board-view {
-  height: calc(100vh - 64px);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+.billing-tab-page .board-v2 {
+  overflow: visible;
+  min-height: auto;
 }
 
-.billing-board-view .board-v2 {
-  flex: 1;
-  min-height: 0;
-  overflow-y: hidden;
+.billing-tab-page .board-column-v2 {
+  max-height: none;
+}
+
+.billing-tab-page .board-cards-scroll {
+  overflow-y: visible;
 }
 
 .billing-tab-page .toolbar-sticky-container {
@@ -1175,7 +1175,9 @@ tbody tr:hover {
 }
 
 .billing-tab-page .board-column-header-v2 {
-  top: 0;
+  position: sticky;
+  top: calc(var(--billing-title-bar-height, 48px) + var(--billing-tab-nav-height, 45px) + var(--billing-toolbar-height, 0px));
+  z-index: 20;
 }
 .module-tab-link {
   display: inline-flex;
