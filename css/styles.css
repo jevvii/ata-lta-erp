@@ -1129,7 +1129,7 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   gap: var(--space-2, 8px);
-  border-bottom: 1px solid var(--color-border, #e5e5e5);
+  border-bottom: 1px solid #d1d5db;
   margin-bottom: var(--space-6, 24px);
 }
 .module-tab-link {
