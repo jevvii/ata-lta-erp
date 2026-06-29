@@ -3007,7 +3007,7 @@ tbody tr:hover {
   position: sticky;
   top: -20px;
   margin-top: -20px;
-  padding: 20px 0 16px;
+  padding: 20px 0 8px;
   margin-bottom: 0;
   background: var(--color-bg);
   z-index: 30;

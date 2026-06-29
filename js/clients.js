@@ -44,13 +44,30 @@ const Clients = {
     // Toolbar (Sticky Container)
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
     const filters = el('div', { class: 'filters-bar' });
+    const searchWrapper = el('div', { style: 'position: relative; display: flex; align-items: center; width: 100%; max-width: 320px;' });
+    
+    const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    searchIcon.setAttribute('width', '14');
+    searchIcon.setAttribute('height', '14');
+    searchIcon.setAttribute('viewBox', '0 0 24 24');
+    searchIcon.setAttribute('fill', 'none');
+    searchIcon.setAttribute('stroke', 'currentColor');
+    searchIcon.setAttribute('stroke-width', '2.5');
+    searchIcon.setAttribute('stroke-linecap', 'round');
+    searchIcon.setAttribute('stroke-linejoin', 'round');
+    searchIcon.setAttribute('style', 'position: absolute; left: 12px; color: var(--color-text-muted); pointer-events: none;');
+    searchIcon.innerHTML = '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>';
+    
     const search = el('input', {
       type: 'text',
       placeholder: 'Search by taxpayer, trade name, or TIN...',
       class: 'form-control search-input',
-      style: 'max-width: 320px;'
+      style: 'width: 100%; padding-left: 36px; max-width: 320px;'
     });
-    filters.appendChild(search);
+    
+    searchWrapper.appendChild(searchIcon);
+    searchWrapper.appendChild(search);
+    filters.appendChild(searchWrapper);
     stickyContainer.appendChild(filters);
     container.appendChild(stickyContainer);
 
@@ -131,7 +148,7 @@ const Clients = {
 
     const tabs = [
       { key: 'active', label: 'Active Clients', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', count: activeCount },
-      { key: 'archived', label: 'Archived Clients', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>', count: archivedCount }
+      { key: 'archived', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archivedCount }
     ];
 
     tabs.forEach(tab => {
