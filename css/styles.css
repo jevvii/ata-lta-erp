@@ -2539,8 +2539,23 @@ tbody tr:hover {
   border-radius: var(--radius-md, 12px) var(--radius-md, 12px) 0 0;
 }
 
+.project-detail-v2 .board-v2 {
+  overflow: visible;
+  min-height: calc(100vh - var(--project-detail-title-bar-height, 48px) - var(--project-detail-toolbar-height, 40px) - 250px);
+}
+
+.project-detail-v2 .board-column-v2 {
+  max-height: none;
+}
+
+.project-detail-v2 .board-cards-scroll {
+  overflow-y: visible;
+}
+
 .project-detail-v2 .board-column-header-v2 {
-  top: 132px;
+  position: sticky;
+  top: calc(var(--project-detail-title-bar-height, 48px) + var(--project-detail-toolbar-height, 40px));
+  z-index: 20;
 }
 
 
@@ -7724,6 +7739,9 @@ tbody tr:hover {
 .project-detail-v2 .task-view-toolbar {
   background: var(--bg);
   border-bottom-color: var(--border);
+  position: sticky;
+  top: var(--project-detail-title-bar-height, 48px);
+  z-index: 25;
 }
 
 .project-detail-v2 .card-compact {

@@ -1483,6 +1483,21 @@ const Workflow = {
       toolbarHeight = toolbar.getBoundingClientRect().height;
     }
     document.documentElement.style.setProperty('--operations-toolbar-height', `${toolbarHeight}px`);
+
+    // Project Detail view sticky offsets
+    const detailTitleBar = document.querySelector('.project-detail-v2 .page-title-bar-v2');
+    let detailTitleBarHeight = 48; // default fallback
+    if (detailTitleBar) {
+      detailTitleBarHeight = detailTitleBar.getBoundingClientRect().height - 20;
+    }
+    document.documentElement.style.setProperty('--project-detail-title-bar-height', `${detailTitleBarHeight}px`);
+
+    const detailToolbar = document.querySelector('.project-detail-v2 .task-view-toolbar');
+    let detailToolbarHeight = 40; // default fallback
+    if (detailToolbar) {
+      detailToolbarHeight = detailToolbar.getBoundingClientRect().height;
+    }
+    document.documentElement.style.setProperty('--project-detail-toolbar-height', `${detailToolbarHeight}px`);
   },
 
   renderTabNav() {
