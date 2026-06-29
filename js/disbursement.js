@@ -41,38 +41,12 @@ const Disbursement = {
       actions.appendChild(backBtn);
       titleBar.appendChild(actions);
       container.appendChild(titleBar);
-    } else if (this.view === 'templates') {
+    } else if (this.view === 'list' || this.view === 'templates' || this.view === 'report') {
+      container.classList.add('disbursement-tab-page');
       const titleBar = el('div', { class: 'page-title-bar-v2' });
-      const h1 = el('h1', { class: 'breadcrumb-h1' });
-      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Disbursement' });
-      baseLink.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
-      h1.appendChild(baseLink);
-      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-      h1.appendChild(document.createTextNode('Templates'));
-      titleBar.appendChild(h1);
-      
-      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
-      backBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
-      titleBar.appendChild(backBtn);
+      titleBar.appendChild(el('h1', { text: 'Disbursement' }));
       container.appendChild(titleBar);
-    } else if (this.view === 'report') {
-      const titleBar = el('div', { class: 'page-title-bar-v2' });
-      const h1 = el('h1', { class: 'breadcrumb-h1' });
-      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Disbursement' });
-      baseLink.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
-      h1.appendChild(baseLink);
-      h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-      h1.appendChild(document.createTextNode('Summary Report'));
-      titleBar.appendChild(h1);
-
-      const actions = el('div', { class: 'title-bar-actions' });
-      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
-      backBtn.addEventListener('click', () => { this.view = 'list'; App.handleRoute(); });
-      actions.appendChild(backBtn);
-      titleBar.appendChild(actions);
-      container.appendChild(titleBar);
-    } else {
-      container.appendChild(el('h1', { text: 'Disbursement' }));
+      container.appendChild(this.renderTabNav());
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
@@ -81,10 +55,137 @@ const Disbursement = {
     else if (this.view === 'report') container.appendChild(this.renderReport());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
 
+    setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
   },
 
-  init() {},
+  init() {
+    this.updateStickyOffsets();
+  },
+
+  updateStickyOffsets() {
+    App.updateStickyOffsets();
+  },
+
+  renderTabNav() {
+    const tabNav = el('div', { class: 'module-tab-nav' });
+
+    const entity = Auth.activeEntity;
+    const dbCount = DB.getWhere('disbursements', d => {
+      const dEnt = (d.entity || '').toUpperCase();
+      if (entity === 'ALL') {
+        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(dEnt);
+      }
+      return dEnt === entity.toUpperCase();
+    }).length;
+
+    const templateCount = DB.getWhere('disbursementTemplates', t => {
+      const tEnt = (t.entity || '').toUpperCase();
+      if (entity === 'ALL') {
+        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(tEnt);
+      }
+      return tEnt === entity.toUpperCase();
+    }).length;
+
+    const tabs = [
+      { key: 'list', label: 'Disbursements', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: dbCount },
+      { key: 'templates', label: 'Templates', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>', count: templateCount },
+      { key: 'report', label: 'Summary Report', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' }
+    ];
+
+    tabs.forEach(tab => {
+      const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
+      btn.appendChild(parseHTML(tab.icon));
+      btn.appendChild(document.createTextNode(' ' + tab.label));
+      if (tab.count !== undefined) {
+        btn.appendChild(document.createTextNode(' '));
+        btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
+      }
+      btn.addEventListener('click', () => {
+        this.view = tab.key;
+        App.handleRoute();
+      });
+      tabNav.appendChild(btn);
+    });
+
+    const canCreate = Auth.can('disbursement:create');
+    const canRequest = Auth.can('disbursement:request');
+
+    if (canCreate && canRequest) {
+      const wrapper = el('div', { class: 'split-btn-group' });
+
+      const primaryBtn = el('button', {
+        class: 'btn btn-primary btn-sm split-btn-left'
+      });
+      primaryBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> File Expense';
+      primaryBtn.addEventListener('click', () => {
+        this.detailId = null;
+        openFormPanel({
+          icon: '💰', title: 'File Expense',
+          formContent: this.renderForm(), formId: 'disbursement-form',
+          actions: [
+            { text: 'Submit Expense', class: 'btn btn-primary', type: 'submit', form: 'disbursement-form', testId: 'submit-expense-btn' },
+            { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement'), testId: 'cancel-expense-btn' }
+          ]
+        });
+      });
+      wrapper.appendChild(primaryBtn);
+
+      const toggleBtn = el('button', {
+        class: 'btn btn-primary btn-sm split-btn-right'
+      });
+      toggleBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+      wrapper.appendChild(toggleBtn);
+
+      const menu = el('div', { class: 'dropdown-menu split-btn-menu hidden' });
+
+      const requestItem = el('button', { class: 'dropdown-item' });
+      requestItem.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> Request Disbursement';
+      requestItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.classList.add('hidden');
+        Disbursement.showRequestDisbursementModal();
+      });
+
+      menu.appendChild(requestItem);
+      wrapper.appendChild(menu);
+
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.classList.toggle('hidden');
+      });
+
+      tabNav.appendChild(wrapper);
+    } else if (canCreate) {
+      const addBtn = el('button', {
+        class: 'btn btn-primary btn-sm',
+        style: 'margin-left: 16px; display: inline-flex; align-items: center; gap: 6px;',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> File Expense'
+      });
+      addBtn.addEventListener('click', () => {
+        this.detailId = null;
+        openFormPanel({
+          icon: '💰', title: 'File Expense',
+          formContent: this.renderForm(), formId: 'disbursement-form',
+          actions: [
+            { text: 'Submit Expense', class: 'btn btn-primary', type: 'submit', form: 'disbursement-form', testId: 'submit-expense-btn' },
+            { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement'), testId: 'cancel-expense-btn' }
+          ]
+        });
+      });
+      tabNav.appendChild(addBtn);
+    } else if (canRequest) {
+      const reqBtn = el('button', {
+        class: 'btn btn-primary btn-sm',
+        style: 'margin-left: 16px; display: inline-flex; align-items: center; gap: 6px;'
+      });
+      reqBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> Request Disbursement';
+      reqBtn.addEventListener('click', () => { Disbursement.showRequestDisbursementModal(); });
+      tabNav.appendChild(reqBtn);
+    }
+
+    return tabNav;
+  },
 
   getFundSource(item) {
     if (item.fundSource) return item.fundSource;
@@ -137,39 +238,11 @@ const Disbursement = {
     const entity = Auth.activeEntity;
     const viewMode = App.getPreferredViewMode('disbursement');
 
-    const actions = el('div', { class: 'actions-bar' });
-    if (Auth.can('disbursement:create')) {
-      const addBtn = el('button', { class: 'btn btn-primary', text: 'File Expense' });
-      addBtn.addEventListener('click', () => {
-        this.detailId = null;
-        openFormPanel({
-          icon: '💰', title: 'File Expense',
-          formContent: this.renderForm(), formId: 'disbursement-form',
-          actions: [
-            { text: 'Submit Expense', class: 'btn btn-primary', type: 'submit', form: 'disbursement-form', testId: 'submit-expense-btn' },
-            { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement'), testId: 'cancel-expense-btn' }
-          ]
-        });
-      });
-      actions.appendChild(addBtn);
-
-      const templatesBtn = el('button', { class: 'btn btn-secondary', text: 'Templates' });
-      templatesBtn.addEventListener('click', () => { this.view = 'templates'; App.handleRoute(); });
-      actions.appendChild(templatesBtn);
-    }
-
-    const reportBtn = el('button', { class: 'btn btn-secondary', text: 'Summary Report' });
-    reportBtn.addEventListener('click', () => { this.view = 'report'; App.handleRoute(); });
-    actions.appendChild(reportBtn);
-
-    if (Auth.can('disbursement:request')) {
-      const reqBtn = el('button', { class: 'btn btn-primary', text: 'Request Disbursement from Accounting' });
-      reqBtn.addEventListener('click', () => { Disbursement.showRequestDisbursementModal(); });
-      actions.appendChild(reqBtn);
-    }
-
     const wrapper = el('div');
-    wrapper.appendChild(actions);
+    const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
+    const filters = el('div', { class: 'filters-bar' });
+
+
 
     // Pending operations requests banner
     if (Auth.can('disbursement:create')) {
@@ -230,9 +303,6 @@ const Disbursement = {
       wrapper.appendChild(pfrSection);
     }
 
-    // Filters bar
-    const filtersBar = el('div', { class: 'filters-bar' });
-
     const wrFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
     wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
     DB.getWhere('workRequests', wr => {
@@ -245,7 +315,7 @@ const Disbursement = {
       const client = DB.getById('clients', wr.clientId);
       wrFilter.appendChild(el('option', { value: wr.id, text: wr.title + ' — ' + (client?.name || '—') }));
     });
-    filtersBar.appendChild(wrapFilterFieldWithClear(wrFilter));
+    filters.appendChild(wrapFilterFieldWithClear(wrFilter));
 
     const clientOptions = [{ value: '', text: 'All Clients' }];
     DB.getWhere('clients', c => {
@@ -258,7 +328,7 @@ const Disbursement = {
       clientOptions.push({ value: c.id, text: c.name });
     });
     const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '180px' });
-    filtersBar.appendChild(clientFilter);
+    filters.appendChild(clientFilter);
 
     const empOptions = [{ value: '', text: 'All Employees' }];
     DB.getWhere('users', u => Auth.ALL_ROLES.includes(u.role)).forEach(u => {
@@ -271,30 +341,30 @@ const Disbursement = {
       }
     });
     const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions, maxWidth: '180px' });
-    filtersBar.appendChild(empFilter);
+    filters.appendChild(empFilter);
 
     const fundFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
     fundFilter.appendChild(el('option', { value: '', text: 'All Funds' }));
     ['Firm Fund', 'Client Fund'].forEach(f => fundFilter.appendChild(el('option', { value: f, text: f })));
-    filtersBar.appendChild(wrapFilterFieldWithClear(fundFilter));
+    filters.appendChild(wrapFilterFieldWithClear(fundFilter));
 
     const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
     statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
     ['Pending', 'Approved', 'Released', 'Rejected'].forEach(s => {
       statusFilter.appendChild(el('option', { value: s, text: s }));
     });
-    filtersBar.appendChild(wrapFilterFieldWithClear(statusFilter));
+    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
 
     const dateFrom = el('input', { type: 'date', class: 'form-select' });
     const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filtersBar.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filtersBar.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filtersBar.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filtersBar.appendChild(wrapFilterFieldWithClear(dateTo));
+    filters.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
+    filters.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+    filters.appendChild(wrapFilterFieldWithClear(dateTo));
 
     const clearBtn = el('button', {
       class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Clear'
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
     });
     clearBtn.addEventListener('click', () => {
       wrFilter.value = '';
@@ -307,9 +377,7 @@ const Disbursement = {
       App.clearSavedFilters('disbursement');
       refresh();
     });
-    filtersBar.appendChild(clearBtn);
-
-    wrapper.appendChild(filtersBar);
+    filters.appendChild(clearBtn);
 
     // Restore saved filters
     const savedFilters = App.restoreFilters('disbursement');
@@ -336,7 +404,7 @@ const Disbursement = {
     };
 
     // View mode toggle
-    const viewToggle = el('div', { class: 'view-mode-toggle', style: 'margin-bottom: var(--spacing-md);' });
+    const vmToggle = el('div', { class: 'view-mode-toggle' });
     const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
     [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
       const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: viewMode === mode ? 'active' : '' });
@@ -345,9 +413,12 @@ const Disbursement = {
         App.setPreferredViewMode('disbursement', mode);
         App.handleRoute();
       });
-      viewToggle.appendChild(btn);
+      vmToggle.appendChild(btn);
     });
-    wrapper.appendChild(viewToggle);
+
+    stickyContainer.appendChild(filters);
+    stickyContainer.appendChild(vmToggle);
+    wrapper.appendChild(stickyContainer);
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
@@ -507,16 +578,20 @@ const Disbursement = {
       const col = el('div', { class: 'board-column-v2' });
       col.style.setProperty('--column-phase-color', colColor);
 
-      const header = el('div', { class: 'board-column-header-v2' });
-      header.appendChild(el('div', { class: 'board-column-title', text: st }));
-      col.appendChild(header);
-
       let colItems = [];
       if (st === 'Pending') {
         colItems = items.filter(d => ['Draft', 'Submitted', 'Under Review', 'Pending'].includes(d.status));
       } else {
         colItems = items.filter(d => d.status === st);
       }
+
+      const header = el('div', { class: 'board-column-header-v2' });
+      const titleWrap = el('div', { class: 'board-column-title' });
+      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
+      titleWrap.appendChild(document.createTextNode(st));
+      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colItems.length) }));
+      header.appendChild(titleWrap);
+      col.appendChild(header);
 
       const cardContainer = el('div', { class: 'board-cards-scroll' });
 
@@ -1965,9 +2040,15 @@ const Disbursement = {
   // ============================================================
   renderReport() {
     const entity = Auth.activeEntity;
-    const items = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Released');
+    const items = DB.getWhere('disbursements', d => {
+      const dEnt = (d.entity || '').toUpperCase();
+      if (entity === 'ALL') {
+        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(dEnt);
+      }
+      return dEnt === entity.toUpperCase();
+    }).filter(d => d.status === 'Released');
 
-    const container = el('div', { class: 'page' });
+    const container = el('div');
 
     container.appendChild(el('h2', { text: 'Reimbursement Summary', style: 'margin-bottom: var(--spacing-lg);' }));
 
