@@ -8603,6 +8603,110 @@ tbody tr * {
   font-weight: 500 !important;
 }
 
+/* Split Combo Button Layout */
+.split-btn-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  margin-left: 16px;
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.split-btn-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.split-btn-right {
+  padding-left: 8px;
+  padding-right: 8px;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+/* Premium Dropdown Menu */
+.split-btn-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.06), 
+    0 4px 6px -2px rgba(0, 0, 0, 0.03),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+  z-index: 100;
+  min-width: 240px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform-origin: top right;
+  animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.split-btn-menu.hidden {
+  display: none !important;
+}
+
+/* Menu Item Design */
+.split-btn-menu .dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text, #2d2d3f);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.split-btn-menu .dropdown-item:hover {
+  background: var(--color-bg, #f4f6fb);
+  color: var(--color-primary, #1e3a8a);
+}
+
+.split-btn-menu .dropdown-item svg {
+  color: var(--color-text-muted, #64748b);
+  transition: color 0.15s ease;
+}
+
+.split-btn-menu .dropdown-item:hover svg {
+  color: var(--color-primary, #1e3a8a);
+}
+
 
 
 
