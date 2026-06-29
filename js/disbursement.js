@@ -1337,6 +1337,15 @@ const Disbursement = {
     const isReleased = d.status === 'Released';
     const pd = d.paymentDetails || {};
 
+    const safeEmpName = escapeHtml(emp?.name || '—');
+    const safeRequesterEmail = escapeHtml(requester?.email || '—');
+    const safeRequesterName = escapeHtml(requester?.name || '—');
+    const safeWrTitle = escapeHtml(wr?.title || '—');
+    const safeCategory = escapeHtml(d.category);
+    const safeDescription = escapeHtml(d.description);
+    const safeApproverName = escapeHtml(approver?.name || '—');
+    const safeReleaserName = escapeHtml(releaser ? releaser.name : (handler ? handler.name : '________________________'));
+
     let paymentDetailsHtml = '';
     if (isReleased && pd.method) {
       paymentDetailsHtml = `
@@ -1344,11 +1353,11 @@ const Disbursement = {
           <span class="lbl">Date:</span>
           <span class="val">${formatDate(pd.date || d.releasedAt)}</span>
           <span class="lbl">Method:</span>
-          <span class="val">${pd.method}</span>
+          <span class="val">${escapeHtml(pd.method)}</span>
           <span class="lbl">Ref/Check No.:</span>
-          <span class="val" style="font-family:monospace;">${pd.reference || '—'}</span>
+          <span class="val" style="font-family:monospace;">${escapeHtml(pd.reference || '—')}</span>
           <span class="lbl">Bank/Branch:</span>
-          <span class="val">${pd.bank || '—'}</span>
+          <span class="val">${escapeHtml(pd.bank || '—')}</span>
         </div>
       `;
     } else {
@@ -1383,9 +1392,9 @@ const Disbursement = {
       <div class="two-col">
         <div class="col-left">
           <h3>Employee / Requester</h3>
-          <p><strong>${emp?.name || '—'}</strong></p>
-          <p style="color: #475569; font-size: 9pt; margin-top: 4px;">${requester?.email || '—'}</p>
-          <p style="color: #64748b; font-size: 8.5pt; margin-top: 2px;">Requested By: ${requester?.name || '—'}</p>
+          <p><strong>${safeEmpName}</strong></p>
+          <p style="color: #475569; font-size: 9pt; margin-top: 4px;">${safeRequesterEmail}</p>
+          <p style="color: #64748b; font-size: 8.5pt; margin-top: 2px;">Requested By: ${safeRequesterName}</p>
         </div>
         <div class="col-right">
           <div class="meta-row">
@@ -1399,7 +1408,7 @@ const Disbursement = {
           ${wr ? `
           <div class="meta-row" style="margin-top: 6px; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
             <span class="meta-label">Project Code:</span>
-            <span class="meta-val" style="font-size: 8.5pt;">${wr.title || '—'}</span>
+            <span class="meta-val" style="font-size: 8.5pt;">${safeWrTitle}</span>
           </div>
           ` : ''}
         </div>
@@ -1416,8 +1425,8 @@ const Disbursement = {
         </thead>
         <tbody>
           <tr>
-            <td style="font-weight: 600;">${d.category}</td>
-            <td>${d.description}</td>
+            <td style="font-weight: 600;">${safeCategory}</td>
+            <td>${safeDescription}</td>
             <td>${this.getFundSource(d)}</td>
             <td class="num" style="font-weight: 700; font-family: monospace;">${formatPHP(d.amount)}</td>
           </tr>
@@ -1449,21 +1458,21 @@ const Disbursement = {
         <div class="signature-box">
           <div style="height: 50px;"></div>
           <div class="line">
-            ${emp?.name || '—'}
+            ${safeEmpName}
             <span>Prepared By / Date</span>
           </div>
         </div>
         <div class="signature-box">
           <div style="height: 50px;"></div>
           <div class="line">
-            ${approver?.name || '—'}
+            ${safeApproverName}
             <span>Approved By / Date</span>
           </div>
         </div>
         <div class="signature-box">
           <div style="height: 50px;"></div>
           <div class="line">
-            ${releaser ? releaser.name : (handler ? handler.name : '________________________')}
+            ${safeReleaserName}
             <span>Released By / Date</span>
           </div>
         </div>
@@ -1559,6 +1568,15 @@ const Disbursement = {
     const pd = d.paymentDetails || {};
     const cleanAmountString = formatPHP(d.amount).replace('₱', '').trim();
 
+    const safeEmpName = escapeHtml(emp?.name || '—');
+    const safeRequesterEmail = escapeHtml(requester?.email || '—');
+    const safeWrTitle = escapeHtml(wr?.title || '—');
+    const safeCategory = escapeHtml(d.category);
+    const safeApproverName = escapeHtml(approver?.name || '—');
+    const safeReleaserName = escapeHtml(releaser ? releaser.name : (handler ? handler.name : '________________________'));
+    const safeReceiptFilename = escapeHtml(d.receiptFilename || '_________________');
+    const safeReleaseFilename = escapeHtml(d.releaseFilename || '_________________');
+
     let paymentDetailsHtml = '';
     if (isReleased && pd.method) {
       const methodCfg = PaymentIcons;
@@ -1570,7 +1588,7 @@ const Disbursement = {
         if (!value) return '';
         return `<div style="display:flex; justify-content:space-between; align-items:baseline; font-size:8.5pt; padding:3px 0; border-bottom: 1px dashed #f1f5f9;">
           <span style="color:#64748b; font-weight:600; text-transform:uppercase; font-size:7.5pt;">${label}</span>
-          <span style="color:#0f172a; font-weight:700;">${value}</span>
+          <span style="color:#0f172a; font-weight:700;">${escapeHtml(value)}</span>
         </div>`;
       };
 
@@ -1597,7 +1615,7 @@ const Disbursement = {
               <div style="display:flex; flex-direction:column; gap:4px;">${detailRows}</div>
             </div>
             <div class="payment-status-box" style="display: flex; flex-direction: column; justify-content: center; height: 100%; box-sizing: border-box;">
-              <p style="margin: 0; font-size:9.5pt; line-height: 1.5; color: #1e293b;">Payment has been authorized by <strong>${approver?.name || 'Authorized Approver'}</strong> and released by <strong>${releaser?.name || handler?.name || 'assigned handler'}</strong>.</p>
+              <p style="margin: 0; font-size:9.5pt; line-height: 1.5; color: #1e293b;">Payment has been authorized by <strong>${safeApproverName}</strong> and released by <strong>${safeReleaserName}</strong>.</p>
             </div>
           </div>
         </div>`;
@@ -1639,8 +1657,8 @@ const Disbursement = {
       <div class="two-col">
         <div class="col-left">
           <h3>Payee Information</h3>
-          <p><strong>${emp?.name || '—'}</strong></p>
-          <p style="color: #475569; font-size: 9pt; margin-top: 4px;">${requester?.email || '—'}</p>
+          <p><strong>${safeEmpName}</strong></p>
+          <p style="color: #475569; font-size: 9pt; margin-top: 4px;">${safeRequesterEmail}</p>
           <p style="color: #64748b; font-size: 8.5pt; margin-top: 2px;">Fund Source: ${this.getFundSource(d)}</p>
         </div>
         <div class="col-right">
@@ -1658,7 +1676,7 @@ const Disbursement = {
           </div>
           <div class="meta-row">
             <span class="meta-label">Category:</span>
-            <span class="meta-val">${d.category}</span>
+            <span class="meta-val">${safeCategory}</span>
           </div>
         </div>
       </div>
@@ -1679,7 +1697,7 @@ const Disbursement = {
           <tbody>
             <tr>
               <td style="font-family: monospace;">61010</td>
-              <td>${d.category} Expense</td>
+              <td>${safeCategory} Expense</td>
               <td class="num" style="font-family: monospace;">${formatPHP(d.amount)}</td>
               <td class="num">—</td>
             </tr>
@@ -1696,16 +1714,16 @@ const Disbursement = {
       <div class="section page-break">
         <h3>Supporting Documents</h3>
         <p style="font-size: 9pt; color: #334155; margin: 6px 0;">☐ Expense Report Ref. ${d.id} dated ${formatDate(d.submittedAt)}</p>
-        <p style="font-size: 9pt; color: #334155; margin: 6px 0;">☐ Receipt / Proof of Payment: <span style="font-family: monospace; font-weight: 600;">${d.receiptFilename || '_________________'}</span></p>
-        <p style="font-size: 9pt; color: #334155; margin: 6px 0;">☐ Work Request: <span style="font-weight: 600;">${wr?.title || '—'}</span></p>
-        <p style="font-size: 9pt; color: #334155; margin: 6px 0;">☐ Release Document: <span style="font-family: monospace; font-weight: 600;">${d.releaseFilename || '_________________'}</span></p>
+        <p style="font-size: 9pt; color: #334155; margin: 6px 0;">☐ Receipt / Proof of Payment: <span style="font-family: monospace; font-weight: 600;">${safeReceiptFilename}</span></p>
+        <p style="font-size: 9pt; color: #334155; margin: 6px 0;">☐ Work Request: <span style="font-weight: 600;">${safeWrTitle}</span></p>
+        <p style="font-size: 9pt; color: #334155; margin: 6px 0;">☐ Release Document: <span style="font-family: monospace; font-weight: 600;">${safeReleaseFilename}</span></p>
       </div>
 
       <div class="approval-row">
         <div class="approval-box">
           <div style="height: 45px;"></div>
           <div class="line">
-            ${emp?.name || '—'}
+            ${safeEmpName}
             <span>Prepared By / Date</span>
           </div>
         </div>
@@ -1719,14 +1737,14 @@ const Disbursement = {
         <div class="approval-box">
           <div style="height: 45px;"></div>
           <div class="line">
-            ${approver?.name || '—'}
+            ${safeApproverName}
             <span>Approved By / Date</span>
           </div>
         </div>
         <div class="approval-box">
           <div style="height: 45px;"></div>
           <div class="line">
-            ${releaser ? releaser.name : (handler ? handler.name : '________________________')}
+            ${safeReleaserName}
             <span>Released By / Date</span>
           </div>
         </div>
