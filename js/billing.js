@@ -150,12 +150,14 @@ const Billing = {
     });
 
     if (Auth.can('billing:edit')) {
-      const addBtn = el('button', {
-        class: 'btn btn-primary btn-sm',
-        style: 'margin-left: 16px; display: inline-flex; align-items: center; gap: 6px;',
-        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Invoice'
+      const wrapper = el('div', { class: 'split-btn-group', style: 'position: relative; display: inline-flex; align-items: stretch; margin-left: 16px;' });
+
+      const primaryBtn = el('button', {
+        class: 'btn btn-primary btn-sm split-btn-left',
+        style: 'display: inline-flex; align-items: center; gap: 6px; border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 1px solid rgba(255,255,255,0.2);'
       });
-      addBtn.addEventListener('click', () => {
+      primaryBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Billing';
+      primaryBtn.addEventListener('click', () => {
         this.detailId = null;
         openFormPanel({
           icon: '🧾', title: 'Create Sales Invoice',
@@ -166,7 +168,60 @@ const Billing = {
           ]
         });
       });
-      tabNav.appendChild(addBtn);
+      wrapper.appendChild(primaryBtn);
+
+      if (Auth.can('billing:request')) {
+        const toggleBtn = el('button', {
+          class: 'btn btn-primary btn-sm split-btn-right',
+          style: 'padding-left: 8px; padding-right: 8px; border-top-left-radius: 0; border-bottom-left-radius: 0; display: inline-flex; align-items: center; justify-content: center;'
+        });
+        toggleBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        wrapper.appendChild(toggleBtn);
+
+        const menu = el('div', {
+          class: 'dropdown-menu split-btn-menu hidden',
+          style: 'position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--color-surface, #fff); border: 1px solid var(--color-border, #e2e8f0); border-radius: var(--radius-md, 8px); box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0,0,0,0.1)); z-index: 100; min-width: 220px; padding: 4px 0;'
+        });
+
+        const requestItem = el('button', {
+          class: 'dropdown-item',
+          style: 'width: 100%; text-align: left; padding: 8px 12px; background: transparent; border: none; font-size: 0.85rem; color: var(--color-text); cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit;',
+          text: 'Request Invoice from Accounting'
+        });
+        requestItem.addEventListener('mouseenter', () => { requestItem.style.background = 'var(--color-bg, #f4f6fb)'; });
+        requestItem.addEventListener('mouseleave', () => { requestItem.style.background = 'transparent'; });
+        requestItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menu.classList.add('hidden');
+          Billing.showRequestInvoiceModal();
+        });
+
+        menu.appendChild(requestItem);
+        wrapper.appendChild(menu);
+
+        toggleBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menu.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', () => {
+          menu.classList.add('hidden');
+        });
+      } else {
+        primaryBtn.style.borderTopRightRadius = 'var(--radius-md, 8px)';
+        primaryBtn.style.borderBottomRightRadius = 'var(--radius-md, 8px)';
+        primaryBtn.style.borderRight = 'none';
+      }
+
+      tabNav.appendChild(wrapper);
+    } else if (Auth.can('billing:request')) {
+      const reqBtn = el('button', {
+        class: 'btn btn-primary btn-sm',
+        style: 'margin-left: 16px; display: inline-flex; align-items: center; gap: 6px;',
+        text: 'Request Invoice from Accounting'
+      });
+      reqBtn.addEventListener('click', () => { Billing.showRequestInvoiceModal(); });
+      tabNav.appendChild(reqBtn);
     }
 
     return tabNav;
@@ -195,14 +250,7 @@ const Billing = {
     const wrapper = el('div');
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
 
-    // Request Invoice button (operations users)
-    if (Auth.can('billing:request')) {
-      const reqActions = el('div', { class: 'actions-bar', style: 'margin-bottom: var(--spacing-md);' });
-      const reqBtn = el('button', { class: 'btn btn-primary', text: 'Request Invoice from Accounting' });
-      reqBtn.addEventListener('click', () => { Billing.showRequestInvoiceModal(); });
-      reqActions.appendChild(reqBtn);
-      wrapper.appendChild(reqActions);
-    }
+
 
     // Pending operations requests banner
     if (Auth.can('billing:edit')) {
