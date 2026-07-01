@@ -39,13 +39,18 @@ const Disbursement = {
           });
           actions.appendChild(submitBtn);
         }
+        const noLogoLabel = el('label', { style: 'margin-right:12px; font-size:0.8125rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:var(--color-text-muted);' });
+        const noLogoCheckbox = el('input', { type: 'checkbox', id: 'print-no-logo' });
+        noLogoLabel.appendChild(noLogoCheckbox);
+        noLogoLabel.appendChild(document.createTextNode('No Logo (Generic)'));
+        actions.appendChild(noLogoLabel);
+
         const genExpBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Expense PDF', style: 'margin-right:8px;' });
-        genExpBtn.addEventListener('click', () => this.generateExpensePDF(d));
+        genExpBtn.addEventListener('click', () => {
+          const noLogo = noLogoCheckbox.checked;
+          this.generateExpensePDF(d, noLogo);
+        });
         actions.appendChild(genExpBtn);
-        
-        const genExpNoLogoBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Generate Expense PDF (No Logo)', style: 'margin-right:8px;' });
-        genExpNoLogoBtn.addEventListener('click', () => this.generateExpensePDF(d, true));
-        actions.appendChild(genExpNoLogoBtn);
 
         const genVouchBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Generate Voucher', style: 'margin-right:8px;' });
         genVouchBtn.addEventListener('click', () => this.generateVoucher(d));
