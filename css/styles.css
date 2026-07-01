@@ -6377,6 +6377,160 @@ tbody tr:hover {
   font-weight: 700;
 }
 
+/* ─── Checklist View Mode (Notion-style) ────────────────────────────────── */
+.checklist-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--color-bg);
+  padding: 8px 0;
+}
+
+.checklist-view-item-wrap {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.checklist-view-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.checklist-view-row:hover {
+  background-color: color-mix(in oklab, var(--color-primary), transparent 97%);
+}
+
+.checklist-view-row.task-level {
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 500;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+}
+
+.checklist-view-row.task-level:last-child {
+  border-bottom: none;
+}
+
+.checklist-view-row.task-level.completed .checklist-view-title {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+  opacity: 0.65;
+}
+
+.checklist-view-row.sub-level {
+  padding-left: 40px;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border), transparent 60%);
+  background-color: color-mix(in oklab, var(--color-surface), var(--color-bg) 30%);
+}
+
+.checklist-view-row.sub-level:last-child {
+  border-bottom: none;
+}
+
+.checklist-view-row.sub-level.completed {
+  background-color: color-mix(in oklab, var(--color-success) 4%, transparent);
+}
+
+.checklist-view-row.sub-level.completed .checklist-view-title {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+  opacity: 0.65;
+}
+
+.checklist-view-row.blocked {
+  opacity: 0.6;
+}
+
+/* Checkbox styling */
+.checklist-view-cb {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-success);
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.checklist-view-cb:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Title text */
+.checklist-view-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Meta wrapper */
+.checklist-view-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.checklist-view-date {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: color-mix(in oklab, var(--color-text-muted), transparent 92%);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.checklist-view-hours {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: color-mix(in oklab, var(--color-text-muted), transparent 90%);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Connective lines for Notion style sub-items */
+.checklist-view-sub-container {
+  position: relative;
+}
+
+.checklist-view-sub-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 22px;
+  left: 22px;
+  width: 1px;
+  background-color: var(--color-border);
+}
+
+.inline-cl-spacer {
+  width: 16px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.inline-cl-spacer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -17px;
+  width: 18px;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
 .bulk-action-bar {
   position: sticky;
   bottom: 20px;
@@ -7588,6 +7742,15 @@ tbody tr:hover {
   background: color-mix(in oklab, var(--accent), transparent 88%);
   border-color: var(--accent);
   color: var(--accent);
+}
+.project-detail-v2 .checklist-view-row:hover {
+  background-color: color-mix(in oklab, var(--accent), transparent 97%);
+}
+.project-detail-v2 .checklist-view-cb {
+  accent-color: var(--accent);
+}
+.project-detail-v2 .checklist-view-row.sub-level.completed {
+  background-color: color-mix(in oklab, var(--accent) 4%, transparent);
 }
 
 .project-detail-v2 .bulk-action-bar {
