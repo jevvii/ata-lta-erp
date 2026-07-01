@@ -600,9 +600,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (Auth.restoreSession()) {
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app-shell').classList.remove('hidden');
-    App.init();
+  const hasSession = Auth.restoreSession();
+  const loadingScreen = document.getElementById('loading-screen');
+
+  const showContent = () => {
+    if (hasSession) {
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('app-shell').classList.remove('hidden');
+      App.init();
+    } else {
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('app-shell').classList.add('hidden');
+    }
+  };
+
+  if (loadingScreen) {
+    loadingScreen.style.opacity = '0';
+    setTimeout(() => {
+      loadingScreen.classList.add('hidden');
+      showContent();
+    }, 200);
+  } else {
+    showContent();
   }
 });
