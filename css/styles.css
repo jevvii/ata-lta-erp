@@ -1118,9 +1118,9 @@ tbody tr:hover {
 }
 
 /* View Mode Toggle */
-.view-mode-toggle { display: flex; gap: var(--space-1, 4px); background: var(--color-surface, #ffffff); border: 1px solid var(--color-border, #e5e5e5); padding: 2px; border-radius: var(--radius-sm, 8px); }
-.view-mode-toggle button { padding: 6px 12px; border: none; background: transparent; border-radius: calc(var(--radius-sm, 8px) - 2px); cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: 500; letter-spacing: var(--btn-letter-spacing); line-height: 1.4; display: inline-flex; align-items: center; gap: var(--space-2, 8px); color: var(--color-text-muted); transition: all 0.2s ease; }
-.view-mode-toggle button svg { flex-shrink: 0; }
+.view-mode-toggle { display: flex; gap: var(--space-1, 4px); background: var(--color-surface, #ffffff); border: 1px solid var(--color-border, #e5e5e5); padding: 2px; border-radius: var(--radius-sm, 8px); height: 28px; align-items: center; box-sizing: border-box; }
+.view-mode-toggle button { padding: 4px 8px; border: none; background: transparent; border-radius: calc(var(--radius-sm, 8px) - 2px); cursor: pointer; font-family: inherit; font-size: 0.7rem; font-weight: 500; letter-spacing: var(--btn-letter-spacing); line-height: 1.2; display: inline-flex; align-items: center; gap: var(--space-1, 4px); color: var(--color-text-muted); transition: all 0.2s ease; height: calc(100% - 2px); }
+.view-mode-toggle button svg { flex-shrink: 0; width: 12px; height: 12px; }
 .view-mode-toggle button:hover { background: var(--color-bg, #fafafa); color: var(--color-text); }
 .view-mode-toggle button.active { background: var(--color-primary, #2f6feb); color: #ffffff; font-weight: 500; }
 
@@ -2158,23 +2158,23 @@ tbody tr:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3, 12px);
-  margin-bottom: 12px;
+  gap: var(--space-2, 8px);
+  margin-bottom: 10px;
   position: sticky;
   top: 76px;
   z-index: 25;
   background: var(--color-bg, #f4f6fb);
-  padding: 8px 0;
+  padding: 6px 0;
 }
 
 .filters-bar .form-select,
 .filters-bar input {
   min-width: 120px;
-  height: 34px;
-  min-height: 34px !important;
-  max-height: 34px !important;
-  padding: 7px 28px 7px 10px;
-  font-size: 0.875rem;
+  height: 30px;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  padding: 5px 28px 5px 10px;
+  font-size: 0.8125rem;
   line-height: 1.25rem;
   border-radius: var(--radius-sm, 8px);
   border: 1px solid var(--color-border, #e5e5e5);
@@ -2183,23 +2183,27 @@ tbody tr:hover {
 }
 
 .filters-bar .form-select {
-  background-position: right 10px center;
-  padding-right: 28px;
+  background-position: right 8px center;
+  padding-right: 24px;
 }
 
 .filters-bar .btn,
 .filters-bar .btn-sm {
-  height: 34px;
-  padding: 7px 12px;
-  font-size: 0.875rem;
+  height: 30px;
+  padding: 5px 10px;
+  font-size: 0.8125rem;
   border-radius: var(--radius-sm, 8px);
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Standard system-wide filter/search inputs */
 .search-input {
-  height: 32px;
-  padding: 6px 14px;
-  font-size: 0.875rem;
+  height: 30px;
+  padding: 5px 14px;
+  font-size: 0.8125rem;
   border-radius: var(--radius-pill);
 }
 
@@ -5993,10 +5997,11 @@ tbody tr:hover {
 
 .filters-bar .searchable-dropdown-input {
   border-radius: var(--radius-sm, 8px) !important;
-  height: 34px;
-  min-height: 34px !important;
-  font-size: 0.875rem;
-  padding: 6px 48px 6px 10px !important;
+  height: 30px;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  font-size: 0.8125rem;
+  padding: 5px 48px 5px 10px !important;
 }
 
 /* Responsive: stack on small screens */
@@ -6039,12 +6044,12 @@ tbody tr:hover {
   width: 150px;
   min-width: 150px;
   max-width: 150px;
-  height: 34px !important;
-  min-height: 34px !important;
-  max-height: 34px !important;
-  padding: 6px 12px 6px 32px !important; /* Make room for left inclined calendar icon */
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  padding: 4px 12px 4px 32px !important; /* Make room for left inclined calendar icon */
   box-sizing: border-box !important;
-  font-size: 0.875rem !important;
+  font-size: 0.8125rem !important;
   border-radius: var(--radius-sm, 8px) !important;
   transition: width 0.15s ease-in-out, min-width 0.15s ease-in-out, max-width 0.15s ease-in-out;
 }
@@ -6056,12 +6061,12 @@ tbody tr:hover {
   width: 220px;
   min-width: 220px;
   max-width: 220px;
-  height: 34px !important;
-  min-height: 34px !important;
-  max-height: 34px !important;
-  padding: 6px 12px 6px 32px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  padding: 4px 12px 4px 32px !important;
   box-sizing: border-box !important;
-  font-size: 0.875rem !important;
+  font-size: 0.8125rem !important;
   border-radius: var(--radius-sm, 8px) !important;
 }
 
