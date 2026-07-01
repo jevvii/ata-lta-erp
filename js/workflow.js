@@ -392,7 +392,7 @@ const Workflow = {
     footer.appendChild(cancelBtn);
     wrapper.appendChild(footer);
 
-    const overlay = this.showModal(title, wrapper);
+    const overlay = this.showModal(title, wrapper, onCancel);
     cancelBtn.addEventListener('click', () => {
       overlay.remove();
       if (onCancel) onCancel();
@@ -4219,12 +4219,16 @@ const Workflow = {
     // Initialize task view mode
     this.taskViewMode = this.taskViewMode || 'table';
 
+    if (!ViewIcons.checklist) {
+      ViewIcons.checklist = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+    }
+
     const viewToggle = el('div', { class: 'group-toggle', style: 'margin-right: 8px;' });
     const viewButtons = {};
-    ['table', 'board', 'list'].forEach(mode => {
+    ['table', 'board', 'list', 'checklist'].forEach(mode => {
       const btn = el('button', {
         type: 'button',
-        html: ViewIcons[mode] + ' ' + (mode === 'table' ? 'Table' : mode === 'board' ? 'Board' : 'List'),
+        html: ViewIcons[mode] + ' ' + (mode === 'table' ? 'Table' : mode === 'board' ? 'Board' : mode === 'list' ? 'List' : 'Checklist'),
         class: this.taskViewMode === mode ? 'active' : ''
       });
       viewButtons[mode] = btn;
@@ -4239,6 +4243,7 @@ const Workflow = {
       viewToggle.appendChild(btn);
     });
     toolbar.appendChild(viewToggle);
+
 
     // Employee Filter Options
     const empOptions = [{ value: '', text: 'All Employees' }];
@@ -4821,6 +4826,168 @@ const Workflow = {
         });
 
         listWrapper.appendChild(list);
+        return;
+      }
+
+      if (this.taskViewMode === 'checklist') {
+        const clContainer = el('div', { class: 'checklist-view-container', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-3);' });
+        
+        if (filteredTasks.length === 0) {
+          clContainer.appendChild(el('div', { class: 'empty-state', text: 'No tasks found.' }));
+        } else {
+          filteredTasks.forEach(t => {
+            const taskCard = el('div', { class: 'checklist-view-item-wrap' });
+            
+            // Primary Task Row
+            const taskRow = el('div', { class: 'checklist-view-row task-level' + (t.status === 'Completed' ? ' completed' : '') });
+            
+            if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
+              taskRow.classList.add('side-pane-active');
+              window.SidePaneInstance.activeElement = taskRow;
+            }
+
+            // Task Checkbox
+            const taskCb = el('input', { type: 'checkbox', class: 'checklist-view-cb' });
+            taskCb.checked = t.status === 'Completed';
+            taskCb.disabled = isArchived;
+            taskCb.addEventListener('click', (e) => e.stopPropagation());
+            taskCb.addEventListener('change', () => {
+              const nextStatus = taskCb.checked ? 'Completed' : 'In Progress';
+              this.showConfirm('Confirm Status Change',
+                `Are you sure you want to mark this task as "${nextStatus}"?`,
+                () => {
+                  const res = this.updateTaskStatus(t.id, nextStatus);
+                  if (res.error) {
+                    this.showMessage('Error', res.error, 'danger');
+                    taskCb.checked = !taskCb.checked;
+                  } else {
+                    App.handleRoute();
+                  }
+                },
+                'warning',
+                () => { taskCb.checked = !taskCb.checked; }
+              );
+            });
+            taskRow.appendChild(taskCb);
+            
+            // Task Title
+            const titleEl = el('div', { class: 'checklist-view-title', text: t.title });
+            taskRow.appendChild(titleEl);
+            
+            // Task Meta Details
+            const metaWrap = el('div', { class: 'checklist-view-meta' });
+            
+            // Priority Badge
+            const pClass = { 'Urgent': 'badge-danger', 'Priority': 'badge-warn', 'Low Priority': 'badge-info' }[t.priority] || 'badge-muted';
+            metaWrap.appendChild(el('span', { class: `badge ${pClass}`, text: t.priority || 'Normal' }));
+            
+            // Due date
+            if (t.dueDate) {
+              metaWrap.appendChild(el('span', { class: 'checklist-view-date', text: formatDate(t.dueDate) }));
+            }
+            
+            // Assignees
+            const allAssigneeNames = getTaskAllAssigneeNames(t);
+            if (allAssigneeNames.length > 0) {
+              metaWrap.appendChild(this.renderAssigneeAvatarsList(allAssigneeNames));
+            }
+            
+            taskRow.appendChild(metaWrap);
+            
+            // Click to open Task Details
+            taskRow.addEventListener('click', () => {
+              this.showTaskSidePane(t.id, taskRow);
+            });
+            
+            taskCard.appendChild(taskRow);
+            
+            // Sub-checklist items nested
+            const normalizedCL = (t.checklist || []).map(item => {
+              if (typeof item === 'string') return { id: generateId('chk'), text: item, completed: false, assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] };
+              return item;
+            });
+            
+            if (normalizedCL.length > 0) {
+              const subItemsWrap = el('div', { class: 'checklist-view-sub-container' });
+              
+              normalizedCL.forEach(item => {
+                const blocked = isChecklistBlocked(item, normalizedCL);
+                const subRow = el('div', { class: 'checklist-view-row sub-level' + (item.completed ? ' completed' : '') + (blocked ? ' blocked' : '') });
+                
+                // Indent spacer
+                subRow.appendChild(el('div', { class: 'inline-cl-spacer' }));
+                
+                // Checkbox
+                const subCb = el('input', { type: 'checkbox', class: 'checklist-view-cb' });
+                subCb.checked = !!item.completed;
+                subCb.disabled = blocked || isArchived;
+                subCb.addEventListener('click', (e) => e.stopPropagation());
+                subCb.addEventListener('change', (e) => {
+                  e.stopPropagation();
+                  const now = new Date().toISOString();
+                  if (subCb.checked) {
+                    item.completed = true;
+                  } else {
+                    item.completed = false;
+                    normalizedCL.forEach(other => {
+                      if (other.dependsOn === item.id || other.dependsOn === '*') other.completed = false;
+                    });
+                  }
+                  DB.update('tasks', t.id, { checklist: normalizedCL, updatedAt: now });
+                  App.handleRoute();
+                });
+                subRow.appendChild(subCb);
+                
+                // Subtask title
+                const subTextEl = el('div', { class: 'checklist-view-title' });
+                if (blocked) {
+                  const prereq = item.dependsOn === '*' ? null : normalizedCL.find(c => c.id === item.dependsOn);
+                  subTextEl.textContent = '🔒 ' + item.text;
+                  subTextEl.title = 'Waiting for: ' + (item.dependsOn === '*' ? 'All items' : (prereq ? prereq.text : 'Unknown'));
+                } else {
+                  subTextEl.textContent = item.text;
+                }
+                subRow.appendChild(subTextEl);
+                
+                // Subtask meta
+                const subMeta = el('div', { class: 'checklist-view-meta' });
+                
+                // Subtask Assignees
+                const itemAssigneeNames = [];
+                if (item.assigneeName) itemAssigneeNames.push(item.assigneeName);
+                if (item.coAssignees && Array.isArray(item.coAssignees)) {
+                  item.coAssignees.forEach(name => {
+                    if (name && !itemAssigneeNames.includes(name)) itemAssigneeNames.push(name);
+                  });
+                }
+                if (itemAssigneeNames.length > 0) {
+                  subMeta.appendChild(this.renderAssigneeAvatarsList(itemAssigneeNames));
+                }
+                
+                // Subtask hours
+                const itemHours = getChecklistItemTotalHours(item);
+                if (itemHours > 0) {
+                  subMeta.appendChild(el('span', { class: 'checklist-view-hours font-mono', text: itemHours + 'h' }));
+                }
+                
+                subRow.appendChild(subMeta);
+                
+                // Click opens task side pane
+                subRow.addEventListener('click', () => {
+                  this.showTaskSidePane(t.id, taskRow);
+                });
+                
+                subItemsWrap.appendChild(subRow);
+              });
+              
+              taskCard.appendChild(subItemsWrap);
+            }
+            
+            clContainer.appendChild(taskCard);
+          });
+        }
+        
+        listWrapper.appendChild(clContainer);
         return;
       }
 
