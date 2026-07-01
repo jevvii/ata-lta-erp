@@ -78,7 +78,7 @@ async function runTests() {
   await log('Clients Columns (#4)', hasRc && hasCd, `RC=${hasRc}, CD=${hasCd}`);
 
   // ─── TEST 5: Clients save button top-right ───────────────────────
-  await page.click('button:has-text("Add Client")');
+  await page.click('button:has-text("New Client")');
   await page.waitForTimeout(400);
   const headerBar = await page.$('.form-header-bar');
   const headerActions = headerBar ? await headerBar.$('.form-actions-top') : null;
@@ -97,7 +97,7 @@ async function runTests() {
   await page.waitForTimeout(800);
   await page.click('button:has-text("Board")');
   await page.waitForTimeout(600);
-  const boardView = await page.$('.board-view');
+  const boardView = await page.$('.board-v2');
   const boardBox = boardView ? await boardView.boundingBox() : null;
   const pageWidth = await page.evaluate(() => window.innerWidth);
   const boardWiderThanViewport = boardBox ? boardBox.width > pageWidth + 2 : false;
@@ -105,14 +105,7 @@ async function runTests() {
 
   const firstCard = await page.$('text=ATA-SI-2025-001');
   if (firstCard) {
-    await page.evaluate(el => {
-      const content = document.querySelector('.content');
-      const rect = el.getBoundingClientRect();
-      const contentRect = content.getBoundingClientRect();
-      content.scrollTop += (rect.top - (contentRect.top + 200));
-    }, firstCard);
-    await page.waitForTimeout(200);
-    await firstCard.click({ force: true });
+    await firstCard.click();
     await page.waitForTimeout(800);
     const hasPrintInvoice = await page.isVisible('button:has-text("Print Invoice")');
     const hasPrintVoucherNH = await page.isVisible('button:has-text("Print Voucher (No Header)")');
@@ -150,7 +143,7 @@ async function runTests() {
   await page.waitForTimeout(800);
   await page.click('button:has-text("Board")');
   await page.waitForTimeout(600);
-  const opsBoard = await page.$('.board-view');
+  const opsBoard = await page.$('.board-v2');
   const opsBoardBox = opsBoard ? await opsBoard.boundingBox() : null;
   const opsBoardWide = opsBoardBox ? opsBoardBox.width > pageWidth + 2 : false;
   await log('Operations Board No-Scroll (#10)', !opsBoardWide, `boardWidth=${opsBoardBox?.width}`);
@@ -172,14 +165,7 @@ async function runTests() {
   await page.waitForTimeout(800);
   const wrCard = await page.$('text=Annual Tax Filing 2025');
   if (wrCard) {
-    await page.evaluate(el => {
-      const content = document.querySelector('.content');
-      const rect = el.getBoundingClientRect();
-      const contentRect = content.getBoundingClientRect();
-      content.scrollTop += (rect.top - (contentRect.top + 200));
-    }, wrCard);
-    await page.waitForTimeout(200);
-    await wrCard.click({ force: true });
+    await wrCard.click();
     await page.waitForTimeout(800);
     const expandRows = await page.$$('.task-row');
     const accordions = await page.$$('.accordion-panel');
@@ -229,11 +215,9 @@ async function runTests() {
   // ─── TEST 14: Disbursement view toggle under filters ─────────────
   await page.goto(BASE + '/#disbursement');
   await page.waitForTimeout(800);
-  const disActionsBar = await page.$('.actions-bar');
   const disFiltersBar = await page.$('.filters-bar');
   let toggleUnderFilters = false;
-  if (disActionsBar && disFiltersBar) {
-    const actionsBox = await disActionsBar.boundingBox();
+  if (disFiltersBar) {
     const filtersBox = await disFiltersBar.boundingBox();
     const vmToggles = await page.$$('.view-mode-toggle');
     for (const vm of vmToggles) {
@@ -286,7 +270,7 @@ async function runTests() {
   // ─── TEST 17: Transmittal save button top-right ──────────────────
   await page.goto(BASE + '/#transmittal');
   await page.waitForTimeout(800);
-  await page.click('button:has-text("Create Transmittal")');
+  await page.click('button:has-text("New Transmittal")');
   await page.waitForTimeout(400);
   const txHeader = await page.$('.form-header-bar');
   const txHeaderActions = txHeader ? await txHeader.$('.form-actions-top') : null;
