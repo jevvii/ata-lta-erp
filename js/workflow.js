@@ -372,7 +372,7 @@ const Workflow = {
     okBtn.addEventListener('click', () => overlay.remove());
   },
 
-  normalizeAndPersistChecklist(task) {
+  normalizeChecklist(task, persist = false) {
     if (!task) return [];
     let changed = false;
     const checklist = task.checklist || [];
@@ -413,8 +413,9 @@ const Workflow = {
       return normalizedItem;
     });
 
-    if (changed) {
-      task.checklist = normalized;
+    task.checklist = normalized;
+
+    if (changed && persist) {
       // Persist to DB if the task is saved (has a non-temporary ID)
       if (task.id && !task.id.startsWith('tmp')) {
         DB.update('tasks', task.id, { checklist: normalized, updatedAt: new Date().toISOString() });
@@ -496,7 +497,7 @@ const Workflow = {
         taskCard.appendChild(taskRow);
         
         // Sub-checklist items nested
-        const normalizedCL = this.normalizeAndPersistChecklist(t);
+        const normalizedCL = this.normalizeChecklist(t);
         
         if (normalizedCL.length > 0) {
           const subItemsWrap = el('div', { class: 'checklist-view-sub-container' });
@@ -2522,7 +2523,7 @@ const Workflow = {
       const listContainer = el('div', { class: 'details-content-list' });
       let populatePrereqSelect = () => {};
       
-      const normalizedChecklist = this.normalizeAndPersistChecklist(task);
+      const normalizedChecklist = this.normalizeChecklist(task);
 
       const renderChecklist = () => {
         listContainer.innerHTML = '';
@@ -5466,7 +5467,7 @@ const Workflow = {
         let populatePrereqSelect = () => {};
         const allowAssignChecklist = !wr || wr.status === 'Draft' || wr.status === 'Pre-processing';
         const allowAddRequirements = allowAssignChecklist;
-        const normalizedChecklist = this.normalizeAndPersistChecklist(t);
+        const normalizedChecklist = this.normalizeChecklist(t);
 
         const renderChecklist = () => {
           checklistList.innerHTML = '';
@@ -7896,7 +7897,7 @@ const Workflow = {
     if (!result) result = Array.from(allowed);
 
     // Block terminal statuses if checklist has incomplete items
-    const checklist = this.normalizeAndPersistChecklist(task);
+    const checklist = this.normalizeChecklist(task);
     const hasIncomplete = checklist.some(item => !item.completed);
     if (hasIncomplete) {
       result = result.filter(s => s !== 'Completed' && s !== 'For Review');
@@ -7940,7 +7941,7 @@ const Workflow = {
     }
 
     if (newStatus === 'Completed' || newStatus === 'For Review') {
-      const checklist = this.normalizeAndPersistChecklist(task);
+      const checklist = this.normalizeChecklist(task);
       const hasIncomplete = checklist.some(item => !item.completed);
       if (hasIncomplete) {
         return { error: `All checklist items must be completed before marking this task as ${newStatus}.` };
