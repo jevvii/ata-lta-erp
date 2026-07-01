@@ -372,6 +372,24 @@ const Workflow = {
     okBtn.addEventListener('click', () => overlay.remove());
   },
 
+  toggleChecklistItem(task, itemId, isCompleted) {
+    if (!task) return;
+    const checklist = task.checklist || [];
+    const item = checklist.find(c => c.id === itemId);
+    if (!item) return;
+
+    item.completed = !!isCompleted;
+    if (!isCompleted) {
+      checklist.forEach(other => {
+        if (isChecklistBlocked(other, checklist)) {
+          other.completed = false;
+        }
+      });
+    }
+
+    DB.update('tasks', task.id, { checklist: checklist, updatedAt: new Date().toISOString() });
+  },
+
   ensureTaskChecklistNormalized(task, persist = false) {
     if (!task) return;
     const checklist = task.checklist || [];
@@ -406,6 +424,11 @@ const Workflow = {
   },
 
   renderChecklistView(filteredTasks, isArchived) {
+    // Ensure all tasks have normalized checklists before rendering
+    filteredTasks.forEach(t => {
+      this.ensureTaskChecklistNormalized(t, true);
+    });
+
     const clContainer = el('div', { class: 'checklist-view-container', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-3);' });
     
     if (filteredTasks.length === 0) {
@@ -497,18 +520,7 @@ const Workflow = {
             subCb.addEventListener('click', (e) => e.stopPropagation());
             subCb.addEventListener('change', (e) => {
               e.stopPropagation();
-              const now = new Date().toISOString();
-              if (subCb.checked) {
-                item.completed = true;
-              } else {
-                item.completed = false;
-                normalizedCL.forEach(other => {
-                  if (isChecklistBlocked(other, normalizedCL)) {
-                    other.completed = false;
-                  }
-                });
-              }
-              DB.update('tasks', t.id, { checklist: normalizedCL, updatedAt: now });
+              this.toggleChecklistItem(t, item.id, subCb.checked);
               App.handleRoute();
             });
             subRow.appendChild(subCb);
@@ -2524,18 +2536,7 @@ const Workflow = {
             cb.disabled = blocked || (wr && wr.isPendingApproval);
             
             cb.addEventListener('change', () => {
-              const now = new Date().toISOString();
-              if (cb.checked) {
-                item.completed = true;
-              } else {
-                item.completed = false;
-                normalizedChecklist.forEach(other => {
-                  if (isChecklistBlocked(other, normalizedChecklist)) {
-                    other.completed = false;
-                  }
-                });
-              }
-              DB.update('tasks', task.id, { checklist: normalizedChecklist, updatedAt: now });
+              this.toggleChecklistItem(task, item.id, cb.checked);
               this.showTaskSidePane(taskId, triggerElement);
               App.handleRoute(); // Refresh background
             });
@@ -5477,18 +5478,7 @@ const Workflow = {
               
               cb.addEventListener('change', (e) => {
                 e.stopPropagation();
-                const now = new Date().toISOString();
-                if (cb.checked) {
-                  item.completed = true;
-                } else {
-                  item.completed = false;
-                  normalizedChecklist.forEach(other => {
-                    if (isChecklistBlocked(other, normalizedChecklist)) {
-                      other.completed = false;
-                    }
-                  });
-                }
-                DB.update('tasks', t.id, { checklist: normalizedChecklist, updatedAt: now });
+                this.toggleChecklistItem(t, item.id, cb.checked);
                 renderChecklist();
               });
               row.appendChild(cb);
