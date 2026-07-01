@@ -372,33 +372,6 @@ const Workflow = {
     okBtn.addEventListener('click', () => overlay.remove());
   },
 
-  normalizeChecklist(task) {
-    if (!task) return [];
-    const checklist = task.checklist || [];
-    return checklist.map(item => {
-      if (typeof item === 'string') {
-        return {
-          id: generateId('chk'),
-          text: item,
-          completed: false,
-          assigneeId: null,
-          assigneeName: null,
-          dependsOn: null,
-          timeLogs: []
-        };
-      }
-      return {
-        id: item.id || generateId('chk'),
-        text: item.text || '',
-        completed: !!item.completed,
-        assigneeId: item.assigneeId || null,
-        assigneeName: item.assigneeName || null,
-        dependsOn: item.dependsOn || null,
-        timeLogs: item.timeLogs || []
-      };
-    });
-  },
-
   ensureTaskChecklistNormalized(task) {
     if (!task) return;
     const checklist = task.checklist || [];
@@ -410,34 +383,19 @@ const Workflow = {
       !('timeLogs' in item)
     );
     if (hasUnnormalized) {
-      const refMap = new Map();
       const normalized = checklist.map(item => {
         const text = typeof item === 'string' ? item : (item.text || '');
-        const newId = (typeof item === 'object' && item && item.id) ? item.id : generateId('chk');
-        
-        refMap.set(text, newId);
-        if (typeof item === 'object' && item && item.id) {
-          refMap.set(item.id, newId);
-        }
+        const id = (typeof item === 'object' && item && item.id) ? item.id : generateId('chk');
 
         return {
-          id: newId,
+          id: id,
           text: text,
           completed: typeof item === 'object' && item ? !!item.completed : false,
           assigneeId: typeof item === 'object' && item ? item.assigneeId || null : null,
           assigneeName: typeof item === 'object' && item ? item.assigneeName || null : null,
-          dependsOn: typeof item === 'object' && item ? item.dependsOn : null,
+          dependsOn: typeof item === 'object' && item ? item.dependsOn || null : null,
           timeLogs: typeof item === 'object' && item ? item.timeLogs || [] : []
         };
-      });
-
-      // Update dependsOn legacy references
-      normalized.forEach(item => {
-        if (item.dependsOn && item.dependsOn !== '*') {
-          if (refMap.has(item.dependsOn)) {
-            item.dependsOn = refMap.get(item.dependsOn);
-          }
-        }
       });
 
       task.checklist = normalized;
