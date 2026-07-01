@@ -94,7 +94,8 @@ async function runTests() {
   await page.waitForTimeout(300);
 
   // Assert that the side pane has closed and is no longer present/open
-  const isPaneOpenAfterCancel = await page.locator('#global-side-pane').evaluate(el => el.classList.contains('open'));
+  const sidePane = await page.$('#global-side-pane');
+  const isPaneOpenAfterCancel = sidePane ? await sidePane.evaluate(el => el.classList.contains('open')) : false;
   await log('Clients Cancel pane closes (#3)', !isPaneOpenAfterCancel, `isPaneOpen=${isPaneOpenAfterCancel}`);
   if (isPaneOpenAfterCancel) {
     throw new Error('Client side pane is still present after clicking Cancel');
