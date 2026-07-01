@@ -372,13 +372,11 @@ const Workflow = {
     okBtn.addEventListener('click', () => overlay.remove());
   },
 
-  normalizeChecklist(task, persist = false) {
+  normalizeChecklist(task) {
     if (!task) return [];
-    let changed = false;
     const checklist = task.checklist || [];
-    const normalized = checklist.map(item => {
+    return checklist.map(item => {
       if (typeof item === 'string') {
-        changed = true;
         return {
           id: generateId('chk'),
           text: item,
@@ -389,39 +387,35 @@ const Workflow = {
           timeLogs: []
         };
       }
-      let itemChanged = false;
-      const normalizedItem = { ...item };
-      if (!normalizedItem.id) {
-        normalizedItem.id = generateId('chk');
-        itemChanged = true;
-      }
-      if (!('completed' in normalizedItem)) {
-        normalizedItem.completed = false;
-        itemChanged = true;
-      }
-      if (!('dependsOn' in normalizedItem)) {
-        normalizedItem.dependsOn = null;
-        itemChanged = true;
-      }
-      if (!('timeLogs' in normalizedItem)) {
-        normalizedItem.timeLogs = [];
-        itemChanged = true;
-      }
-      if (itemChanged) {
-        changed = true;
-      }
-      return normalizedItem;
+      return {
+        id: item.id || generateId('chk'),
+        text: item.text || '',
+        completed: !!item.completed,
+        assigneeId: item.assigneeId || null,
+        assigneeName: item.assigneeName || null,
+        dependsOn: item.dependsOn || null,
+        timeLogs: item.timeLogs || []
+      };
     });
+  },
 
-    task.checklist = normalized;
-
-    if (changed && persist) {
-      // Persist to DB if the task is saved (has a non-temporary ID)
+  ensureTaskChecklistNormalized(task) {
+    if (!task) return;
+    const checklist = task.checklist || [];
+    const hasUnnormalized = checklist.some(item => 
+      typeof item === 'string' || 
+      !item.id || 
+      !('completed' in item) || 
+      !('dependsOn' in item) || 
+      !('timeLogs' in item)
+    );
+    if (hasUnnormalized) {
+      const normalized = this.normalizeChecklist(task);
+      task.checklist = normalized;
       if (task.id && !task.id.startsWith('tmp')) {
         DB.update('tasks', task.id, { checklist: normalized, updatedAt: new Date().toISOString() });
       }
     }
-    return normalized;
   },
 
   renderChecklistView(filteredTasks, isArchived) {
@@ -497,7 +491,7 @@ const Workflow = {
         taskCard.appendChild(taskRow);
         
         // Sub-checklist items nested
-        const normalizedCL = this.normalizeChecklist(t);
+        const normalizedCL = t.checklist || [];
         
         if (normalizedCL.length > 0) {
           const subItemsWrap = el('div', { class: 'checklist-view-sub-container' });
@@ -2328,6 +2322,7 @@ const Workflow = {
       }
     }
     if (!task) return;
+    this.ensureTaskChecklistNormalized(task);
 
     const assignedUser = task.assignedTo || task.assigneeId ? DB.getById('users', task.assignedTo || task.assigneeId) : null;
     const assigneeName = task.assigneeName || assignedUser?.name || '—';
@@ -2523,7 +2518,7 @@ const Workflow = {
       const listContainer = el('div', { class: 'details-content-list' });
       let populatePrereqSelect = () => {};
       
-      const normalizedChecklist = this.normalizeChecklist(task);
+      const normalizedChecklist = task.checklist || [];
 
       const renderChecklist = () => {
         listContainer.innerHTML = '';
@@ -4215,6 +4210,7 @@ const Workflow = {
     }
     const client = DB.getById('clients', wr.clientId);
     const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
+    tasks.forEach(t => this.ensureTaskChecklistNormalized(t));
     const canApprove = Auth.can('workflow:approve');
     const isDraft = wr.status === 'Draft';
 
@@ -5467,7 +5463,7 @@ const Workflow = {
         let populatePrereqSelect = () => {};
         const allowAssignChecklist = !wr || wr.status === 'Draft' || wr.status === 'Pre-processing';
         const allowAddRequirements = allowAssignChecklist;
-        const normalizedChecklist = this.normalizeChecklist(t);
+        const normalizedChecklist = t.checklist || [];
 
         const renderChecklist = () => {
           checklistList.innerHTML = '';
@@ -7897,7 +7893,7 @@ const Workflow = {
     if (!result) result = Array.from(allowed);
 
     // Block terminal statuses if checklist has incomplete items
-    const checklist = this.normalizeChecklist(task);
+    const checklist = task.checklist || [];
     const hasIncomplete = checklist.some(item => !item.completed);
     if (hasIncomplete) {
       result = result.filter(s => s !== 'Completed' && s !== 'For Review');
@@ -7941,7 +7937,7 @@ const Workflow = {
     }
 
     if (newStatus === 'Completed' || newStatus === 'For Review') {
-      const checklist = this.normalizeChecklist(task);
+      const checklist = task.checklist || [];
       const hasIncomplete = checklist.some(item => !item.completed);
       if (hasIncomplete) {
         return { error: `All checklist items must be completed before marking this task as ${newStatus}.` };
