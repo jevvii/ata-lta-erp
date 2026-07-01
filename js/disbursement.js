@@ -24,6 +24,46 @@ const Disbursement = {
       
       const actions = el('div', { class: 'title-bar-actions' });
       if (d) {
+        // Edit button — Admin and Accounting (users with disbursement:edit or create)
+        const canEdit = Auth.can('disbursement:edit') || Auth.can('disbursement:create');
+        const isPendingStatus = ['Draft', 'Submitted', 'Under Review', 'Pending'].includes(d.status);
+        if (canEdit && isPendingStatus) {
+          const editBtn = el('button', { class: 'btn btn-warning btn-sm', text: '✏️ Edit Expense', style: 'margin-right:8px;' });
+          editBtn.addEventListener('click', () => {
+            this.detailId = d.id;
+            openFormPanel({
+              icon: '💰', title: 'Edit Expense',
+              formContent: this.renderForm(), formId: 'disbursement-form',
+              actions: [
+                { text: 'Update Expense', class: 'btn btn-primary', type: 'submit', form: 'disbursement-form', testId: 'submit-expense-btn' },
+                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement/detail/' + d.id), testId: 'cancel-expense-btn' }
+              ]
+            });
+          });
+          actions.appendChild(editBtn);
+        }
+
+        // Delete button — Admin only
+        if (Auth.user.role === 'Admin') {
+          const deleteBtn = el('button', { class: 'btn btn-danger btn-sm', text: '🗑️ Delete', style: 'margin-right:8px;' });
+          deleteBtn.addEventListener('click', () => {
+            Workflow.showConfirm('Delete Expense', 'Are you sure you want to permanently delete this disbursement? This cannot be undone.', () => {
+              // Unlink from WR if linked
+              if (d.linkedWorkRequestId) {
+                const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+                if (wr) {
+                  const linkedIds = (wr.linkedDisbursementIds || []).filter(id => id !== d.id);
+                  DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
+                }
+              }
+              DB.remove('disbursements', d.id);
+              location.hash = '#disbursement';
+              Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
+            }, 'danger');
+          });
+          actions.appendChild(deleteBtn);
+        }
+
         const genExpBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Expense PDF', style: 'margin-right:8px;' });
         genExpBtn.addEventListener('click', () => this.generateExpensePDF(d));
         actions.appendChild(genExpBtn);
@@ -209,6 +249,7 @@ const Disbursement = {
       'Under Review': 'badge-warning',
       'Pending': 'badge-warning',
       'Approved': 'badge-info',
+      'Release Pending Approval': 'badge-warning',
       'Released': 'badge-success',
       'Rejected': 'badge-danger',
       'Cancelled': 'badge-danger'
@@ -303,6 +344,46 @@ const Disbursement = {
       wrapper.appendChild(pfrSection);
     }
 
+    // "Release Pending Admin Approval" Section — visible to Admin
+    if (Auth.user.role === 'Admin') {
+      const releasePending = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Release Pending Approval');
+      if (releasePending.length > 0) {
+        const rpSection = el('div', { class: 'form-section', style: 'background: #fdf4ff; border: 1px solid #f0abfc; padding: var(--spacing-md); border-radius: 12px; margin-bottom: var(--spacing-lg);' });
+        rpSection.appendChild(el('h3', { text: '📋 Release Requests Pending Approval', style: 'color: #86198f; margin-top: 0;' }));
+        rpSection.appendChild(el('p', { text: 'A Manager has marked the following disbursements for release. Please review and approve or reject.', style: 'font-size: 0.875rem; color: #a21caf; margin-bottom: var(--spacing-md);' }));
+
+        const rpTable = el('table', { class: 'task-table-v2' });
+        rpTable.appendChild(el('thead', {}, [
+          el('tr', {}, [
+            el('th', { text: 'Category' }),
+            el('th', { text: 'Amount' }),
+            el('th', { text: 'Requested By' }),
+            el('th', { text: 'Marked By' }),
+            el('th', { text: 'Actions', class: 'text-right' })
+          ])
+        ]));
+        const rpBody = el('tbody');
+        releasePending.forEach(d => {
+          const tr = el('tr');
+          tr.appendChild(el('td', { text: d.category, style: 'font-weight:600;' }));
+          tr.appendChild(el('td', { text: formatPHP(d.amount) }));
+          const req = DB.getById('users', d.requestedBy);
+          tr.appendChild(el('td', { text: req?.name || '—' }));
+          const marker = d.releaseRequestedBy ? DB.getById('users', d.releaseRequestedBy) : null;
+          tr.appendChild(el('td', { text: marker?.name || '—' }));
+          const tdAct = el('td', { class: 'text-right' });
+          const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review & Approve' });
+          reviewBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
+          tdAct.appendChild(reviewBtn);
+          tr.appendChild(tdAct);
+          rpBody.appendChild(tr);
+        });
+        rpTable.appendChild(rpBody);
+        rpSection.appendChild(rpTable);
+        wrapper.appendChild(rpSection);
+      }
+    }
+
     const wrFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
     wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
     DB.getWhere('workRequests', wr => {
@@ -311,6 +392,10 @@ const Disbursement = {
         return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
       }
       return wrEnt === entity.toUpperCase();
+    }).filter(wr => {
+      // RBAC: Manager only sees WRs they're assigned to
+      if (Auth.user.role === 'Manager') return wr.assignedTo === Auth.user.id;
+      return true;
     }).forEach(wr => {
       const client = DB.getById('clients', wr.clientId);
       wrFilter.appendChild(el('option', { value: wr.id, text: wr.title + ' — ' + (client?.name || '—') }));
@@ -350,7 +435,7 @@ const Disbursement = {
 
     const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
     statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Pending', 'Approved', 'Released', 'Rejected'].forEach(s => {
+    ['Pending', 'Approved', 'Release Pending Approval', 'Released', 'Rejected'].forEach(s => {
       statusFilter.appendChild(el('option', { value: s, text: s }));
     });
     filters.appendChild(wrapFilterFieldWithClear(statusFilter));
@@ -436,6 +521,15 @@ const Disbursement = {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
     let items = DB.getWhere('disbursements', d => (entity === 'ALL' ? Auth.user.entities.includes(d.entity) : d.entity === entity));
+
+    // RBAC: Manager can only view disbursements linked to WRs they're assigned to
+    if (Auth.user.role === 'Manager') {
+      items = items.filter(d => {
+        if (!d.linkedWorkRequestId) return false;
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        return wr && wr.assignedTo === Auth.user.id;
+      });
+    }
 
     if (wrFilter) items = items.filter(d => d.linkedWorkRequestId === wrFilter);
     if (clientFilter || (clientSearchText && clientSearchText.trim() !== '')) {
@@ -565,10 +659,11 @@ const Disbursement = {
       return;
     }
     const board = el('div', { class: 'board-v2' });
-    const statuses = ['Pending', 'Approved', 'Released', 'Rejected'];
+    const statuses = ['Pending', 'Approved', 'Release Pending', 'Released', 'Rejected'];
     const statusColors = {
       'Pending': '#f59e0b',
       'Approved': '#3b82f6',
+      'Release Pending': '#e879f9',
       'Released': '#10b981',
       'Rejected': '#ef4444'
     };
@@ -581,6 +676,8 @@ const Disbursement = {
       let colItems = [];
       if (st === 'Pending') {
         colItems = items.filter(d => ['Draft', 'Submitted', 'Under Review', 'Pending'].includes(d.status));
+      } else if (st === 'Release Pending') {
+        colItems = items.filter(d => d.status === 'Release Pending Approval');
       } else {
         colItems = items.filter(d => d.status === st);
       }
@@ -689,14 +786,20 @@ const Disbursement = {
   // Expense Filing Form
   // ============================================================
   renderForm() {
-    if (!Auth.can('disbursement:create')) {
+    // Allow access if user can create new disbursements OR can edit existing ones
+    const isNew = !this.detailId;
+    if (isNew && !Auth.can('disbursement:create')) {
+      this.view = 'list';
+      App.handleRoute();
+      return el('div');
+    }
+    if (!isNew && !Auth.can('disbursement:create') && !Auth.can('disbursement:edit')) {
       this.view = 'list';
       App.handleRoute();
       return el('div');
     }
 
     const entity = Auth.activeEntity;
-    const isNew = !this.detailId;
     const existing = this.detailId ? DB.getById('disbursements', this.detailId) : null;
     const opReq = this.prefilledRequestId ? DB.getById('operationsRequests', this.prefilledRequestId) : null;
     const prefill = this.prefilledWrId ? { workRequestId: this.prefilledWrId, clientId: this.prefilledClientId } : null;
@@ -932,11 +1035,16 @@ const Disbursement = {
 
   showRequestDisbursementModal() {
     const entity = Auth.activeEntity;
-    const wrs = DB.getWhere('workRequests', wr => {
+    let wrs = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
       return wrEnt === entity.toUpperCase();
     });
+
+    // RBAC: Manager can only request for WRs they're assigned to
+    if (Auth.user.role === 'Manager') {
+      wrs = wrs.filter(wr => wr.assignedTo === Auth.user.id);
+    }
 
     const wrapper = el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' });
     const selectGroup = el('div', { class: 'form-group' });
@@ -995,6 +1103,15 @@ const Disbursement = {
   renderDetail() {
     const d = DB.getById('disbursements', this.detailId);
     if (!d) { location.hash = '#disbursement'; return el('div'); }
+
+    // RBAC: Manager can only view disbursements linked to WRs they're assigned to
+    if (Auth.user.role === 'Manager') {
+      const linkedWr = d.linkedWorkRequestId ? DB.getById('workRequests', d.linkedWorkRequestId) : null;
+      if (!linkedWr || linkedWr.assignedTo !== Auth.user.id) {
+        location.hash = '#disbursement';
+        return el('div');
+      }
+    }
     const emp = DB.getById('users', this.getEmployeeId(d));
     const wr = d.linkedWorkRequestId ? DB.getById('workRequests', d.linkedWorkRequestId) : null;
     const client = wr ? DB.getById('clients', wr.clientId) : null;
@@ -1138,14 +1255,14 @@ const Disbursement = {
       container.appendChild(payHist);
     }
 
-    // Approval Actions
-    const canApprove = Auth.can('disbursement:approve');
+    // Approval Actions — Only Admin can approve disbursements
+    const canApprove = Auth.user.role === 'Admin';
     const isPending = ['Draft', 'Submitted', 'Under Review', 'Pending'].includes(d.status);
 
     if (isPending && canApprove) {
       const isRequester = Auth.isSelfApprover(this.getEmployeeId(d));
       if (isRequester) {
-        container.appendChild(el('p', { class: 'field-error', text: 'You cannot approve your own expense. Wait for another Admin or Manager.' }));
+        container.appendChild(el('p', { class: 'field-error', text: 'You cannot approve your own expense. Wait for another Admin.' }));
       } else {
         const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
 
@@ -1165,13 +1282,57 @@ const Disbursement = {
         actions.appendChild(rejectBtn);
         container.appendChild(actions);
       }
+    } else if (d.status === 'Release Pending Approval' && canApprove) {
+      // Admin approves a Manager's mark-as-released action
+      const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
+      actions.appendChild(el('p', { style: 'font-size:0.875rem;color:#64748b;margin-bottom:var(--spacing-sm);' , text: `A Manager has marked this disbursement for release. Please approve or reject.` }));
+      const approveReleaseBtn = el('button', { class: 'btn btn-success', text: 'Approve & Release Funds' });
+      approveReleaseBtn.addEventListener('click', () => {
+        this.showReleaseDialog(d.id, true);
+      });
+      actions.appendChild(approveReleaseBtn);
+
+      const rejectReleaseBtn = el('button', { class: 'btn btn-danger', text: 'Reject Release', style: 'margin-left: 8px;' });
+      rejectReleaseBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Reject Release', 'Are you sure you want to reject this release request?', () => {
+          const reason = prompt('Enter rejection reason:');
+          if (reason) {
+            DB.update('disbursements', d.id, { status: 'Approved', releaseRejectionReason: reason, releaseRejectedBy: Auth.user.id, releaseRejectedAt: new Date().toISOString() });
+            Workflow.showMessage('Release Rejected', 'The release has been rejected and returned to Approved status.', 'warning');
+            App.handleRoute();
+          }
+        }, 'danger');
+      });
+      actions.appendChild(rejectReleaseBtn);
+      container.appendChild(actions);
     } else if (d.status === 'Approved') {
         const isHandler = d.paymentHandledBy === Auth.user.id;
+        const canMarkReleased = Auth.can('disbursement:mark_released');
+
         if (isHandler) {
+          // Assigned handler can authorize & release funds
           const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
           const releaseBtn = el('button', { class: 'btn btn-primary', text: 'Authorize & Release Funds' });
           releaseBtn.addEventListener('click', () => { this.showReleaseDialog(d.id); });
           actions.appendChild(releaseBtn);
+          container.appendChild(actions);
+        } else if (canMarkReleased) {
+          // Manager can mark as released (pending Admin approval)
+          const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
+          actions.appendChild(el('p', { style: 'font-size:0.875rem;color:#64748b;margin-bottom:var(--spacing-sm);', text: 'As a Manager, you can mark this for release. This will require Admin approval.' }));
+          const markReleaseBtn = el('button', { class: 'btn btn-warning', text: 'Mark as Released (Pending Admin Approval)' });
+          markReleaseBtn.addEventListener('click', () => {
+            Workflow.showConfirm('Mark as Released', 'This will submit a release request to Admin for final approval. Continue?', () => {
+              DB.update('disbursements', d.id, {
+                status: 'Release Pending Approval',
+                releaseRequestedBy: Auth.user.id,
+                releaseRequestedAt: new Date().toISOString()
+              });
+              Workflow.showMessage('Release Requested', 'This disbursement has been marked for release. An Admin will need to approve and finalize the release.', 'info');
+              App.handleRoute();
+            });
+          });
+          actions.appendChild(markReleaseBtn);
           container.appendChild(actions);
         } else {
           const handler = DB.getById('users', d.paymentHandledBy);
@@ -1230,14 +1391,16 @@ const Disbursement = {
     });
   },
 
-  showReleaseDialog(id) {
+  showReleaseDialog(id, adminRelease) {
     const d = DB.getById('disbursements', id);
     if (!d) return;
-    if (d.status !== 'Approved') {
+    // Admin release flow: status is 'Release Pending Approval' (Manager marked for release)
+    const validStatuses = adminRelease ? ['Approved', 'Release Pending Approval'] : ['Approved'];
+    if (!validStatuses.includes(d.status)) {
       Workflow.showMessage('Error', 'This disbursement is not approved for release.', 'danger');
       return;
     }
-    if (d.paymentHandledBy !== Auth.user.id) {
+    if (!adminRelease && d.paymentHandledBy !== Auth.user.id) {
       Workflow.showMessage('Unauthorized', 'You are not assigned to release this disbursement.', 'danger');
       return;
     }

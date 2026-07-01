@@ -1689,7 +1689,12 @@ const Workflow = {
 
       // Scope visibility for staff-level roles to only show work requests they are added to
       if (!Auth.isManagerial()) {
-        const myTasks = DB.getWhere('tasks', t => t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id);
+        const myTasks = DB.getWhere('tasks', t => {
+          if (t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id) return true;
+          if (t.assigneeName && Auth.user?.name && t.assigneeName === Auth.user.name) return true;
+          if ((t.coAssignees || []).some(n => n && n === Auth.user?.name)) return true;
+          return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === Auth.user.name);
+        });
         const myWrIds = new Set(myTasks.map(t => t.workRequestId));
         wrs = wrs.filter(r => {
           if (r.isPendingApproval) {
@@ -1877,7 +1882,7 @@ const Workflow = {
 
       const cardContainer = el('div', { class: 'board-cards-scroll' });
 
-      if (st === 'Draft') {
+      if (st === 'Draft' && Auth.can('workflow:edit')) {
         const addCard = el('div', {
           class: 'board-card-v2 add-wr-card',
           style: 'border: 1px dashed #94a3b8; background: rgba(148, 163, 184, 0.02); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: #94a3b8; margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
@@ -1897,7 +1902,7 @@ const Workflow = {
         cardContainer.appendChild(addCard);
       }
 
-      if (colWrs.length === 0 && st !== 'Draft') {
+      if (colWrs.length === 0 && (st !== 'Draft' || !Auth.can('workflow:edit'))) {
         cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No work requests' }));
       }
 
@@ -3207,11 +3212,12 @@ const Workflow = {
     fields.forEach(f => {
       const group = el('div', { class: 'form-group' });
       group.appendChild(el('label', { text: f.label + (f.required ? ' *' : '') }));
-      const input = el('input', {
+      const inputAttrs = {
         type: f.type, name: f.name,
-        value: wr ? (wr[f.name] || '') : '',
-        required: f.required
-      });
+        value: wr ? (wr[f.name] || '') : ''
+      };
+      if (f.required) inputAttrs.required = true;
+      const input = el('input', inputAttrs);
       group.appendChild(input);
       form.appendChild(group);
     });
