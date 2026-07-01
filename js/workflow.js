@@ -372,7 +372,7 @@ const Workflow = {
     okBtn.addEventListener('click', () => overlay.remove());
   },
 
-  ensureTaskChecklistNormalized(task) {
+  ensureTaskChecklistNormalized(task, persist = false) {
     if (!task) return;
     const checklist = task.checklist || [];
     const hasUnnormalized = checklist.some(item => 
@@ -399,7 +399,7 @@ const Workflow = {
       });
 
       task.checklist = normalized;
-      if (task.id && !task.id.startsWith('tmp')) {
+      if (persist && task.id && !task.id.startsWith('tmp')) {
         DB.update('tasks', task.id, { checklist: normalized, updatedAt: new Date().toISOString() });
       }
     }
@@ -549,7 +549,7 @@ const Workflow = {
             
             // Click opens task side pane
             subRow.addEventListener('click', () => {
-              this.showTaskSidePane(t.id, taskRow);
+              this.showTaskSidePane(t.id, subRow);
             });
             
             subItemsWrap.appendChild(subRow);
