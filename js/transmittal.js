@@ -25,7 +25,7 @@ const Transmittal = {
       
       const actions = el('div', { class: 'title-bar-actions' });
       if (t) {
-        if (Auth.can('transmittal:edit')) {
+        if (Auth.can('transmittal:mark')) {
           if (t.status === 'Draft') {
             const editBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Edit', style: 'margin-right:8px;' });
             editBtn.addEventListener('click', () => { this.showForm(t.id); });
@@ -33,11 +33,19 @@ const Transmittal = {
             const sendBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Mark as Sent', style: 'margin-right:8px;' });
             sendBtn.addEventListener('click', () => {
               Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
-                DB.update('transmittals', t.id, {
+                const markData = {
                   status: 'Sent',
                   sentAt: new Date().toISOString(),
                   sentBy: Auth.user.id
-                });
+                };
+                if (Auth.user.role === 'Admin') {
+                  // Admin marks are applied immediately
+                  DB.update('transmittals', t.id, markData);
+                } else {
+                  // Manager/Documentation: pending Admin approval
+                  const record = Object.assign({}, t, markData, { id: t.id });
+                  PendingChanges.submit('transmittals', record, false);
+                }
                 App.handleRoute();
               }, 'success');
             });
@@ -70,7 +78,7 @@ const Transmittal = {
 
     if (this.view === 'list') container.appendChild(this.renderList());
     else if (this.view === 'form') {
-      if (!Auth.can('transmittal:edit')) {
+      if (!Auth.can('transmittal:create')) {
         this.view = 'list';
         container.appendChild(this.renderList());
       } else {
@@ -118,7 +126,7 @@ const Transmittal = {
       tabNav.appendChild(btn);
     });
 
-    const canCreate = Auth.can('transmittal:edit');
+    const canCreate = Auth.can('transmittal:create');
     const canRequest = Auth.can('transmittal:request');
 
     if (canCreate && canRequest) {
@@ -229,7 +237,7 @@ const Transmittal = {
 
 
     // Pending operations requests banner
-    if (Auth.can('transmittal:edit')) {
+    if (Auth.can('transmittal:create')) {
       const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'transmittal');
       if (pendingReqs.length > 0) {
         const banner = el('div', { class: 'pending-requests-banner', style: 'background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #ffc107;border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
@@ -969,12 +977,20 @@ const Transmittal = {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;
       const fd = new FormData(form);
-      DB.update('transmittals', t.id, {
+      const ackData = {
         status: 'Acknowledged',
         acknowledgedAt: fd.get('receivedDate'),
         acknowledgedBy: Auth.user.id,
         receivedByName: fd.get('receivedBy')
-      });
+      };
+      if (Auth.user.role === 'Admin') {
+        // Admin acknowledgments are applied immediately
+        DB.update('transmittals', t.id, ackData);
+      } else {
+        // Manager/Documentation: pending Admin approval
+        const record = Object.assign({}, t, ackData, { id: t.id });
+        PendingChanges.submit('transmittals', record, false);
+      }
       overlay.remove();
       App.handleRoute();
     });
