@@ -410,7 +410,36 @@ const Workflow = {
       !('timeLogs' in item)
     );
     if (hasUnnormalized) {
-      const normalized = this.normalizeChecklist(task);
+      const refMap = new Map();
+      const normalized = checklist.map(item => {
+        const text = typeof item === 'string' ? item : (item.text || '');
+        const newId = (typeof item === 'object' && item && item.id) ? item.id : generateId('chk');
+        
+        refMap.set(text, newId);
+        if (typeof item === 'object' && item && item.id) {
+          refMap.set(item.id, newId);
+        }
+
+        return {
+          id: newId,
+          text: text,
+          completed: typeof item === 'object' && item ? !!item.completed : false,
+          assigneeId: typeof item === 'object' && item ? item.assigneeId || null : null,
+          assigneeName: typeof item === 'object' && item ? item.assigneeName || null : null,
+          dependsOn: typeof item === 'object' && item ? item.dependsOn : null,
+          timeLogs: typeof item === 'object' && item ? item.timeLogs || [] : []
+        };
+      });
+
+      // Update dependsOn legacy references
+      normalized.forEach(item => {
+        if (item.dependsOn && item.dependsOn !== '*') {
+          if (refMap.has(item.dependsOn)) {
+            item.dependsOn = refMap.get(item.dependsOn);
+          }
+        }
+      });
+
       task.checklist = normalized;
       if (task.id && !task.id.startsWith('tmp')) {
         DB.update('tasks', task.id, { checklist: normalized, updatedAt: new Date().toISOString() });
@@ -516,7 +545,9 @@ const Workflow = {
               } else {
                 item.completed = false;
                 normalizedCL.forEach(other => {
-                  if (other.dependsOn === item.id || other.dependsOn === '*') other.completed = false;
+                  if (isChecklistBlocked(other, normalizedCL)) {
+                    other.completed = false;
+                  }
                 });
               }
               DB.update('tasks', t.id, { checklist: normalizedCL, updatedAt: now });
@@ -2541,7 +2572,9 @@ const Workflow = {
               } else {
                 item.completed = false;
                 normalizedChecklist.forEach(other => {
-                  if (other.dependsOn === item.id || other.dependsOn === '*') other.completed = false;
+                  if (isChecklistBlocked(other, normalizedChecklist)) {
+                    other.completed = false;
+                  }
                 });
               }
               DB.update('tasks', task.id, { checklist: normalizedChecklist, updatedAt: now });
@@ -5492,7 +5525,9 @@ const Workflow = {
                 } else {
                   item.completed = false;
                   normalizedChecklist.forEach(other => {
-                    if (other.dependsOn === item.id || other.dependsOn === '*') other.completed = false;
+                    if (isChecklistBlocked(other, normalizedChecklist)) {
+                      other.completed = false;
+                    }
                   });
                 }
                 DB.update('tasks', t.id, { checklist: normalizedChecklist, updatedAt: now });
