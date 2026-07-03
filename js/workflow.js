@@ -3536,7 +3536,7 @@ const Workflow = {
     form.appendChild(propsGrid);
 
     // ── Description free-form ──
-    const descSection = el('div', { class: 'notion-freeform' });
+    const descSection = el('div', { class: 'notion-freeform notion-freeform--description' });
     descSection.appendChild(el('label', { class: 'notion-section-label', text: 'Description' }));
     descSection.appendChild(el('input', { type: 'text', name: 'description', class: 'notion-freeform-input', placeholder: 'What is this work request about?', value: wr ? (wr.description || '') : '' }));
     form.appendChild(descSection);
@@ -3673,7 +3673,7 @@ const Workflow = {
 
     // Tasks section — Notion-style editable list
     const tasksSection = el('div', { class: 'form-section notion-line-items' });
-    tasksSection.appendChild(el('h3', { class: 'form-section-title', text: 'Tasks' }));
+    tasksSection.appendChild(el('h3', { class: 'form-section-title notion-section-heading', text: 'Tasks' }));
     const tasksList = el('div', { class: 'notion-line-item-list', id: 'task-rows' });
     tasksSection.appendChild(tasksList);
 

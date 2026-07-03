@@ -3092,6 +3092,16 @@ tbody tr:hover {
   font-weight: 400;
 }
 
+[data-theme="dark"] .breadcrumb-base,
+[data-theme="dark"] .breadcrumb-link {
+  color: var(--color-primary, #d4b8ff);
+}
+
+[data-theme="dark"] .breadcrumb-v2 .breadcrumb-link,
+[data-theme="dark"] .breadcrumb-h1 .breadcrumb-base {
+  color: var(--color-primary, #d4b8ff);
+}
+
 /* Detail Info Info */
 .detail-sub-header {
   margin-bottom: var(--spacing-md);
@@ -8700,9 +8710,17 @@ tbody tr * {
   display: none !important;
 }
 
-/* Panel form title (Notion-style) */
+.side-pane--side-peek .side-pane-header {
+  padding: 8px 16px;
+}
+
+.side-pane--side-peek .side-pane-body {
+  padding: 0 16px;
+}
+
+/* Panel form title (Notion-style, compact padding) */
 .side-pane-form-title {
-  padding: 24px 24px 8px;
+  padding: 16px 40px 8px;
 }
 
 .side-pane-form-title .side-pane-icon {
@@ -8726,11 +8744,65 @@ tbody tr * {
 
 /* Form content area inside panel */
 .side-pane-form-content {
-  padding: 12px 24px 100px;
+  padding: 8px 40px 100px;
 }
 
 .side-pane-form-content .form-stacked {
   margin: 0;
+}
+
+/* Notion-like wider, airy property grid inside side-peek panels */
+.side-pane-form-content .notion-property-grid {
+  gap: 16px 32px;
+  max-width: none;
+}
+
+.side-pane-form-content .notion-property-grid .notion-prop {
+  padding: 0;
+}
+
+.side-pane-form-content .notion-property-grid .notion-prop-select,
+.side-pane-form-content .notion-property-grid input,
+.side-pane-form-content .notion-property-grid textarea {
+  font-size: 0.875rem;
+}
+
+/* Collapsible sections inside side-peek forms */
+.side-pane-form-content .notion-collapsible {
+  margin-top: 24px;
+}
+
+.side-pane-form-content .notion-collapsible .notion-toggle-header {
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  margin: 0;
+}
+
+.side-pane-form-content .notion-collapsible .notion-toggle-body {
+  padding: 16px 0;
+  border: none;
+  padding-left: 0;
+}
+
+/* Notion-style labels and headings inside side-peek forms */
+.side-pane-form-content .notion-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.side-pane-form-content .notion-section-heading,
+.side-pane-form-content .notion-line-items .form-section-title.notion-section-heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 12px;
 }
 
 .side-pane-form-content .form-group {
@@ -8892,9 +8964,10 @@ tbody tr * {
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.2s ease;
 }
 
-/* Side peek: right drawer, source list remains interactive, no backdrop */
+/* Side peek: right drawer spans to the center of the screen, Notion-style */
 .side-pane.side-pane--side-peek {
   transform: translateX(100%);
+  --pane-width: min(50vw, 720px);
 }
 .side-pane.side-pane--side-peek.open {
   transform: translateX(0);
@@ -9513,6 +9586,7 @@ tbody tr * {
   .side-pane.side-pane--side-peek {
     width: 100vw !important;
     max-width: 100vw !important;
+    --pane-width: 100vw;
   }
   .side-pane.side-pane--center-peek {
     width: 100vw;
@@ -10012,6 +10086,16 @@ tbody tr * {
   color: var(--color-text-muted);
 }
 
+/* Notion-style section headings inside forms */
+.notion-section-heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--color-text);
+  margin: 0 0 12px;
+}
+
 .notion-line-items {
   margin-top: var(--spacing-xl);
 }
@@ -10020,6 +10104,14 @@ tbody tr * {
   font-size: 1rem;
   font-weight: 700;
   margin: 0 0 14px;
+}
+
+.notion-line-items .form-section-title.notion-section-heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 12px;
 }
 
 .notion-add-line-item {
@@ -10084,10 +10176,12 @@ tbody tr * {
 
 /* Hide the WR title field border in dark mode — the glowing cursor/focus
    treatment below provides the only visual cue. */
-[data-theme="dark"] .side-pane-body .notion-form .notion-title-input {
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input,
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
+  outline: none !important;
 }
 
 /* ============================================================
