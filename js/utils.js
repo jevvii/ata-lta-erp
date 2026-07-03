@@ -1058,7 +1058,9 @@ function openFormPanel({ icon, title, formContent, formId, actions, mode, viewCo
 
   const titleSec = el('div', { class: 'side-pane-form-title' });
   titleSec.appendChild(el('div', { class: 'side-pane-icon', text: icon || '📝' }));
-  titleSec.appendChild(el('h2', { text: title }));
+  if (title && title.trim()) {
+    titleSec.appendChild(el('h2', { text: title }));
+  }
   wrapper.appendChild(titleSec);
 
   const contentArea = el('div', { class: 'side-pane-form-content' });

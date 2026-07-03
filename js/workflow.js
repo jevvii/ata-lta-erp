@@ -1861,7 +1861,7 @@ const Workflow = {
       addBtn.addEventListener('click', () => {
         this.editingId = null;
         openFormPanel({
-          icon: '📝', title: 'Add Work Request',
+          icon: '📝', title: ' ',
           formContent: this.renderForm(), formId: 'wr-form',
           viewContext: 'work-request-form',
           fullPageRoute: '#operations/form/new',
@@ -2209,7 +2209,7 @@ const Workflow = {
         addCard.addEventListener('click', () => {
           this.editingId = null;
           openFormPanel({
-            icon: '📝', title: 'Add Work Request',
+            icon: '📝', title: ' ',
             formContent: this.renderForm(), formId: 'wr-form',
             viewContext: 'work-request-form',
             fullPageRoute: '#operations/form/new',
@@ -3472,7 +3472,7 @@ const Workflow = {
     const titleSection = el('div', { class: 'notion-freeform' });
     const titleInput = el('input', {
       type: 'text', name: 'title', class: 'notion-freeform-input notion-title-input',
-      placeholder: 'Work request title', required: true,
+      placeholder: 'New Work Request', required: true,
       value: wr ? (wr.title || '') : ''
     });
     titleSection.appendChild(titleInput);

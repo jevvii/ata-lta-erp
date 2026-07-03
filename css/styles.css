@@ -10082,6 +10082,14 @@ tbody tr * {
   opacity: 0.65;
 }
 
+/* Hide the WR title field border in dark mode — the glowing cursor/focus
+   treatment below provides the only visual cue. */
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 /* ============================================================
  * Side Pane — Dark-mode polish (scoped to the panel)
  * Triggered by a parent `data-theme="dark"` attribute.
@@ -10186,10 +10194,22 @@ tbody tr * {
   background: transparent !important;
   border: none !important;
   color: #ffffff !important;
+  caret-color: var(--color-primary, #d4b8ff);
+}
+
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus {
+  caret-color: var(--color-primary, #d4b8ff);
+  text-shadow: 0 0 6px rgba(212, 184, 255, 0.35);
+  animation: wr-title-focus-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes wr-title-focus-pulse {
+  0%, 100% { text-shadow: 0 0 6px rgba(212, 184, 255, 0.35); }
+  50% { text-shadow: 0 0 16px rgba(212, 184, 255, 0.65); }
 }
 
 [data-theme="dark"] .side-pane-body .notion-form .notion-title-input::placeholder {
-  color: #9ca3af;
+  color: #6b7280;
 }
 
 [data-theme="dark"] .side-pane-body .notion-line-item-row:hover {
