@@ -30,27 +30,69 @@ const Workflow = {
    * "Add employee: X" option and auto-registers it on selection/Enter/blur.
    * Returns the dropdown wrapper. `onChange` receives { assigneeId: null, assigneeName }.
    */
+  resolveAssignee(name) {
+    if (!name) return { id: null, name: null };
+    const trimmed = name.trim();
+    if (!trimmed) return { id: null, name: null };
+    
+    // Check system users first
+    const user = (DB.getAll('users') || []).find(u => u.name.toLowerCase() === trimmed.toLowerCase());
+    if (user) return { id: user.id, name: user.name };
+    
+    // Check ground workers next
+    const gw = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === trimmed.toLowerCase());
+    if (gw) return { id: gw.id, name: gw.name };
+    
+    // Generate and register new ground worker
+    const newGwId = generateId('gw');
+    DB.insert('groundWorkers', { id: newGwId, name: trimmed });
+    return { id: newGwId, name: trimmed };
+  },
+
+  /**
+   * Builds a typable employee assignee dropdown like the filter tray.
+   * Existing ground workers are offered; typing a new name shows an
+   * "Add employee: X" option and auto-registers it on selection/Enter/blur.
+   * Returns the dropdown wrapper. `onChange` receives { assigneeId, assigneeName }.
+   */
   createGroundWorkerDropdown({ selectedGroundWorkerName, onChange, placeholder = 'Employee...', maxWidth, className, priorityNames = [] } = {}) {
-    const prioritySet = new Set((priorityNames || []).filter(Boolean));
-
     const buildOptions = () => {
-      const groundWorkers = (DB.getAll('groundWorkers') || []);
-      const existingNames = new Set(groundWorkers.map(gw => gw.name));
-      const allNames = new Set([...existingNames, ...prioritySet]);
-
-      const sortedNames = Array.from(allNames).sort((a, b) => a.localeCompare(b));
-      const priority = sortedNames.filter(n => prioritySet.has(n));
-      const others = sortedNames.filter(n => !prioritySet.has(n));
-
+      const systemUsers = DB.getAll('users') || [];
+      const groundWorkers = DB.getAll('groundWorkers') || [];
+      const systemUserNames = systemUsers.map(u => u.name);
+      const prioritySet = new Set([...(priorityNames || []), ...systemUserNames].filter(Boolean));
+      
+      const addedNames = new Set();
       const options = [];
-      priority.forEach(name => {
-        const gw = groundWorkers.find(g => g.name === name);
+
+      // Priority 1: System users allowed access to the site (created via admin)
+      const sortedSystemUsers = [...systemUsers].sort((a, b) => a.name.localeCompare(b.name));
+      sortedSystemUsers.forEach(u => {
+        if (!addedNames.has(u.name.toLowerCase())) {
+          options.push({ value: u.id, text: u.name });
+          addedNames.add(u.name.toLowerCase());
+        }
+      });
+
+      // Priority 2: Other priority names not in system users
+      const otherPriorityNames = Array.from(prioritySet)
+        .filter(name => !addedNames.has(name.toLowerCase()))
+        .sort((a, b) => a.localeCompare(b));
+      otherPriorityNames.forEach(name => {
+        const gw = groundWorkers.find(g => g.name.toLowerCase() === name.toLowerCase());
         options.push({ value: gw ? gw.id : name, text: name });
+        addedNames.add(name.toLowerCase());
       });
-      others.forEach(name => {
-        const gw = groundWorkers.find(g => g.name === name);
-        options.push({ value: gw.id, text: name });
+
+      // Priority 3: Other ground workers
+      const otherGws = groundWorkers
+        .filter(gw => !addedNames.has(gw.name.toLowerCase()))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      otherGws.forEach(gw => {
+        options.push({ value: gw.id, text: gw.name });
+        addedNames.add(gw.name.toLowerCase());
       });
+
       return options;
     };
 
@@ -69,24 +111,55 @@ const Workflow = {
       const val = dropdown.value;
       const text = dropdown.searchText.trim();
       let name = '';
+      let resolvedId = null;
+
       if (val) {
-        const gw = (DB.getAll('groundWorkers') || []).find(g => g.id === val);
-        name = gw ? gw.name : val;
+        const u = (DB.getAll('users') || []).find(user => user.id === val);
+        if (u) {
+          name = u.name;
+          resolvedId = u.id;
+        } else {
+          const gw = (DB.getAll('groundWorkers') || []).find(g => g.id === val);
+          if (gw) {
+            name = gw.name;
+            resolvedId = gw.id;
+          } else {
+            name = val;
+          }
+        }
       } else if (text) {
         name = text;
       }
+
       if (name === lastAppliedName) return;
-      if (name) {
-        const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase());
-        if (!existing) {
-          DB.insert('groundWorkers', { id: generateId('gw'), name });
-        }
+
+      if (name && !resolvedId) {
+        const res = this.resolveAssignee(name);
+        resolvedId = res.id;
+        name = res.name;
       }
+
       lastAppliedName = name;
-      onChange({ assigneeId: null, assigneeName: name || null });
+      onChange({ assigneeId: resolvedId, assigneeName: name || null });
     };
 
-    dropdown.value = selectedGroundWorkerName || '';
+    // Set initial value
+    if (selectedGroundWorkerName) {
+      const nameLower = selectedGroundWorkerName.toLowerCase();
+      const user = (DB.getAll('users') || []).find(u => u.name.toLowerCase() === nameLower);
+      if (user) {
+        dropdown.value = user.id;
+      } else {
+        const gw = (DB.getAll('groundWorkers') || []).find(g => g.name.toLowerCase() === nameLower);
+        if (gw) {
+          dropdown.value = gw.id;
+        } else {
+          dropdown.value = selectedGroundWorkerName;
+        }
+      }
+    } else {
+      dropdown.value = '';
+    }
 
     const input = dropdown.querySelector('input');
     let blurTimeout;
@@ -1541,7 +1614,7 @@ const Workflow = {
           wr.status = 'Draft';
         }
       }
-      if (!wr) {
+      if (!wr || !Auth.canViewWr(wr)) {
         this.view = 'list';
         App.handleRoute();
         return el('div');
@@ -1677,10 +1750,8 @@ const Workflow = {
     const entity = Auth.activeEntity;
     const wrCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
+      return matchesEntity && Auth.canViewWr(wr);
     }).filter(wr => wr.status !== 'Cancelled').length;
 
     const templateCount = DB.getWhere('retainerTemplates', t => {
@@ -1693,10 +1764,8 @@ const Workflow = {
 
     const archiveCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
+      return matchesEntity && Auth.canViewWr(wr);
     }).filter(wr => wr.status === 'Cancelled').length;
 
     const tabs = [
@@ -1891,24 +1960,8 @@ const Workflow = {
         return matchesEntity;
       }));
 
-      // Scope visibility for staff-level roles to only show work requests they are added to
-      if (!Auth.isManagerial()) {
-        const myTasks = DB.getWhere('tasks', t => {
-          if (t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id) return true;
-          if (t.assigneeName && Auth.user?.name && t.assigneeName === Auth.user.name) return true;
-          if ((t.coAssignees || []).some(n => n && n === Auth.user?.name)) return true;
-          return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === Auth.user.name);
-        });
-        const myWrIds = new Set(myTasks.map(t => t.workRequestId));
-        wrs = wrs.filter(r => {
-          if (r.isPendingApproval) {
-            const tasks = r.tasks || [];
-            const isAssignedToStagedTasks = tasks.some(t => t.assigneeId === Auth.user.id || t.assigneeName === Auth.user.name || (t.coAssignees || []).includes(Auth.user.name));
-            return r.submittedBy === Auth.user.id || r.assignedTo === Auth.user.id || isAssignedToStagedTasks;
-          }
-          return myWrIds.has(r.id) || r.assignedTo === Auth.user.id || r.requestedBy === Auth.user.id;
-        });
-      }
+      // Scope visibility: staff-level roles only show work requests they are assigned to within the tasks
+      wrs = wrs.filter(r => Auth.canViewWr(r));
       if (priorityFilter.value) wrs = wrs.filter(r => r.priority === priorityFilter.value);
       if (empFilter.searchText && empFilter.searchText.trim() !== '') {
         const query = empFilter.searchText.trim().toLowerCase();
@@ -2473,13 +2526,11 @@ const Workflow = {
         selectedGroundWorkerName: task.assigneeName || '',
         placeholder: 'Assign primary employee...',
         className: 'side-pane-primary-assignee-dropdown',
-        onChange: ({ assigneeName }) => {
-          const name = (assigneeName || '').trim();
-          const existing = name ? (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase()) : null;
+        onChange: ({ assigneeId, assigneeName }) => {
           DB.update('tasks', task.id, {
-            assigneeId: existing ? existing.id : null,
-            assigneeName: name || null,
-            status: name ? 'Assigned' : 'Draft',
+            assigneeId: assigneeId || null,
+            assigneeName: assigneeName || null,
+            status: assigneeName ? 'Assigned' : 'Draft',
             updatedAt: new Date().toISOString()
           });
           this.showTaskSidePane(task.id, triggerElement);
@@ -2566,11 +2617,9 @@ const Workflow = {
                 placeholder: 'Assign...',
                 className: 'checklist-assignee-dropdown',
                 priorityNames: getTaskAllAssigneeNames(task),
-                onChange: ({ assigneeName }) => {
-                  const name = (assigneeName || '').trim();
-                  const existing = name ? (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase()) : null;
-                  item.assigneeName = name || null;
-                  item.assigneeId = existing ? existing.id : null;
+                onChange: ({ assigneeId, assigneeName }) => {
+                  item.assigneeName = assigneeName || null;
+                  item.assigneeId = assigneeId || null;
                   DB.update('tasks', task.id, { checklist: normalizedChecklist, updatedAt: new Date().toISOString() });
                   this.showTaskSidePane(taskId, triggerElement);
                   App.handleRoute();
@@ -3342,6 +3391,11 @@ const Workflow = {
 
     const entity = Auth.activeEntity;
     const wr = this.editingId ? DB.getById('workRequests', this.editingId) : null;
+    if (this.editingId && (!wr || !Auth.canViewWr(wr))) {
+      this.view = 'list';
+      App.handleRoute();
+      return el('div');
+    }
     const container = el('div');
 
     // Header bar
@@ -3657,8 +3711,11 @@ const Workflow = {
         if (name === primaryName) { coAssigneeDropdown.value = ''; return; }
         if (!coAssignees.includes(name)) {
           coAssignees.push(name);
-          const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase());
-          if (!existing) DB.insert('groundWorkers', { id: generateId('gw'), name });
+          const isUser = (DB.getAll('users') || []).some(u => u.name.toLowerCase() === name.toLowerCase());
+          if (!isUser) {
+            const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase());
+            if (!existing) DB.insert('groundWorkers', { id: generateId('gw'), name });
+          }
           renderCoChips();
         }
         coAssigneeDropdown.value = '';
@@ -3898,21 +3955,15 @@ const Workflow = {
       const gwAutocomplete = row.querySelector('.task-assignee-groundworker');
       const groundWorkerName = gwAutocomplete?.searchText?.trim() || '';
 
-      // Auto-register new ground workers
-      if (groundWorkerName) {
-        const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === groundWorkerName.toLowerCase());
-        if (!existing) {
-          DB.insert('groundWorkers', { id: generateId('gw'), name: groundWorkerName });
-        }
-      }
+      const res = this.resolveAssignee(groundWorkerName);
 
       const predKeysStr = row.dataset.predKeys || '';
       const predecessorKeys = predKeysStr.split(',').filter(Boolean);
       tasks.push({
         key: row.dataset.taskKey || generateId('tmp'),
         title,
-        assigneeId: null,
-        assigneeName: groundWorkerName || null,
+        assigneeId: res.id,
+        assigneeName: res.name,
         coAssignees: row._coAssignees || [],
         predecessorKeys: predecessorKeys
       });
@@ -4713,21 +4764,19 @@ const Workflow = {
       const assignBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Assign' });
       assignBtn.addEventListener('click', () => {
         const name = (assignDropdown.searchText || '').trim();
+        const res = this.resolveAssignee(name);
         const selected = sortedTasks.filter(t => container.selectedTaskIds.has(t.id));
         // Bulk assign dropdown is single-select, so only one name can be chosen.
         // Treat that single name as the primary assignee and clear any co-assignees.
         selected.forEach(t => {
           DB.update('tasks', t.id, {
-            assigneeId: null,
-            assigneeName: name || null,
+            assigneeId: res.id,
+            assigneeName: res.name,
             coAssignees: [],
-            status: name ? 'Assigned' : 'Draft',
+            status: res.name ? 'Assigned' : 'Draft',
             updatedAt: new Date().toISOString()
           });
         });
-        if (name && !DB.getAll('groundWorkers').some(gw => gw.name.toLowerCase() === name.toLowerCase())) {
-          DB.insert('groundWorkers', { id: generateId('gw'), name });
-        }
         App.handleRoute();
       });
       assignWrap.appendChild(assignBtn);
@@ -5223,12 +5272,11 @@ const Workflow = {
             selectedGroundWorkerName: t.assigneeName || '',
             placeholder: 'Employee...',
             className: 'inline-ground-worker-autocomplete',
-            onChange: ({ assigneeName }) => {
-              const name = assigneeName || '';
+            onChange: ({ assigneeId, assigneeName }) => {
               DB.update('tasks', t.id, {
-                assigneeId: null,
-                assigneeName: name || null,
-                status: name ? 'Assigned' : 'Draft',
+                assigneeId: assigneeId || null,
+                assigneeName: assigneeName || null,
+                status: assigneeName ? 'Assigned' : 'Draft',
                 updatedAt: new Date().toISOString()
               });
               App.handleRoute();
@@ -5571,11 +5619,9 @@ const Workflow = {
                   placeholder: 'Assign...',
                   className: 'checklist-assignee-dropdown',
                   priorityNames: getTaskAllAssigneeNames(t),
-                  onChange: ({ assigneeName }) => {
-                    const name = (assigneeName || '').trim();
-                    const existing = name ? (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase()) : null;
-                    item.assigneeName = name || null;
-                    item.assigneeId = existing ? existing.id : null;
+                  onChange: ({ assigneeId, assigneeName }) => {
+                    item.assigneeName = assigneeName || null;
+                    item.assigneeId = assigneeId || null;
                     DB.update('tasks', t.id, { checklist: normalizedChecklist, updatedAt: new Date().toISOString() });
                     renderChecklist();
                     App.handleRoute();
@@ -7250,8 +7296,8 @@ const Workflow = {
           placeholder: 'Assign...',
           maxWidth: '140px',
           className: 'modal-checklist-assignee',
-          onChange: ({ assigneeName }) => {
-            item.assigneeId = null;
+          onChange: ({ assigneeId, assigneeName }) => {
+            item.assigneeId = assigneeId || null;
             item.assigneeName = assigneeName || null;
           }
         });
@@ -7338,9 +7384,12 @@ const Workflow = {
         }
         if (!coAssignees.includes(name)) {
           coAssignees.push(name);
-          const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase());
-          if (!existing) {
-            DB.insert('groundWorkers', { id: generateId('gw'), name });
+          const isUser = (DB.getAll('users') || []).some(u => u.name.toLowerCase() === name.toLowerCase());
+          if (!isUser) {
+            const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase());
+            if (!existing) {
+              DB.insert('groundWorkers', { id: generateId('gw'), name });
+            }
           }
           renderCoAssigneeChips();
         }
@@ -7496,20 +7545,14 @@ const Workflow = {
       const allExistingIds = existingTasks.map(t => t.id);
       const predecessors = selectedPreds.includes('*') ? allExistingIds : selectedPreds;
 
-      // Auto-register new ground workers
-      if (groundWorkerName) {
-        const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === groundWorkerName.toLowerCase());
-        if (!existing) {
-          DB.insert('groundWorkers', { id: generateId('gw'), name: groundWorkerName });
-        }
-      }
+      const res = this.resolveAssignee(groundWorkerName);
 
       const newTask = {
         id: generateId('t'),
         workRequestId: wrId,
         title: data.title.trim(),
-        assigneeId: null,
-        assigneeName: groundWorkerName || null,
+        assigneeId: res.id,
+        assigneeName: res.name,
         coAssignees: isDraft ? coAssignees.filter(Boolean) : [],
         status: (groundWorkerName || coAssignees.length > 0) ? 'Assigned' : 'Draft',
         priority: data.priority || 'Normal',
@@ -7589,8 +7632,11 @@ const Workflow = {
         }
         if (!coAssignees.includes(name)) {
           coAssignees.push(name);
-          const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase());
-          if (!existing) DB.insert('groundWorkers', { id: generateId('gw'), name });
+          const isUser = (DB.getAll('users') || []).some(u => u.name.toLowerCase() === name.toLowerCase());
+          if (!isUser) {
+            const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === name.toLowerCase());
+            if (!existing) DB.insert('groundWorkers', { id: generateId('gw'), name });
+          }
           renderCoAssigneeChips();
         }
         coAssigneeDropdown.value = '';
@@ -7751,18 +7797,12 @@ const Workflow = {
       const allExistingIds = existingTasks.map(t => t.id);
       const predecessors = selectedPreds.includes('*') ? allExistingIds : selectedPreds;
 
-      // Auto-register new ground workers
-      if (groundWorkerName) {
-        const existing = (DB.getAll('groundWorkers') || []).find(gw => gw.name.toLowerCase() === groundWorkerName.toLowerCase());
-        if (!existing) {
-          DB.insert('groundWorkers', { id: generateId('gw'), name: groundWorkerName });
-        }
-      }
+      const res = this.resolveAssignee(groundWorkerName);
 
       DB.update('tasks', task.id, {
         title: data.title.trim(),
-        assigneeId: null,
-        assigneeName: groundWorkerName || null,
+        assigneeId: res.id,
+        assigneeName: res.name,
         coAssignees: isDraft ? coAssignees.filter(Boolean) : task.coAssignees || [],
         priority: data.priority || 'Normal',
         dueDate: data.dueDate || '',
@@ -8367,10 +8407,8 @@ const Workflow = {
     const canApprove = Auth.can('workflow:approve');
     const archived = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
+      return matchesEntity && Auth.canViewWr(wr);
     }).filter(wr => wr.status === 'Cancelled');
 
     const container = el('div');

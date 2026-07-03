@@ -131,12 +131,35 @@ const Auth = {
 
   canViewWr(wr) {
     if (!this.user) return false;
-    if (this.user.role === 'Admin') return true;
-    if (this.user.role === 'Manager') {
-      return wr && wr.assignedTo === this.user.id;
+    if (this.user.role === 'Admin' || this.user.role === 'Manager') return true;
+    if (!wr) return false;
+    
+    // Check if user is assigned to any task within this work request
+    const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id) || [];
+    const isAssignedInTasks = tasks.some(t => {
+      if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
+      if (t.assigneeName && this.user.name && t.assigneeName === this.user.name) return true;
+      if ((t.coAssignees || []).some(n => n && n === this.user.name)) return true;
+      return (t.checklist || []).some(item => item.assigneeId === this.user.id || (item.assigneeName && item.assigneeName === this.user.name));
+    });
+    if (isAssignedInTasks) return true;
+
+    // Check if it's a staged work request (pending approval), check tasks array inside proposedData
+    if (wr.isPendingApproval || (wr.id && typeof wr.id === 'string' && wr.id.startsWith('pc'))) {
+      const pc = wr.pendingChangeId ? DB.getById('pendingChanges', wr.pendingChangeId) : DB.getWhere('pendingChanges', p => p.proposedData && p.proposedData.id === wr.id)[0];
+      const proposedTasks = pc?.proposedData?.tasks || wr.tasks || [];
+      const isAssignedInStagedTasks = proposedTasks.some(t => {
+        if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
+        if (t.assigneeName && this.user.name && t.assigneeName === this.user.name) return true;
+        if ((t.coAssignees || []).some(n => n && n === this.user.name)) return true;
+        return (t.checklist || []).some(item => item.assigneeId === this.user.id || (item.assigneeName && item.assigneeName === this.user.name));
+      });
+      if (isAssignedInStagedTasks) return true;
     }
-    return true;
+
+    return false;
   },
+
 
   canViewDisbursement(d) {
     if (!this.user) return false;
