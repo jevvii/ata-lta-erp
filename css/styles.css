@@ -8995,7 +8995,7 @@ html.loading-active #loading-screen {
 /* ─── Side Pane Task Row Layout (Fix Overflow & Beautify) ─── */
 .side-pane-body .task-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 8px 12px;
   background: var(--color-bg, #ffffff);
   border: 1px solid var(--color-border, #e2e8f0);
@@ -9019,9 +9019,45 @@ html.loading-active #loading-screen {
   border-color: var(--color-border, #334155);
 }
 
+/* Global Collapse/Expand Caret */
+.task-row-toggle {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted, #64748b);
+  transition: transform 0.2s ease;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.task-row-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.task-row.collapsed .task-row-toggle {
+  transform: rotate(0deg);
+}
+
+.task-row:not(.collapsed) .task-row-toggle {
+  transform: rotate(90deg);
+}
+
+/* Hide metadata when collapsed */
+.task-row.collapsed .task-assignee-wrapper,
+.task-row.collapsed .wr-task-row-coassignees,
+.task-row.collapsed .task-pred {
+  display: none !important;
+}
+
 /* Row 1: Title and Delete Button */
 .side-pane-body .task-row .task-title-input {
-  grid-column: 1 / 2;
+  grid-column: 2 / 3;
   width: 100%;
   font-weight: 600 !important;
   border: 1px solid transparent !important;
@@ -9057,7 +9093,7 @@ html.loading-active #loading-screen {
 }
 
 .side-pane-body .task-row .btn-danger {
-  grid-column: 2 / 3;
+  grid-column: 3 / 4;
   width: 28px !important;
   height: 28px !important;
   border-radius: 6px !important;
@@ -9086,7 +9122,7 @@ html.loading-active #loading-screen {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  grid-column: 1 / 3;
+  grid-column: 1 / 4;
   width: 100% !important;
   max-width: none !important;
   min-width: 0 !important;
@@ -9094,30 +9130,45 @@ html.loading-active #loading-screen {
 }
 
 .side-pane-body .task-row .task-assignee-wrapper::before {
-  content: "👤 Assignee";
+  content: "Assignee";
   font-size: 0.75rem;
   color: var(--color-text-muted, #64748b);
   font-weight: 500;
   width: 100px;
   flex-shrink: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 14px 14px;
+  background-position: left center;
+  padding-left: 20px;
 }
 
 .side-pane-body .task-row .wr-task-row-coassignees::before {
-  content: "👥 Co-assignee";
+  content: "Co-assignee";
   font-size: 0.75rem;
   color: var(--color-text-muted, #64748b);
   font-weight: 500;
   width: 100px;
   flex-shrink: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 14px 14px;
+  background-position: left center;
+  padding-left: 20px;
 }
 
 .side-pane-body .task-row .task-pred::before {
-  content: "🔗 Dependency";
+  content: "Dependency";
   font-size: 0.75rem;
   color: var(--color-text-muted, #64748b);
   font-weight: 500;
   width: 100px;
   flex-shrink: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 14px 14px;
+  background-position: left center;
+  padding-left: 20px;
 }
 
 /* Fields & Buttons Height Overrides */

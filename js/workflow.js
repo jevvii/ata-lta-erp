@@ -3713,6 +3713,13 @@ const Workflow = {
     const row = el('div', { class: 'task-row' });
     row.dataset.taskKey = taskData?.id || generateId('tmp');
 
+    // Toggle caret for collapse/expand
+    const caret = el('button', { type: 'button', class: 'task-row-toggle', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>' });
+    caret.addEventListener('click', () => {
+      row.classList.toggle('collapsed');
+    });
+    row.appendChild(caret);
+
     // Detect if existing task depends on every previous task -> show as "All (*)"
     const existingPreds = taskData?.predecessors || taskData?.dependencies || [];
     const previousTaskKeys = Array.from(container.querySelectorAll('.task-row')).map(r => r.dataset.taskKey);
