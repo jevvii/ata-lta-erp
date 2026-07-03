@@ -1231,6 +1231,53 @@ const Workflow = {
     });
   },
 
+  getFinancialQuickActions(wr, t) {
+    const actions = [];
+    if (Auth.can('billing:edit')) {
+      actions.push({
+        title: 'Generate Billing',
+        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+        handler: () => this.openGenerateBillingModal(wr, t)
+      });
+    } else if (Auth.can('billing:request')) {
+      actions.push({
+        title: 'Request Billing',
+        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+        handler: () => this.submitOperationsRequest('billing', wr, t)
+      });
+    }
+
+    if (Auth.can('disbursement:create')) {
+      actions.push({
+        title: 'Generate Disbursement',
+        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+        handler: () => this.openGenerateDisbursementModal(wr, t)
+      });
+    } else if (Auth.can('disbursement:request')) {
+      actions.push({
+        title: 'Request Disbursement',
+        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+        handler: () => this.submitOperationsRequest('disbursement', wr, t)
+      });
+    }
+
+    if (Auth.can('transmittal:create')) {
+      actions.push({
+        title: 'Generate Transmittal',
+        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`,
+        handler: () => this.openGenerateTransmittalModal(wr, t)
+      });
+    } else if (Auth.can('transmittal:request')) {
+      actions.push({
+        title: 'Request Transmittal',
+        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`,
+        handler: () => this.submitOperationsRequest('transmittal', wr, t)
+      });
+    }
+
+    return actions;
+  },
+
   submitOperationsRequest(type, wr, preselectedTask = null) {
     const existing = DB.getWhere('operationsRequests', r => r.workRequestId === wr.id && r.type === type && r.status === 'pending');
     if (existing.length > 0) {
@@ -4554,8 +4601,9 @@ const Workflow = {
 
     const searchIcon = el('span', {
       class: 'search-icon',
+      'aria-hidden': 'true',
       style: 'position: absolute; left: 10px; pointer-events: none; display: flex; align-items: center; color: var(--muted);',
-      html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`
+      html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`
     });
 
     const searchInput = el('input', {
@@ -5456,39 +5504,13 @@ const Workflow = {
             setTimeout(() => {
               menuList.classList.add('open');
             }, 10);
+          } else {
+            menuList.classList.remove('open');
+            menuList.classList.add('hidden');
           }
         });
 
-        // Compute financial quick action handlers for task t
-        let billingTitle = null;
-        let billingHandler = null;
-        if (Auth.can('billing:edit')) {
-          billingTitle = 'Generate Billing';
-          billingHandler = () => this.openGenerateBillingModal(wr, t);
-        } else if (Auth.can('billing:request')) {
-          billingTitle = 'Request Billing';
-          billingHandler = () => this.submitOperationsRequest('billing', wr, t);
-        }
-
-        let disbTitle = null;
-        let disbHandler = null;
-        if (Auth.can('disbursement:create')) {
-          disbTitle = 'Generate Disbursement';
-          disbHandler = () => this.openGenerateDisbursementModal(wr, t);
-        } else if (Auth.can('disbursement:request')) {
-          disbTitle = 'Request Disbursement';
-          disbHandler = () => this.submitOperationsRequest('disbursement', wr, t);
-        }
-
-        let transTitle = null;
-        let transHandler = null;
-        if (Auth.can('transmittal:create')) {
-          transTitle = 'Generate Transmittal';
-          transHandler = () => this.openGenerateTransmittalModal(wr, t);
-        } else if (Auth.can('transmittal:request')) {
-          transTitle = 'Request Transmittal';
-          transHandler = () => this.submitOperationsRequest('transmittal', wr, t);
-        }
+        const finActions = this.getFinancialQuickActions(wr, t);
 
         // Log Time item
         const logTimeMenuItem = el('button', {
@@ -5550,45 +5572,19 @@ const Workflow = {
         menuList.appendChild(editTaskItem);
 
         if (!isArchived) {
-          if (billingHandler) {
-            const bItem = el('button', {
+          finActions.forEach(act => {
+            const item = el('button', {
               class: 'action-menu-item',
-              html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${billingTitle}`
+              html: `${act.iconSvg} ${act.title}`
             });
-            bItem.addEventListener('click', (e) => {
+            item.addEventListener('click', (e) => {
               e.stopPropagation();
               menuList.classList.remove('open');
               menuList.classList.add('hidden');
-              billingHandler();
+              act.handler();
             });
-            menuList.appendChild(bItem);
-          }
-          if (disbHandler) {
-            const dItem = el('button', {
-              class: 'action-menu-item',
-              html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg> ${disbTitle}`
-            });
-            dItem.addEventListener('click', (e) => {
-              e.stopPropagation();
-              menuList.classList.remove('open');
-              menuList.classList.add('hidden');
-              disbHandler();
-            });
-            menuList.appendChild(dItem);
-          }
-          if (transHandler) {
-            const trItem = el('button', {
-              class: 'action-menu-item',
-              html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg> ${transTitle}`
-            });
-            trItem.addEventListener('click', (e) => {
-              e.stopPropagation();
-              menuList.classList.remove('open');
-              menuList.classList.add('hidden');
-              transHandler();
-            });
-            menuList.appendChild(trItem);
-          }
+            menuList.appendChild(item);
+          });
         }
 
         // Delete item
@@ -5920,30 +5916,14 @@ const Workflow = {
         editTaskHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showEditTaskModal(t.id, () => App.handleRoute()); });
 
         if (!isArchived) {
-          if (billingHandler) {
-            const bBtn = el('button', {
+          finActions.forEach(act => {
+            const btn = el('button', {
               class: 'btn btn-secondary btn-xs',
-              html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${billingTitle}`
+              html: `${act.iconSvg.replace('width="14" height="14"', 'width="14" height="14" style="margin-right: 4px; vertical-align: middle;"')} ${act.title}`
             });
-            bBtn.addEventListener('click', (e) => { e.stopPropagation(); billingHandler(); });
-            detailToolbar.appendChild(bBtn);
-          }
-          if (disbHandler) {
-            const dBtn = el('button', {
-              class: 'btn btn-secondary btn-xs',
-              html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg> ${disbTitle}`
-            });
-            dBtn.addEventListener('click', (e) => { e.stopPropagation(); disbHandler(); });
-            detailToolbar.appendChild(dBtn);
-          }
-          if (transHandler) {
-            const trBtn = el('button', {
-              class: 'btn btn-secondary btn-xs',
-              html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg> ${transTitle}`
-            });
-            trBtn.addEventListener('click', (e) => { e.stopPropagation(); transHandler(); });
-            detailToolbar.appendChild(trBtn);
-          }
+            btn.addEventListener('click', (e) => { e.stopPropagation(); act.handler(); });
+            detailToolbar.appendChild(btn);
+          });
         }
 
         detailToolbar.appendChild(editTaskHeaderBtn);
