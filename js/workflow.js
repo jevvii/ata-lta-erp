@@ -1233,16 +1233,26 @@ const Workflow = {
 
   getFinancialQuickActions(wr, t) {
     const actions = [];
+    const makeToolbarIcon = (svg) => svg.replace('<svg ', '<svg style="margin-right: 4px; vertical-align: middle;" ');
+
+    const ICONS = {
+      billing: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+      disbursement: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+      transmittal: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`
+    };
+
     if (Auth.can('billing:edit')) {
       actions.push({
         title: 'Generate Billing',
-        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+        menuIconHtml: ICONS.billing,
+        toolbarIconHtml: makeToolbarIcon(ICONS.billing),
         handler: () => this.openGenerateBillingModal(wr, t)
       });
     } else if (Auth.can('billing:request')) {
       actions.push({
         title: 'Request Billing',
-        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+        menuIconHtml: ICONS.billing,
+        toolbarIconHtml: makeToolbarIcon(ICONS.billing),
         handler: () => this.submitOperationsRequest('billing', wr, t)
       });
     }
@@ -1250,13 +1260,15 @@ const Workflow = {
     if (Auth.can('disbursement:create')) {
       actions.push({
         title: 'Generate Disbursement',
-        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+        menuIconHtml: ICONS.disbursement,
+        toolbarIconHtml: makeToolbarIcon(ICONS.disbursement),
         handler: () => this.openGenerateDisbursementModal(wr, t)
       });
     } else if (Auth.can('disbursement:request')) {
       actions.push({
         title: 'Request Disbursement',
-        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+        menuIconHtml: ICONS.disbursement,
+        toolbarIconHtml: makeToolbarIcon(ICONS.disbursement),
         handler: () => this.submitOperationsRequest('disbursement', wr, t)
       });
     }
@@ -1264,13 +1276,15 @@ const Workflow = {
     if (Auth.can('transmittal:create')) {
       actions.push({
         title: 'Generate Transmittal',
-        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`,
+        menuIconHtml: ICONS.transmittal,
+        toolbarIconHtml: makeToolbarIcon(ICONS.transmittal),
         handler: () => this.openGenerateTransmittalModal(wr, t)
       });
     } else if (Auth.can('transmittal:request')) {
       actions.push({
         title: 'Request Transmittal',
-        iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`,
+        menuIconHtml: ICONS.transmittal,
+        toolbarIconHtml: makeToolbarIcon(ICONS.transmittal),
         handler: () => this.submitOperationsRequest('transmittal', wr, t)
       });
     }
@@ -5205,6 +5219,7 @@ const Workflow = {
       let totalHours = 0;
 
       groupTasks.forEach(t => {
+        const finActions = this.getFinancialQuickActions(wr, t);
         const assignee = t.assigneeName
           ? { name: t.assigneeName }
           : DB.getById('users', t.assigneeId || t.assignedTo);
@@ -5510,8 +5525,6 @@ const Workflow = {
           }
         });
 
-        const finActions = this.getFinancialQuickActions(wr, t);
-
         // Log Time item
         const logTimeMenuItem = el('button', {
           class: 'action-menu-item',
@@ -5575,7 +5588,7 @@ const Workflow = {
           finActions.forEach(act => {
             const item = el('button', {
               class: 'action-menu-item',
-              html: `${act.iconSvg} ${act.title}`
+              html: `${act.menuIconHtml} ${act.title}`
             });
             item.addEventListener('click', (e) => {
               e.stopPropagation();
@@ -5919,7 +5932,7 @@ const Workflow = {
           finActions.forEach(act => {
             const btn = el('button', {
               class: 'btn btn-secondary btn-xs',
-              html: `${act.iconSvg.replace('width="14" height="14"', 'width="14" height="14" style="margin-right: 4px; vertical-align: middle;"')} ${act.title}`
+              html: `${act.toolbarIconHtml} ${act.title}`
             });
             btn.addEventListener('click', (e) => { e.stopPropagation(); act.handler(); });
             detailToolbar.appendChild(btn);
