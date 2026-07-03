@@ -2412,12 +2412,6 @@ const Workflow = {
 
     const assignedUser = task.assignedTo || task.assigneeId ? DB.getById('users', task.assignedTo || task.assigneeId) : null;
     const wr = pendingWr || (task.workRequestId ? DB.getById('workRequests', task.workRequestId) : null);
-    if (wr) {
-      const isPending = DB.getWhere('pendingChanges', pc => pc.status === 'pending' && pc.table === 'workRequests' && (pc.proposedData.id === wr.id || pc.proposedData.key === wr.id || pc.proposedData.workRequestId === wr.id)).length > 0;
-      if (isPending) {
-        wr.isPendingApproval = true;
-      }
-    }
 
     const paneContent = el('div');
 

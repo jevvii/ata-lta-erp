@@ -148,7 +148,7 @@ const Auth = {
     if (wr.submittedBy === this.user.id || wr.assignedTo === this.user.id || wr.requestedBy === this.user.id) return true;
     
     // Check tasks
-    const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
+    const tasks = wr.tasks || (wr.isPendingApproval ? [] : DB.getWhere('tasks', t => t.workRequestId === wr.id));
     const isAssigned = tasks.some(t => {
       if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
       if (t.assigneeName && t.assigneeName === this.user.name) return true;

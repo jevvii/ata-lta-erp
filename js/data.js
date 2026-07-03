@@ -1828,7 +1828,26 @@ const DB = {
   },
 
   getAll(table) {
-    return JSON.parse(localStorage.getItem('erp_' + table) || '[]');
+    const records = JSON.parse(localStorage.getItem('erp_' + table) || '[]');
+    if (table === 'workRequests' && records.length > 0) {
+      const pcStr = localStorage.getItem('erp_pendingChanges') || '[]';
+      try {
+        const pcs = JSON.parse(pcStr);
+        const pendingWrIds = new Set(
+          pcs.filter(pc => pc.status === 'pending' && pc.table === 'workRequests')
+             .map(pc => pc.proposedData.id || pc.proposedData.key || pc.proposedData.workRequestId)
+             .filter(Boolean)
+        );
+        records.forEach(r => {
+          if (pendingWrIds.has(r.id)) {
+            r.isPendingApproval = true;
+          }
+        });
+      } catch (e) {
+        // ignore errors
+      }
+    }
+    return records;
   },
 
   getById(table, id) {
