@@ -7892,12 +7892,7 @@ const Workflow = {
       if (wr.status === 'Draft') {
         capStatus = 'Assigned';
       } else if (wr.status === 'Pre-processing') {
-        const title = (task.title || '').toLowerCase();
-        if (title.includes('requirement') || title.includes('gather')) {
-          capStatus = 'Completed';
-        } else {
-          capStatus = 'Assigned';
-        }
+        capStatus = 'Completed';
       } else if (wr.status === 'Processing') {
         capStatus = 'Completed';
       } else if (wr.status === 'Billing' || wr.status === 'Disbursement') {

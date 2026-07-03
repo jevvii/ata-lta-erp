@@ -128,7 +128,7 @@ async function runVerification() {
       let allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
       assert(
         'Case 3: getValidNextStatuses for Non-Requirement Task (Draft)',
-        allowedNonReq.includes('Draft') && allowedNonReq.includes('Assigned') && allowedNonReq.includes('Cancelled') && !allowedNonReq.includes('In Progress'),
+        allowedNonReq.includes('Assigned') && !allowedNonReq.includes('In Progress'),
         `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
       );
 
@@ -139,16 +139,34 @@ async function runVerification() {
       allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
       assert(
         'Case 3: getValidNextStatuses for Non-Requirement Task (Assigned)',
-        allowedNonReq.includes('Draft') && allowedNonReq.includes('Assigned') && allowedNonReq.includes('Cancelled') && !allowedNonReq.includes('In Progress'),
+        allowedNonReq.includes('In Progress') && !allowedNonReq.includes('For Review'),
         `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
       );
 
-      let res3_invalid = Workflow.updateTaskStatus(taskNonReqPreprocId, 'In Progress');
+      let res3_in_progress = Workflow.updateTaskStatus(taskNonReqPreprocId, 'In Progress');
+      assert('Case 3: Transition to In Progress', res3_in_progress.success === true, `Result: ${JSON.stringify(res3_in_progress)}`);
+
+      taskNonReq = DB.getById('tasks', taskNonReqPreprocId);
+      allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
       assert(
-        'Case 3: updateTaskStatus non-requirement task to In Progress (Invalid)',
-        res3_invalid.error === 'Task status cannot be set to "In Progress" in the "Pre-processing" phase.',
-        `Result error: ${res3_invalid.error}`
+        'Case 3: getValidNextStatuses for Non-Requirement Task (In Progress)',
+        allowedNonReq.includes('For Review') && !allowedNonReq.includes('Completed'),
+        `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
       );
+
+      let res3_for_review = Workflow.updateTaskStatus(taskNonReqPreprocId, 'For Review');
+      assert('Case 3: Transition to For Review', res3_for_review.success === true, `Result: ${JSON.stringify(res3_for_review)}`);
+
+      taskNonReq = DB.getById('tasks', taskNonReqPreprocId);
+      allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
+      assert(
+        'Case 3: getValidNextStatuses for Non-Requirement Task (For Review)',
+        allowedNonReq.includes('Completed'),
+        `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
+      );
+
+      let res3_completed = Workflow.updateTaskStatus(taskNonReqPreprocId, 'Completed');
+      assert('Case 3: Transition to Completed', res3_completed.success === true, `Result: ${JSON.stringify(res3_completed)}`);
 
       // Case 4: Work Request is in Billing
       const taskBilling = DB.getById('tasks', taskBillingId);
