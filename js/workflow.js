@@ -46,7 +46,7 @@ const FINANCIAL_ACTION_CONFIGS = [
  * Apply standard disabled treatment to an element for pending-approval state.
  * Sets disabled, opacity, cursor, and tooltip.
  */
-function disableForPending(element, title = 'Under approval') {
+function disableForApproval(element, title = 'Under approval') {
   element.disabled = true;
   element.style.opacity = '0.5';
   element.style.cursor = 'not-allowed';
@@ -70,6 +70,9 @@ function buildTaskMap() {
 
 const Workflow = {
   editingId: null,
+  disableForApproval(element, title = 'Under approval') {
+    disableForApproval(element, title);
+  },
   view: 'list',
   detailWrId: null,
   templateEditingId: null,
@@ -1617,6 +1620,7 @@ const Workflow = {
     if (this.view === 'list') {
       container.classList.add('operations-list-page');
     }
+    this._tempTaskMap = buildTaskMap();
     
     if (this.view === 'detail' && this.detailWrId) {
       let wr = DB.getById('workRequests', this.detailWrId);
@@ -1729,6 +1733,7 @@ const Workflow = {
     }
 
     setTimeout(() => this.updateStickyOffsets(), 0);
+    delete this._tempTaskMap;
     return container;
   },
 
@@ -1760,7 +1765,7 @@ const Workflow = {
     const tabNav = el('div', { class: 'module-tab-nav' });
 
     const entity = Auth.activeEntity;
-    const taskMap = buildTaskMap();
+    const taskMap = this._tempTaskMap || buildTaskMap();
     const wrCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
@@ -1974,7 +1979,7 @@ const Workflow = {
       }));
 
       // Scope visibility for Manager and Staff roles using central visibility helper
-      const listTaskMap = buildTaskMap();
+      const listTaskMap = this._tempTaskMap || buildTaskMap();
       wrs = wrs.filter(r => Auth.canViewWrWithTasks(r, listTaskMap));
       if (priorityFilter.value) wrs = wrs.filter(r => r.priority === priorityFilter.value);
       if (empFilter.searchText && empFilter.searchText.trim() !== '') {
@@ -2077,7 +2082,7 @@ const Workflow = {
       
       if (wr.isPendingApproval) {
         const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-        disableForPending(editBtn);
+        disableForApproval(editBtn);
         tdAct.appendChild(editBtn);
 
         if (Auth.user.id === wr.submittedBy || Auth.isManagerial()) {
@@ -2479,11 +2484,10 @@ const Workflow = {
       }
       statusSel.appendChild(opt);
     });
-    if (isArchived) {
+    if (wr && wr.isPendingApproval) {
+      disableForApproval(statusSel);
+    } else if (isArchived) {
       statusSel.disabled = true;
-      if (wr && wr.isPendingApproval) {
-        disableForPending(statusSel);
-      }
     }
 
     const sColors = { 'Completed': '#17a34a', 'In Progress': '#eab308', 'Draft': '#6b6b6b', 'For Review': '#2f6feb', 'Assigned': '#2f6feb', 'Cancelled': '#dc2626' };
@@ -2623,7 +2627,7 @@ const Workflow = {
             const cb = el('input', { type: 'checkbox' });
             cb.checked = !!item.completed;
             if (wr && wr.isPendingApproval) {
-              disableForPending(cb);
+              disableForApproval(cb);
             } else {
               cb.disabled = blocked;
               if (blocked) cb.title = 'Locked';
@@ -2662,8 +2666,8 @@ const Workflow = {
               });
               if (wr && wr.isPendingApproval) {
                 const input = assigneeDropdown.querySelector('input');
-                if (input) disableForPending(input);
-                disableForPending(assigneeDropdown);
+                if (input) disableForApproval(input);
+                disableForApproval(assigneeDropdown);
               }
               assigneeWrap.appendChild(assigneeDropdown);
 
@@ -2704,7 +2708,7 @@ const Workflow = {
             const actionsDiv = el('div', { style: 'display:flex; gap: 4px;' });
             const logBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-xs', text: 'Log' });
             if (wr && wr.isPendingApproval) {
-              disableForPending(logBtn);
+              disableForApproval(logBtn);
             } else {
               logBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -2715,7 +2719,7 @@ const Workflow = {
 
             const delBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-xs', text: '×', style: 'color:var(--color-text-muted); font-size: 14px;' });
             if (wr && wr.isPendingApproval) {
-              disableForPending(delBtn);
+              disableForApproval(delBtn);
             } else {
               delBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -2848,11 +2852,11 @@ const Workflow = {
         const addItemBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: 'Add' });
 
         if (wr && wr.isPendingApproval) {
-          disableForPending(newItemInput);
+          disableForApproval(newItemInput);
 
-          disableForPending(predBtn);
+          disableForApproval(predBtn);
 
-          disableForPending(addItemBtn);
+          disableForApproval(addItemBtn);
         } else {
           predBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -2964,7 +2968,7 @@ const Workflow = {
           if (isDocStaff || isAdmin) {
             const delBtn = el('button', { class: 'btn btn-ghost btn-xs', text: '×', style: 'color:var(--color-danger); font-size:1.2rem; padding:0 4px;' });
             if (wr && wr.isPendingApproval) {
-              disableForPending(delBtn);
+              disableForApproval(delBtn);
             } else {
               delBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -4695,10 +4699,7 @@ const Workflow = {
         text: '+ Add Task'
       });
       if (wr.isPendingApproval) {
-        addTaskBtn.disabled = true;
-        addTaskBtn.style.opacity = '0.5';
-        addTaskBtn.style.cursor = 'not-allowed';
-        addTaskBtn.title = 'Tasks cannot be added while the Work Request is awaiting approval.';
+        disableForApproval(addTaskBtn, 'Tasks cannot be added while the Work Request is awaiting approval.');
         
         const note = el('span', {
           text: '(Under approval)',
@@ -4790,10 +4791,7 @@ const Workflow = {
       if (canAddTaskInToolbar && !isArchived) {
         const addFirstBtn = el('button', { type: 'button', class: 'btn btn-primary', text: '+ Add First Task' });
         if (wr.isPendingApproval) {
-          addFirstBtn.disabled = true;
-          addFirstBtn.style.opacity = '0.5';
-          addFirstBtn.style.cursor = 'not-allowed';
-          addFirstBtn.title = 'Tasks cannot be added while the Work Request is awaiting approval.';
+          disableForApproval(addFirstBtn, 'Tasks cannot be added while the Work Request is awaiting approval.');
           
           const wrap = el('div', { style: 'display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 12px;' });
           wrap.appendChild(addFirstBtn);
@@ -5323,7 +5321,7 @@ const Workflow = {
         });
         rowCheckbox.checked = selected;
         if (wr.isPendingApproval) {
-          disableForPending(rowCheckbox);
+          disableForApproval(rowCheckbox);
         } else {
           rowCheckbox.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -5396,8 +5394,8 @@ const Workflow = {
 
           if (wr.isPendingApproval) {
             const input = gwDropdown.querySelector('input');
-            if (input) disableForPending(input);
-            disableForPending(gwDropdown);
+            if (input) disableForApproval(input);
+            disableForApproval(gwDropdown);
           }
 
           const assigneeWrap = el('div', { class: 'task-assignee-wrapper' });
@@ -5454,7 +5452,7 @@ const Workflow = {
         if (isArchived) {
           statusSel.disabled = true;
         } else if (wr.isPendingApproval) {
-          disableForPending(statusSel);
+          disableForApproval(statusSel);
         }
 
         const sColors = { 'Completed': '#17a34a', 'In Progress': '#eab308', 'Draft': '#6b6b6b', 'For Review': '#2f6feb', 'Assigned': '#2f6feb', 'Cancelled': '#dc2626' };
@@ -5552,7 +5550,7 @@ const Workflow = {
             style: 'font-size:10px;color:var(--warn);font-weight:500;'
           });
           if (wr.isPendingApproval) {
-            disableForPending(linkHint);
+            disableForApproval(linkHint);
           } else {
             linkHint.style.cursor = 'pointer';
             linkHint.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
@@ -5565,7 +5563,7 @@ const Workflow = {
             style: 'font-size:10px;color:var(--warn);font-weight:500;'
           });
           if (wr.isPendingApproval) {
-            disableForPending(linkHint);
+            disableForApproval(linkHint);
           } else {
             linkHint.style.cursor = 'pointer';
             linkHint.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
@@ -5832,7 +5830,7 @@ const Workflow = {
               const checklistActions = el('div', { style: 'display:flex;gap:var(--space-1);' });
               const logBtn = el('button', { type: 'button', class: 'action-btn', text: 'Log Time' });
               if (wr.isPendingApproval) {
-                disableForPending(logBtn);
+                disableForApproval(logBtn);
               } else {
                 logBtn.addEventListener('click', (e) => {
                   e.stopPropagation();
@@ -5843,7 +5841,7 @@ const Workflow = {
 
               const delBtn = el('button', { type: 'button', class: 'action-btn', text: '×', style: 'border-color:transparent;color:var(--muted);' });
               if (wr.isPendingApproval) {
-                disableForPending(delBtn);
+                disableForApproval(delBtn);
               } else {
                 delBtn.title = 'Delete checklist item';
                 delBtn.addEventListener('click', (e) => {
@@ -5982,11 +5980,11 @@ const Workflow = {
 
           const addItemBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Add' });
           if (wr.isPendingApproval) {
-            disableForPending(newItemInput);
+            disableForApproval(newItemInput);
 
-            disableForPending(predBtn);
+            disableForApproval(predBtn);
 
-            disableForPending(addItemBtn);
+            disableForApproval(addItemBtn);
           } else {
             addItemBtn.addEventListener('click', () => {
               const val = newItemInput.value.trim();
@@ -6017,7 +6015,7 @@ const Workflow = {
           html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Log Time`
         });
         if (wr.isPendingApproval) {
-          disableForPending(logTimeHeaderBtn);
+          disableForApproval(logTimeHeaderBtn);
         } else {
           logTimeHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddTimeLogModal(t.id); });
         }
@@ -6029,7 +6027,7 @@ const Workflow = {
             html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Request Log`
           });
           if (wr.isPendingApproval) {
-            disableForPending(reqLogHeaderBtn);
+            disableForApproval(reqLogHeaderBtn);
           } else {
             reqLogHeaderBtn.addEventListener('click', (e) => {
               e.stopPropagation();
@@ -6049,7 +6047,7 @@ const Workflow = {
           html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Link Record`
         });
         if (wr.isPendingApproval) {
-          disableForPending(linkRecordHeaderBtn);
+          disableForApproval(linkRecordHeaderBtn);
         } else {
           linkRecordHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
         }
@@ -6060,7 +6058,7 @@ const Workflow = {
           html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`
         });
         if (wr.isPendingApproval) {
-          disableForPending(editTaskHeaderBtn);
+          disableForApproval(editTaskHeaderBtn);
         } else {
           editTaskHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showEditTaskModal(t.id, () => App.handleRoute()); });
         }
@@ -6071,7 +6069,7 @@ const Workflow = {
             html: `${act.toolbarIconHtml} ${act.title}`
           });
           if (wr.isPendingApproval) {
-            disableForPending(btn);
+            disableForApproval(btn);
           } else {
             btn.addEventListener('click', (e) => { e.stopPropagation(); act.handler(); });
           }
@@ -6091,7 +6089,7 @@ const Workflow = {
         if ((canHandover || canUploadTaskDocs) && !isArchived) {
           const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload' });
           if (wr.isPendingApproval) {
-            disableForPending(addDocBtn);
+            disableForApproval(addDocBtn);
           } else {
             addDocBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddDocumentModal(t.id); });
           }
@@ -6143,7 +6141,7 @@ const Workflow = {
                 style: 'color:var(--danger); font-size:1.2rem; padding:0 4px; line-height:1;' 
               });
               if (wr.isPendingApproval) {
-                disableForPending(delBtn);
+                disableForApproval(delBtn);
               } else {
                 delBtn.title = 'Remove Attachment';
                 delBtn.addEventListener('click', (e) => {
@@ -6189,7 +6187,7 @@ const Workflow = {
                     const cActions = el('div', { style: 'display:flex; gap:8px; margin-top:8px; border-top:1px solid var(--border); padding-top:4px;' });
                     const editBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Edit', style: 'padding:0; font-size:0.7rem;' });
                     if (wr.isPendingApproval) {
-                      disableForPending(editBtn);
+                      disableForApproval(editBtn);
                     } else {
                       editBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -6219,7 +6217,7 @@ const Workflow = {
                     }
                     const delCommentBtn = el('button', { class: 'btn btn-link btn-xs', text: 'Delete', style: 'padding:0; font-size:var(--text-xs); color:var(--danger);' });
                     if (wr.isPendingApproval) {
-                      disableForPending(delCommentBtn);
+                      disableForApproval(delCommentBtn);
                     } else {
                       delCommentBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -6246,9 +6244,9 @@ const Workflow = {
                 const addBtnRow = el('div', { style: 'display:flex; gap:8px; margin-top:8px;' });
                 const saveNewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Save Comment' });
                 if (wr.isPendingApproval) {
-                  disableForPending(addInput);
+                  disableForApproval(addInput);
 
-                  disableForPending(saveNewBtn);
+                  disableForApproval(saveNewBtn);
                 } else {
                   saveNewBtn.addEventListener('click', (e) => {
                     e.stopPropagation();

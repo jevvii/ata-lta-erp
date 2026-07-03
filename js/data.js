@@ -1828,8 +1828,9 @@ const DB = {
   },
 
   getAll(table) {
-    const records = JSON.parse(localStorage.getItem('erp_' + table) || '[]');
+    let records = JSON.parse(localStorage.getItem('erp_' + table) || '[]');
     if (table === 'workRequests' && records.length > 0) {
+      records = records.map(r => ({ ...r }));
       const pcStr = localStorage.getItem('erp_pendingChanges') || '[]';
       try {
         const pcs = JSON.parse(pcStr);
@@ -1864,7 +1865,11 @@ const DB = {
 
   insert(table, record) {
     const all = this.getAll(table);
-    all.push(record);
+    const cleanRecord = { ...record };
+    if (table === 'workRequests') {
+      delete cleanRecord.isPendingApproval;
+    }
+    all.push(cleanRecord);
     this.save(table, all);
   },
 
@@ -1872,7 +1877,14 @@ const DB = {
     const all = this.getAll(table);
     const idx = all.findIndex(r => r.id === id);
     if (idx !== -1) {
-      all[idx] = { ...all[idx], ...changes };
+      const cleanChanges = { ...changes };
+      if (table === 'workRequests') {
+        delete cleanChanges.isPendingApproval;
+      }
+      all[idx] = { ...all[idx], ...cleanChanges };
+      if (table === 'workRequests') {
+        delete all[idx].isPendingApproval;
+      }
       this.save(table, all);
     }
   },
