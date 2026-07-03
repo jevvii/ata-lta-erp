@@ -7080,7 +7080,7 @@ tbody tr:hover {
   color: var(--muted);
 }
 
-.status-select,
+.task-group-v2 .status-select,
 .status-dropdown-wrapper-v2 .status-select,
 .task-list .status-select {
   appearance: none !important;
