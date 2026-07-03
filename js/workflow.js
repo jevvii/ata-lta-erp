@@ -5059,7 +5059,7 @@ const Workflow = {
           }
 
           colTasks.forEach(t => {
-            const card = el('div', { class: 'board-card board-card-v2', style: 'cursor: pointer;' });
+            const card = el('div', { class: 'board-card board-card-v2' + (t.status === 'Completed' ? ' completed' : ''), style: 'cursor: pointer;' });
             card.style.borderLeftColor = colColor;
             
             if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
@@ -5127,7 +5127,7 @@ const Workflow = {
         const list = el('div', { class: 'list-view operations-list-view', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-2);' });
         
         filteredTasks.forEach(t => {
-          const row = el('div', { class: 'list-item', style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
+          const row = el('div', { class: 'list-item' + (t.status === 'Completed' ? ' completed' : ''), style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
           
           if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
             row.classList.add('side-pane-active');
@@ -5230,7 +5230,7 @@ const Workflow = {
 
         const expanded = this.expandedTaskIds.has(t.id);
         const selected = container.selectedTaskIds.has(t.id);
-        const rowEl = el('div', { class: 'task-row' + (expanded ? ' expanded' : '') + (selected ? ' selected' : '') });
+        const rowEl = el('div', { class: 'task-row' + (expanded ? ' expanded' : '') + (selected ? ' selected' : '') + (t.status === 'Completed' ? ' completed' : '') });
         rowEl.dataset.id = t.id;
 
         // 1. Checkbox cell
