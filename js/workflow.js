@@ -51,9 +51,12 @@ const Workflow = {
   expandedTaskIds: new Set(),
   lastRenderedWrId: null,
 
+  isCompleted(itemOrTask) {
+    return !!(itemOrTask && (itemOrTask.status === 'Completed' || itemOrTask.completed));
+  },
+
   getCompletedClass(itemOrTask) {
-    const isCompleted = itemOrTask && (itemOrTask.status === 'Completed' || itemOrTask.completed);
-    return isCompleted ? ' completed is-completed' : '';
+    return this.isCompleted(itemOrTask) ? 'is-completed' : '';
   },
 
   standardTaskTemplates: [
@@ -486,7 +489,7 @@ const Workflow = {
         const taskCard = el('div', { class: 'checklist-view-item-wrap' });
         
         // Primary Task Row
-        const taskRow = el('div', { class: 'checklist-view-row task-level' + this.getCompletedClass(t) });
+        const taskRow = el('div', { class: ['checklist-view-row', 'task-level', this.getCompletedClass(t)].filter(Boolean).join(' ') });
         
         if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
           taskRow.classList.add('side-pane-active');
@@ -556,7 +559,7 @@ const Workflow = {
           
           normalizedCL.forEach(item => {
             const blocked = isChecklistBlocked(item, normalizedCL);
-            const subRow = el('div', { class: 'checklist-view-row sub-level' + this.getCompletedClass(item) + (blocked ? ' blocked' : '') });
+            const subRow = el('div', { class: ['checklist-view-row', 'sub-level', this.getCompletedClass(item), blocked ? 'blocked' : ''].filter(Boolean).join(' ') });
             
             // Indent spacer
             subRow.appendChild(el('div', { class: 'inline-cl-spacer' }));
@@ -2605,7 +2608,7 @@ const Workflow = {
           normalizedChecklist.forEach((item, idx) => {
             const blocked = isChecklistBlocked(item, normalizedChecklist);
             const prereq = item.dependsOn === '*' ? null : normalizedChecklist.find(c => c.id === item.dependsOn);
-            const row = el('div', { class: 'checklist-item' + (blocked ? ' locked' : '') + this.getCompletedClass(item) });
+            const row = el('div', { class: ['checklist-item', blocked ? 'locked' : '', this.getCompletedClass(item)].filter(Boolean).join(' ') });
             
             const cb = el('input', { type: 'checkbox' });
             cb.checked = !!item.completed;
@@ -5064,8 +5067,11 @@ const Workflow = {
           }
 
           colTasks.forEach(t => {
-            const card = el('div', { class: 'board-card board-card-v2' + this.getCompletedClass(t), style: 'cursor: pointer;' });
-            card.style.borderLeftColor = colColor;
+            const isComp = this.isCompleted(t);
+            const card = el('div', { class: ['board-card', 'board-card-v2', this.getCompletedClass(t)].filter(Boolean).join(' '), style: 'cursor: pointer;' });
+            if (!isComp) {
+              card.style.borderLeftColor = colColor;
+            }
             
             if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
               card.classList.add('side-pane-active');
@@ -5132,7 +5138,7 @@ const Workflow = {
         const list = el('div', { class: 'list-view operations-list-view', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-2);' });
         
         filteredTasks.forEach(t => {
-          const row = el('div', { class: 'list-item' + this.getCompletedClass(t), style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
+          const row = el('div', { class: ['list-item', this.getCompletedClass(t)].filter(Boolean).join(' '), style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
           
           if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
             row.classList.add('side-pane-active');
@@ -5235,7 +5241,7 @@ const Workflow = {
 
         const expanded = this.expandedTaskIds.has(t.id);
         const selected = container.selectedTaskIds.has(t.id);
-        const rowEl = el('div', { class: 'task-row' + (expanded ? ' expanded' : '') + (selected ? ' selected' : '') + this.getCompletedClass(t) });
+        const rowEl = el('div', { class: ['task-row', expanded ? 'expanded' : '', selected ? 'selected' : '', this.getCompletedClass(t)].filter(Boolean).join(' ') });
         rowEl.dataset.id = t.id;
 
         // 1. Checkbox cell

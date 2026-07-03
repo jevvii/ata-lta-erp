@@ -9006,8 +9006,8 @@ html.loading-active #loading-screen {
 .is-completed .checklist-view-title,
 .is-completed .checklist-text span {
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--fg, #000) 20%, transparent);
-  color: var(--muted, #94a3b8);
+  text-decoration-color: color-mix(in oklab, var(--color-text, #2d2d3f) 20%, transparent);
+  color: var(--color-text-muted, #9494a0);
 }
 .is-completed .badge {
   filter: grayscale(60%) opacity(70%);
@@ -9017,22 +9017,22 @@ html.loading-active #loading-screen {
 
 /* 1. Table View */
 .task-list .task-row.is-completed {
-  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff));
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 2.5%, var(--color-surface, #ffffff));
 }
 .task-list .task-row.is-completed .cell {
-  color: var(--muted, #94a3b8);
+  color: var(--color-text-muted, #9494a0);
 }
 
 /* 2. Board View */
 .board-v2 .board-card-v2.is-completed {
-  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff));
-  border-left-color: var(--success, #10b981);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 2.5%, var(--color-surface, #ffffff));
+  border-left-color: var(--color-success, #10b981);
 }
 
 /* 3. List View */
 .operations-list-view .list-item.is-completed {
-  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff));
-  border-left: 3px solid var(--success, #10b981);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 2.5%, var(--color-surface, #ffffff));
+  border-left: 3px solid var(--color-success, #10b981);
 }
 
 /* 4. Checklist View */
@@ -9044,12 +9044,12 @@ html.loading-active #loading-screen {
   background-color: color-mix(in oklab, var(--color-success, #10b981) 5%, transparent);
 }
 .project-detail-v2 .checklist-view-container .checklist-view-row.sub-level.is-completed {
-  background-color: color-mix(in oklab, var(--accent, #2563eb) 5%, transparent);
+  background-color: color-mix(in oklab, var(--color-primary, #2563eb) 5%, transparent);
 }
 
 /* 5. Detail Panel / Side Pane Checklists */
 .detail-panel .checklist-item.is-completed,
 .side-pane-toggle-content .checklist-item.is-completed {
-  background-color: color-mix(in srgb, var(--color-success, #10b981) 6%, transparent);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 6%, transparent);
   border-left-color: var(--color-success, #10b981);
 }
