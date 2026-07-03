@@ -7,9 +7,10 @@
 // This prevents the loading screen from flashing on immediate loads/reloads.
 (function() {
   if (sessionStorage.getItem('is_syncing') === 'true') {
-    window.showLoadingTimeout = setTimeout(function() {
+    const timeoutId = setTimeout(function() {
       document.documentElement.classList.add('loading-active');
     }, 250); // 250ms threshold for visible delay
+    document.documentElement.dataset.loadingTimeout = timeoutId.toString();
   }
 })();
 

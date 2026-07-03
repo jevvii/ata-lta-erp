@@ -643,19 +643,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Clear the show timeout to prevent it from firing if the page loaded fast
-  if (window.showLoadingTimeout) {
-    clearTimeout(window.showLoadingTimeout);
-    window.showLoadingTimeout = null;
+  const loadingTimeoutId = document.documentElement.dataset.loadingTimeout;
+  if (loadingTimeoutId) {
+    clearTimeout(parseInt(loadingTimeoutId, 10));
+    delete document.documentElement.dataset.loadingTimeout;
   }
 
   // Handle fading out of loading screen if active
   if (document.documentElement.classList.contains('loading-active') && loadingScreen) {
-    loadingScreen.style.transition = 'opacity 0.25s ease-in-out';
+    // Rely entirely on the CSS transition timing function by only toggling the opacity property
     loadingScreen.style.opacity = '0';
     setTimeout(() => {
       document.documentElement.classList.remove('loading-active');
-      loadingScreen.style.transition = '';
-    }, 250);
+      loadingScreen.style.opacity = '';
+    }, 250); // Matches the 0.25s duration defined in CSS
   }
   
   // Always ensure is_syncing is cleared after routing and initialization
