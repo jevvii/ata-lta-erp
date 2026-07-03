@@ -6,8 +6,60 @@
 const App = {
   currentModule: null,
 
+  /**
+   * Theme management: manual toggle with OS preference fallback.
+   * Persists the user's choice in localStorage so it survives reloads.
+   */
+  initTheme() {
+    if (this._themeInited) return;
+    this._themeInited = true;
+
+    const apply = () => {
+      const stored = localStorage.getItem('erp_theme');
+      let theme = stored;
+      if (!theme && window.matchMedia) {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      this.applyTheme(theme || 'light');
+    };
+
+    apply();
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (!localStorage.getItem('erp_theme')) apply();
+      });
+    }
+  },
+
+  applyTheme(theme) {
+    const isDark = theme === 'dark';
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    const moon = document.getElementById('theme-icon-moon');
+    const sun = document.getElementById('theme-icon-sun');
+    if (moon && sun) {
+      moon.classList.toggle('hidden', isDark);
+      sun.classList.toggle('hidden', !isDark);
+    }
+  },
+
+  toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('erp_theme', next);
+    this.applyTheme(next);
+  },
+
+  setupThemeToggle() {
+    if (this._themeToggleWired) return;
+    this._themeToggleWired = true;
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) btn.addEventListener('click', () => this.toggleTheme());
+  },
+
   init() {
     if (!Auth.restoreSession()) return;
+    this.initTheme();
+    this.setupThemeToggle();
     this.renderShell();
     this.setupRouting();
     this.setupNavigation();
@@ -609,6 +661,9 @@ const App = {
 
 // Login form wiring
 document.addEventListener('DOMContentLoaded', () => {
+  App.initTheme();
+  App.setupThemeToggle();
+
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
     loginForm.addEventListener('submit', (e) => {

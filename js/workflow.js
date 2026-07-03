@@ -2525,7 +2525,8 @@ const Workflow = {
     });
     if (isArchived) statusSel.disabled = true;
 
-    const sColors = { 'Completed': '#17a34a', 'In Progress': '#eab308', 'Draft': '#6b6b6b', 'For Review': '#2f6feb', 'Assigned': '#2f6feb', 'Cancelled': '#dc2626' };
+    // Status text colors chosen to stay discernible in both light and dark surfaces.
+    const sColors = { 'Completed': '#22c55e', 'In Progress': '#f59e0b', 'Draft': '#94a3b8', 'For Review': '#3b82f6', 'Assigned': '#3b82f6', 'Cancelled': '#ef4444' };
     statusSel.style.color = sColors[task.status] || 'var(--fg)';
 
     statusSel.addEventListener('change', () => {
@@ -3469,11 +3470,15 @@ const Workflow = {
 
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform' });
-    titleSection.appendChild(el('input', {
+    const titleInput = el('input', {
       type: 'text', name: 'title', class: 'notion-freeform-input notion-title-input',
       placeholder: 'Work request title', required: true,
       value: wr ? (wr.title || '') : ''
-    }));
+    });
+    titleSection.appendChild(titleInput);
+    if (!wr) {
+      setTimeout(() => { titleInput.focus(); titleInput.select(); }, 60);
+    }
     form.appendChild(titleSection);
 
     // ── Top property grid ──
@@ -5422,7 +5427,8 @@ const Workflow = {
         });
         if (isArchived) statusSel.disabled = true;
 
-        const sColors = { 'Completed': '#17a34a', 'In Progress': '#eab308', 'Draft': '#6b6b6b', 'For Review': '#2f6feb', 'Assigned': '#2f6feb', 'Cancelled': '#dc2626' };
+        // Status text colors chosen to stay discernible in both light and dark surfaces.
+        const sColors = { 'Completed': '#22c55e', 'In Progress': '#f59e0b', 'Draft': '#94a3b8', 'For Review': '#3b82f6', 'Assigned': '#3b82f6', 'Cancelled': '#ef4444' };
         statusSel.style.color = sColors[t.status] || 'var(--fg)';
 
         statusSel.addEventListener('change', () => {

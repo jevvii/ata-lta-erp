@@ -1005,6 +1005,23 @@ class SidePane {
 window.SidePaneInstance = new SidePane();
 
 /**
+ * Focus the first empty `.notion-title-input` inside a form container.
+ * Used so creation forms auto-focus their title field as soon as they open.
+ *
+ * @param {HTMLElement} container
+ */
+function focusFormTitle(container) {
+  if (!container) return;
+  const titleInput = container.querySelector('.notion-title-input');
+  if (titleInput && !titleInput.value.trim() && typeof titleInput.focus === 'function') {
+    setTimeout(() => {
+      titleInput.focus();
+      titleInput.select();
+    }, 60);
+  }
+}
+
+/**
  * Opens a form inside the side panel with Notion-style layout:
  * Icon + Title at top, form content in body, action buttons in sticky footer.
  *
@@ -1072,6 +1089,8 @@ function openFormPanel({ icon, title, formContent, formId, actions, mode, viewCo
       newTabRoute
     });
   }
+
+  focusFormTitle(wrapper);
 }
 
 /**

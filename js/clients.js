@@ -272,7 +272,11 @@ const Clients = {
     // ── Identity free-form block ──
     const identitySection = el('div', { class: 'notion-freeform' });
     identitySection.appendChild(el('label', { class: 'notion-section-label', text: 'Client Name' }));
-    identitySection.appendChild(el('input', { type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input', placeholder: 'Taxpayer / company name', required: true, value: client ? (client.name || '') : '' }));
+    const nameInput = el('input', { type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input', placeholder: 'Taxpayer / company name', required: true, value: client ? (client.name || '') : '' });
+    identitySection.appendChild(nameInput);
+    if (!client) {
+      setTimeout(() => { nameInput.focus(); nameInput.select(); }, 60);
+    }
     form.appendChild(identitySection);
 
     // ── Property grid ──
