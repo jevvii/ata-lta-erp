@@ -5952,7 +5952,7 @@ const Workflow = {
         docsHeader.appendChild(el('span', { text: 'Attached Documents' }));
         const canUploadTaskDocs = Auth.can('workflow:edit') || Auth.can('workflow:task_upload');
         if ((canHandover || canUploadTaskDocs) && !isArchived) {
-          const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload Scanned' });
+          const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload' });
           addDocBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddDocumentModal(t.id); });
           docsHeader.appendChild(addDocBtn);
         }
