@@ -8933,90 +8933,37 @@ tbody tr * {
   color: var(--color-primary, #1e3a8a);
 }
 
-.split-btn-menu .dropdown-item svg {
-  color: var(--color-text-muted, #64748b);
-  transition: color 0.15s ease;
-}
-
-.split-btn-menu .dropdown-item:hover svg {
-  color: var(--color-primary, #1e3a8a);
-}
-/* ==========================================================================
-   Loading Screen Overlay
-   ========================================================================== */
-#loading-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(244, 246, 251, 0.4);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 99999;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out;
-  pointer-events: none;
-}
-html.loading-active #loading-screen {
-  display: flex;
-  opacity: 1;
-  pointer-events: auto;
-}
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  font-family: "Poppins", "Inter", sans-serif;
-}
-.loading-spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid rgba(37, 99, 235, 0.1);
-  border-left-color: #2563eb;
-  border-radius: 50%;
-  animation: loading-spin 0.8s linear infinite;
-}
-.loading-text {
-  color: #2d2d3f;
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-@keyframes loading-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* ─── Side Pane Task Row Layout (Fix Overflow & Beautify) ─── */
+.split-btn-/* ─── Side Pane Task Row Layout (Fix Overflow & Beautify) ─── */
 .side-pane-body .task-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 8px 12px;
-  background: var(--color-bg, #ffffff);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-left: 3px solid var(--color-primary, #2563eb);
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  gap: 10px 12px;
+  background: var(--color-bg-light, #f8fafc); /* Slightly off-white background for visual container contrast */
+  border: 1px solid var(--color-border, #cbd5e1); /* Stronger border for higher visibility */
+  border-left: 4px solid var(--color-primary, #2563eb); /* Thicker left accent bar */
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
   position: relative;
   align-items: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.15s ease;
 }
 
 .side-pane-body .task-row:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border, #cbd5e1));
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  border-color: var(--color-primary, #2563eb);
+  background: var(--color-surface, #ffffff);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 [data-theme="dark"] .side-pane-body .task-row {
-  background: var(--color-surface, #1e293b);
-  border-color: var(--color-border, #334155);
+  background: #1e293b;
+  border-color: #475569;
+}
+
+[data-theme="dark"] .side-pane-body .task-row:hover {
+  background: #252f44;
+  border-color: var(--color-primary, #2563eb);
 }
 
 /* Global Collapse/Expand Caret */
@@ -9055,41 +9002,42 @@ html.loading-active #loading-screen {
   display: none !important;
 }
 
-/* Row 1: Title and Delete Button */
+/* Row 1: Title Input (Crisp bordered inputs for visibility) */
 .side-pane-body .task-row .task-title-input {
   grid-column: 2 / 3;
   width: 100%;
   font-weight: 600 !important;
-  border: 1px solid transparent !important;
-  background-color: transparent !important;
-  box-shadow: none !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  border: 1px solid var(--color-border, #cbd5e1) !important;
+  background-color: var(--color-surface, #ffffff) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  padding: 4px 8px !important;
   font-size: 0.875rem !important;
   height: 32px !important;
-  border-radius: 4px !important;
+  border-radius: 6px !important;
 }
 
 .side-pane-body .task-row .task-title-input:hover {
-  background-color: var(--color-bg-light, #f8fafc) !important;
-  border-color: var(--color-border, #cbd5e1) !important;
-  padding-left: 8px !important;
-  padding-right: 8px !important;
+  border-color: #94a3b8 !important;
 }
 
 .side-pane-body .task-row .task-title-input:focus {
-  background-color: #ffffff !important;
   border-color: var(--color-primary, #2563eb) !important;
-  padding-left: 8px !important;
-  padding-right: 8px !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15) !important;
+  background-color: #ffffff !important;
+}
+
+[data-theme="dark"] .side-pane-body .task-row .task-title-input {
+  background-color: #0f172a !important;
+  border-color: #475569 !important;
 }
 
 [data-theme="dark"] .side-pane-body .task-row .task-title-input:hover {
-  background-color: var(--color-bg, #0f172a) !important;
+  border-color: #64748b !important;
 }
 
 [data-theme="dark"] .side-pane-body .task-row .task-title-input:focus {
-  background-color: var(--color-bg, #0f172a) !important;
+  border-color: var(--color-primary, #2563eb) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3) !important;
 }
 
 .side-pane-body .task-row .btn-danger {
@@ -9171,17 +9119,33 @@ html.loading-active #loading-screen {
   padding-left: 20px;
 }
 
-/* Fields & Buttons Height Overrides */
-.side-pane-body .task-row .searchable-dropdown-input {
+/* Fields & Buttons Height & Border Overrides */
+.side-pane-body .task-row .searchable-dropdown-input,
+.side-pane-body .task-row .multi-select-btn {
   height: 32px !important;
   font-size: 0.8125rem !important;
-  padding: 4px 8px !important;
+  border: 1px solid var(--color-border, #cbd5e1) !important; /* Defined borders for inputs inside cards */
+  background-color: var(--color-surface, #ffffff) !important;
+  border-radius: 6px !important;
+}
+
+[data-theme="dark"] .side-pane-body .task-row .searchable-dropdown-input,
+[data-theme="dark"] .side-pane-body .task-row .multi-select-btn {
+  border-color: #475569 !important;
+  background-color: #0f172a !important;
+}
+
+.side-pane-body .task-row .searchable-dropdown-input {
+  padding: 4px 8px 4px 8px !important; /* Default padding reset */
+}
+
+/* Fix employee icon overlap in side-panel */
+.side-pane-body .task-row .searchable-dropdown.has-icon .searchable-dropdown-input {
+  padding-left: 32px !important;
 }
 
 .side-pane-body .task-row .multi-select-btn {
   min-height: 32px !important;
-  height: 32px !important;
-  font-size: 0.8125rem !important;
   padding: 4px 28px 4px 10px !important;
   background-position: right 8px center !important;
 }
