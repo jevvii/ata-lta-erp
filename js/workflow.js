@@ -4,7 +4,7 @@ const FINANCIAL_ACTION_ICONS = {
   transmittal: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`
 };
 
-const makeToolbarIcon = (svg) => svg.replace(/^<svg([^>]*)>/i, '<svg$1 style="margin-right: 4px; vertical-align: middle;">');
+const makeToolbarIcon = (svg) => svg.replace(/^<svg([^>]*)>/i, '<svg$1 class="btn-icon-start">');
 
 const FINANCIAL_ACTION_CONFIGS = [
   {
@@ -4606,15 +4606,11 @@ const Workflow = {
       style: 'margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;'
     });
 
-    const searchWrap = el('div', {
-      class: 'search-input-wrapper',
-      style: 'position: relative; display: flex; align-items: center;'
-    });
+    const searchWrap = el('div', { class: 'search-input-wrapper' });
 
     const searchIcon = el('span', {
       class: 'search-icon',
       'aria-hidden': 'true',
-      style: 'position: absolute; left: 10px; pointer-events: none; display: flex; align-items: center; color: var(--muted);',
       html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`
     });
 
@@ -4622,8 +4618,7 @@ const Workflow = {
       type: 'search',
       class: 'search-input form-control',
       placeholder: 'Search tasks, assignees, records…',
-      id: 'taskSearch',
-      style: 'padding-left: 32px;'
+      id: 'taskSearch'
     });
     searchInput.addEventListener('input', (e) => {
       container.searchQuery = e.target.value.toLowerCase();
@@ -5332,7 +5327,8 @@ const Workflow = {
         const statusSel = el('select', { class: 'status-select' });
         const statusCaret = el('span', {
           class: 'status-dropdown-caret',
-          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
+          'aria-hidden': 'true',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>`
         });
 
         const validStatuses = this.getValidNextStatuses(t);
@@ -5585,21 +5581,19 @@ const Workflow = {
         });
         menuList.appendChild(editTaskItem);
 
-        if (!isArchived) {
-          finActions.forEach(act => {
-            const item = el('button', {
-              class: 'action-menu-item',
-              html: `${act.menuIconHtml} ${act.title}`
-            });
-            item.addEventListener('click', (e) => {
-              e.stopPropagation();
-              menuList.classList.remove('open');
-              menuList.classList.add('hidden');
-              act.handler();
-            });
-            menuList.appendChild(item);
+        finActions.forEach(act => {
+          const item = el('button', {
+            class: 'action-menu-item',
+            html: `${act.menuIconHtml} ${act.title}`
           });
-        }
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menuList.classList.remove('open');
+            menuList.classList.add('hidden');
+            act.handler();
+          });
+          menuList.appendChild(item);
+        });
 
         // Delete item
         const deleteItem = el('button', {
@@ -5929,16 +5923,14 @@ const Workflow = {
         });
         editTaskHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showEditTaskModal(t.id, () => App.handleRoute()); });
 
-        if (!isArchived) {
-          finActions.forEach(act => {
-            const btn = el('button', {
-              class: 'btn btn-secondary btn-xs',
-              html: `${act.toolbarIconHtml} ${act.title}`
-            });
-            btn.addEventListener('click', (e) => { e.stopPropagation(); act.handler(); });
-            detailToolbar.appendChild(btn);
+        finActions.forEach(act => {
+          const btn = el('button', {
+            class: 'btn btn-secondary btn-xs',
+            html: `${act.toolbarIconHtml} ${act.title}`
           });
-        }
+          btn.addEventListener('click', (e) => { e.stopPropagation(); act.handler(); });
+          detailToolbar.appendChild(btn);
+        });
 
         detailToolbar.appendChild(editTaskHeaderBtn);
 

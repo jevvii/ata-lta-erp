@@ -7068,6 +7068,30 @@ tbody tr:hover {
   gap: var(--space-1);
 }
 
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+.search-input-wrapper .search-input {
+  padding-left: 32px;
+}
+
+.btn-icon-start {
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
 .task-list .coassignee-chip {
   display: inline-flex;
   align-items: center;
