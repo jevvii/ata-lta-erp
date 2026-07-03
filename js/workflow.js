@@ -3689,7 +3689,7 @@ const Workflow = {
 
     const addTaskBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: '+ Add Task' });
     addTaskBtn.setAttribute('data-role', 'add-task');
-    addTaskBtn.addEventListener('click', () => this.addTaskRow(tasksList));
+    addTaskBtn.addEventListener('click', () => this.addTaskRow(tasksList, null, true));
     tasksSection.appendChild(addTaskBtn);
     form.appendChild(tasksSection);
 
@@ -3709,7 +3709,10 @@ const Workflow = {
     return container;
   },
 
-  addTaskRow(container, taskData) {
+  addTaskRow(container, taskData, collapseOthers = false) {
+    if (collapseOthers) {
+      container.querySelectorAll('.task-row').forEach(r => r.classList.add('collapsed'));
+    }
     const row = el('div', { class: 'task-row' });
     row.dataset.taskKey = taskData?.id || generateId('tmp');
 
