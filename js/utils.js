@@ -776,14 +776,31 @@ function closeFormPanelAndRoute(hash, messageConfig) {
 }
 
 /**
- * Utility to compose CSS class strings from primitives, arrays, or objects.
- * Flattens nested arguments and filters out falsy values.
+ * Utility to compose CSS class strings from strings, numbers, arrays, or objects.
+ * Supports string primitives ('foo'), conditional objects ({ foo: true, bar: false }),
+ * and nested arrays without relying on Array.prototype.flat.
  */
 function classNames(...args) {
-  return args
-    .flat(Infinity)
-    .filter(Boolean)
-    .join(' ');
+  const classes = [];
+  for (const arg of args) {
+    if (!arg) continue;
+    const type = typeof arg;
+    if (type === 'string' || type === 'number') {
+      classes.push(arg);
+    } else if (Array.isArray(arg)) {
+      if (arg.length > 0) {
+        const inner = classNames(...arg);
+        if (inner) classes.push(inner);
+      }
+    } else if (type === 'object') {
+      for (const key in arg) {
+        if (Object.prototype.hasOwnProperty.call(arg, key) && arg[key]) {
+          classes.push(key);
+        }
+      }
+    }
+  }
+  return classes.join(' ');
 }
 
 

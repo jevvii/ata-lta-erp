@@ -6421,6 +6421,7 @@ tbody tr:hover {
   border-bottom: none;
 }
 
+.checklist-view-row.task-level.is-completed .checklist-view-title,
 .checklist-view-row.task-level.completed .checklist-view-title {
   text-decoration: line-through;
   color: var(--color-text-muted);
@@ -6439,10 +6440,12 @@ tbody tr:hover {
   border-bottom: none;
 }
 
+.checklist-view-row.sub-level.is-completed,
 .checklist-view-row.sub-level.completed {
   background-color: color-mix(in oklab, var(--color-success) 4%, transparent);
 }
 
+.checklist-view-row.sub-level.is-completed .checklist-view-title,
 .checklist-view-row.sub-level.completed .checklist-view-title {
   text-decoration: line-through;
   color: var(--color-text-muted);
@@ -7341,16 +7344,20 @@ tbody tr:hover {
   transition: background-color 0.2s ease, border-left-color 0.2s ease;
 }
 
+.detail-panel .checklist-item.is-completed,
+.side-pane-toggle-content .checklist-item.is-completed,
 .detail-panel .checklist-item.completed,
 .side-pane-toggle-content .checklist-item.completed {
-  background-color: color-mix(in srgb, var(--color-success) 6%, transparent);
+  background-color: color-mix(in oklab, var(--color-success) 6%, transparent);
   border-left-color: var(--color-success);
 }
 
+.detail-panel .checklist-item.is-completed .checklist-text span,
+.side-pane-toggle-content .checklist-item.is-completed .checklist-text span,
 .detail-panel .checklist-item.completed .checklist-text span,
 .side-pane-toggle-content .checklist-item.completed .checklist-text span {
   text-decoration: line-through;
-  color: var(--muted);
+  color: var(--color-text-muted);
   opacity: 0.65;
 }
 
@@ -7803,6 +7810,7 @@ tbody tr:hover {
 .project-detail-v2 .checklist-view-cb {
   accent-color: var(--accent);
 }
+.project-detail-v2 .checklist-view-row.sub-level.is-completed,
 .project-detail-v2 .checklist-view-row.sub-level.completed {
   background-color: color-mix(in oklab, var(--accent) 4%, transparent);
 }
@@ -7848,6 +7856,7 @@ tbody tr:hover {
   color: var(--fg);
   font-weight: 600;
 }
+.project-detail-v2 .task-v2-title.is-completed,
 .project-detail-v2 .task-v2-title.completed { color: var(--muted); }
 .project-detail-v2 .task-group-footer {
   color: var(--fg);
