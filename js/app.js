@@ -642,16 +642,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.classList.remove('loading-active');
   }
 
+  // Clear the show timeout to prevent it from firing if the page loaded fast
+  if (window.showLoadingTimeout) {
+    clearTimeout(window.showLoadingTimeout);
+    window.showLoadingTimeout = null;
+  }
+
   // Handle fading out of loading screen if active
   if (document.documentElement.classList.contains('loading-active') && loadingScreen) {
+    loadingScreen.style.transition = 'opacity 0.25s ease-in-out';
+    loadingScreen.style.opacity = '0';
     setTimeout(() => {
-      loadingScreen.style.transition = 'opacity 0.2s ease-in-out';
-      loadingScreen.style.opacity = '0';
-      setTimeout(() => {
-        document.documentElement.classList.remove('loading-active');
-        loadingScreen.style.transition = '';
-      }, 200);
-    }, 450); // Keep it visible for 450ms for a smooth syncing transition feel
-    sessionStorage.removeItem('is_syncing');
+      document.documentElement.classList.remove('loading-active');
+      loadingScreen.style.transition = '';
+    }, 250);
   }
+  
+  // Always ensure is_syncing is cleared after routing and initialization
+  sessionStorage.removeItem('is_syncing');
 });

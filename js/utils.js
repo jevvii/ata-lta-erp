@@ -3,10 +3,13 @@
  * Safe DOM builder, formatting helpers, and general utilities.
  */
 
-// Set loading-active class instantly if reload was triggered by a sync operation
+// Set loading-active class with a small delay if reload was triggered by a sync operation.
+// This prevents the loading screen from flashing on immediate loads/reloads.
 (function() {
   if (sessionStorage.getItem('is_syncing') === 'true') {
-    document.documentElement.classList.add('loading-active');
+    window.showLoadingTimeout = setTimeout(function() {
+      document.documentElement.classList.add('loading-active');
+    }, 250); // 250ms threshold for visible delay
   }
 })();
 
