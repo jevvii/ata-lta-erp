@@ -8996,75 +8996,60 @@ html.loading-active #loading-screen {
    Completed Item Indication Styles (Table, Board, List, Checklist)
    ========================================================================== */
 
-/* 1. Table View */
-.task-list .task-row.completed {
-  opacity: 0.7;
-  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff)) !important;
+/* Shared Completed Utility Rules */
+.is-completed {
+  opacity: 0.75;
 }
-.task-list .task-row.completed .cell {
-  color: var(--muted, #94a3b8);
-}
-.task-list .task-row.completed .cell-title .title-main {
+.is-completed .title-main,
+.is-completed .card-v2-title,
+.is-completed .list-item-title,
+.is-completed .checklist-view-title,
+.is-completed .checklist-text span {
   text-decoration: line-through;
   text-decoration-color: color-mix(in srgb, var(--fg, #000) 20%, transparent);
+  color: var(--muted, #94a3b8);
+}
+.is-completed .badge {
+  filter: grayscale(60%) opacity(70%);
+}
+
+/* View-Specific Backgrounds & Borders (No !important) */
+
+/* 1. Table View */
+.task-list .task-row.is-completed {
+  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff));
+}
+.task-list .task-row.is-completed .cell {
+  color: var(--muted, #94a3b8);
 }
 
 /* 2. Board View */
-.board-card-v2.completed {
-  opacity: 0.7;
-  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff)) !important;
-  border-left-color: var(--success, #10b981) !important;
-}
-.board-card-v2.completed .card-v2-title {
-  text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--fg, #000) 20%, transparent);
-  color: var(--muted, #94a3b8);
-}
-.board-card-v2.completed .badge {
-  filter: grayscale(60%) opacity(70%);
+.board-v2 .board-card-v2.is-completed {
+  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff));
+  border-left-color: var(--success, #10b981);
 }
 
 /* 3. List View */
-.operations-list-view .list-item.completed {
-  opacity: 0.7;
-  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff)) !important;
-  border-left: 3px solid var(--success, #10b981) !important;
-}
-.operations-list-view .list-item.completed .list-item-title {
-  text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--fg, #000) 20%, transparent);
-  color: var(--muted, #94a3b8);
-}
-.operations-list-view .list-item.completed .badge {
-  filter: grayscale(60%) opacity(70%);
+.operations-list-view .list-item.is-completed {
+  background-color: color-mix(in oklab, var(--success, #10b981) 2.5%, var(--surface, #ffffff));
+  border-left: 3px solid var(--success, #10b981);
 }
 
 /* 4. Checklist View */
-.checklist-view-row.task-level.completed {
-  opacity: 0.75;
-  background-color: color-mix(in oklab, var(--color-success, #10b981) 3%, var(--color-surface, #ffffff)) !important;
-  border-left: 3px solid var(--color-success, #10b981) !important;
+.checklist-view-container .checklist-view-row.task-level.is-completed {
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 3%, var(--color-surface, #ffffff));
+  border-left: 3px solid var(--color-success, #10b981);
 }
-.checklist-view-row.task-level.completed .badge {
-  filter: grayscale(60%) opacity(70%);
+.checklist-view-container .checklist-view-row.sub-level.is-completed {
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 5%, transparent);
 }
-.checklist-view-row.sub-level.completed {
-  opacity: 0.8;
-  background-color: color-mix(in oklab, var(--color-success, #10b981) 5%, transparent) !important;
-}
-.project-detail-v2 .checklist-view-row.sub-level.completed {
-  opacity: 0.8;
-  background-color: color-mix(in oklab, var(--accent, #2563eb) 5%, transparent) !important;
+.project-detail-v2 .checklist-view-container .checklist-view-row.sub-level.is-completed {
+  background-color: color-mix(in oklab, var(--accent, #2563eb) 5%, transparent);
 }
 
 /* 5. Detail Panel / Side Pane Checklists */
-.detail-panel .checklist-item.completed,
-.side-pane-toggle-content .checklist-item.completed {
-  opacity: 0.8;
-  background-color: color-mix(in srgb, var(--color-success, #10b981) 6%, transparent) !important;
-  border-left-color: var(--color-success, #10b981) !important;
-}
-.detail-panel .checklist-item.completed .badge,
-.side-pane-toggle-content .checklist-item.completed .badge {
-  filter: grayscale(60%) opacity(70%);
+.detail-panel .checklist-item.is-completed,
+.side-pane-toggle-content .checklist-item.is-completed {
+  background-color: color-mix(in srgb, var(--color-success, #10b981) 6%, transparent);
+  border-left-color: var(--color-success, #10b981);
 }
