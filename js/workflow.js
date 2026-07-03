@@ -1,7 +1,46 @@
-/**
- * Workflow & Task Management Module
- * Work Request CRUD, task assignment, dependency engine (DAG), retainer templates.
- */
+const FINANCIAL_ACTION_ICONS = {
+  billing: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+  disbursement: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+  transmittal: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`
+};
+
+const makeToolbarIcon = (svg) => {
+  if (!svg) return '';
+  if (/class=["']/i.test(svg)) {
+    return svg.replace(/class=(["'])(.*?)\1/i, 'class=$1$2 btn-icon-start$1');
+  }
+  return svg.replace(/^<svg([^>]*)>/i, '<svg$1 class="btn-icon-start">');
+};
+
+const FINANCIAL_ACTION_CONFIGS = [
+  {
+    type: 'billing',
+    createPerm: 'billing:edit',
+    requestPerm: 'billing:request',
+    createTitle: 'Generate Billing',
+    requestTitle: 'Request Billing',
+    icon: FINANCIAL_ACTION_ICONS.billing,
+    createHandler: (wf, wr, t) => wf.openGenerateBillingModal(wr, t)
+  },
+  {
+    type: 'disbursement',
+    createPerm: 'disbursement:create',
+    requestPerm: 'disbursement:request',
+    createTitle: 'Generate Disbursement',
+    requestTitle: 'Request Disbursement',
+    icon: FINANCIAL_ACTION_ICONS.disbursement,
+    createHandler: (wf, wr, t) => wf.openGenerateDisbursementModal(wr, t)
+  },
+  {
+    type: 'transmittal',
+    createPerm: 'transmittal:create',
+    requestPerm: 'transmittal:request',
+    createTitle: 'Generate Transmittal',
+    requestTitle: 'Request Transmittal',
+    icon: FINANCIAL_ACTION_ICONS.transmittal,
+    createHandler: (wf, wr, t) => wf.openGenerateTransmittalModal(wr, t)
+  }
+];
 
 const Workflow = {
   editingId: null,
@@ -1231,6 +1270,32 @@ const Workflow = {
     });
   },
 
+  getFinancialQuickActions(wr, t) {
+    const actions = [];
+    FINANCIAL_ACTION_CONFIGS.forEach(cfg => {
+      let title = null;
+      let handler = null;
+      if (Auth.can(cfg.createPerm)) {
+        title = cfg.createTitle;
+        handler = () => cfg.createHandler(this, wr, t);
+      } else if (Auth.can(cfg.requestPerm)) {
+        title = cfg.requestTitle;
+        handler = () => this.submitOperationsRequest(cfg.type, wr, t);
+      }
+
+      if (title && handler) {
+        actions.push({
+          type: cfg.type,
+          title,
+          menuIconHtml: cfg.icon,
+          toolbarIconHtml: makeToolbarIcon(cfg.icon),
+          handler
+        });
+      }
+    });
+    return actions;
+  },
+
   submitOperationsRequest(type, wr, preselectedTask = null) {
     const existing = DB.getWhere('operationsRequests', r => r.workRequestId === wr.id && r.type === type && r.status === 'pending');
     if (existing.length > 0) {
@@ -1559,12 +1624,6 @@ const Workflow = {
       h1.appendChild(document.createTextNode(wr.title || 'Untitled Work Request'));
       titleBar.appendChild(h1);
       const actions = el('div', { class: 'title-bar-actions' });
-      const canAddTask = canEdit || Auth.can('workflow:task_add');
-      if (canAddTask && wr && !isArchived) {
-        const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
-        addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
-        actions.appendChild(addBtn);
-      }
       const badges = el('div', { class: 'identity-badges', style: 'margin-right:12px;' });
       const statusBadgeClass = {
         'Draft': 'badge-info',
@@ -4533,6 +4592,14 @@ const Workflow = {
       style: 'margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;'
     });
 
+    const searchWrap = el('div', { class: 'search-input-wrapper' });
+
+    const searchIcon = el('span', {
+      class: 'search-icon',
+      'aria-hidden': 'true',
+      html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`
+    });
+
     const searchInput = el('input', {
       type: 'search',
       class: 'search-input form-control',
@@ -4543,6 +4610,11 @@ const Workflow = {
       container.searchQuery = e.target.value.toLowerCase();
       renderGroups();
     });
+
+    searchWrap.appendChild(searchIcon);
+    searchWrap.appendChild(searchInput);
+
+    actionsWrap.appendChild(searchWrap);
 
     const canAddTaskInToolbar = Auth.can('workflow:edit') || Auth.can('workflow:task_add');
     if (canAddTaskInToolbar && !isArchived) {
@@ -4557,7 +4629,6 @@ const Workflow = {
       actionsWrap.appendChild(addTaskBtn);
     }
 
-    actionsWrap.appendChild(searchInput);
     toolbar.appendChild(actionsWrap);
 
     container.appendChild(toolbar);
@@ -5127,6 +5198,10 @@ const Workflow = {
       let totalHours = 0;
 
       groupTasks.forEach(t => {
+        let finActions = [];
+        if (!isArchived) {
+          finActions = this.getFinancialQuickActions(wr, t);
+        }
         const assignee = t.assigneeName
           ? { name: t.assigneeName }
           : DB.getById('users', t.assigneeId || t.assignedTo);
@@ -5236,6 +5311,11 @@ const Workflow = {
         cellStatus.addEventListener('click', (e) => e.stopPropagation()); // Prevent accordion toggle
         const statusWrapper = el('div', { class: 'status-dropdown-wrapper-v2' });
         const statusSel = el('select', { class: 'status-select' });
+        const statusCaret = el('span', {
+          class: 'status-dropdown-caret',
+          'aria-hidden': 'true',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>`
+        });
 
         const validStatuses = this.getValidNextStatuses(t);
         const flow = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
@@ -5299,6 +5379,7 @@ const Workflow = {
           }
         });
         statusWrapper.appendChild(statusSel);
+        statusWrapper.appendChild(statusCaret);
         cellStatus.appendChild(statusWrapper);
         rowEl.appendChild(cellStatus);
 
@@ -5427,6 +5508,19 @@ const Workflow = {
           }
         });
 
+        // Log Time item
+        const logTimeMenuItem = el('button', {
+          class: 'action-menu-item',
+          html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Log Time`
+        });
+        logTimeMenuItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menuList.classList.remove('open');
+          menuList.classList.add('hidden');
+          this.showAddTimeLogModal(t.id);
+        });
+        menuList.appendChild(logTimeMenuItem);
+
         // Request Log item
         if (t.assigneeName && !t.assigneeId) {
           const reqLogItem = el('button', {
@@ -5472,6 +5566,20 @@ const Workflow = {
           this.showEditTaskModal(t.id, () => App.handleRoute());
         });
         menuList.appendChild(editTaskItem);
+
+        finActions.forEach(act => {
+          const item = el('button', {
+            class: 'action-menu-item',
+            html: `${act.menuIconHtml} ${act.title}`
+          });
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menuList.classList.remove('open');
+            menuList.classList.add('hidden');
+            act.handler();
+          });
+          menuList.appendChild(item);
+        });
 
         // Delete item
         const deleteItem = el('button', {
@@ -5761,15 +5869,15 @@ const Workflow = {
         leftPane.appendChild(checklistSection);
         renderChecklist();
 
-        // --- Right Pane: Attached Documents, Time Logs, Dependencies ---
-        const detailHeaderActions = el('div', { class: 'detail-header-actions' });
+        // --- Collapsed Row Toolbar (Quick Actions) ---
+        const detailToolbar = el('div', { class: 'detail-toolbar' });
         
         const logTimeHeaderBtn = el('button', {
           class: 'btn btn-primary btn-xs',
           html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Log Time`
         });
         logTimeHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddTimeLogModal(t.id); });
-        detailHeaderActions.appendChild(logTimeHeaderBtn);
+        detailToolbar.appendChild(logTimeHeaderBtn);
 
         if (t.assigneeName && !t.assigneeId) {
           const reqLogHeaderBtn = el('button', {
@@ -5785,7 +5893,7 @@ const Workflow = {
               this.showMessage('Error', 'Could not copy to clipboard.', 'danger');
             });
           });
-          detailHeaderActions.appendChild(reqLogHeaderBtn);
+          detailToolbar.appendChild(reqLogHeaderBtn);
         }
 
         const linkRecordHeaderBtn = el('button', {
@@ -5793,16 +5901,24 @@ const Workflow = {
           html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Link Record`
         });
         linkRecordHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkFinancialModal(t.id); });
-        detailHeaderActions.appendChild(linkRecordHeaderBtn);
+        detailToolbar.appendChild(linkRecordHeaderBtn);
 
         const editTaskHeaderBtn = el('button', {
           class: 'btn btn-ghost btn-xs',
           html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`
         });
         editTaskHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showEditTaskModal(t.id, () => App.handleRoute()); });
-        detailHeaderActions.appendChild(editTaskHeaderBtn);
 
-        rightPane.appendChild(detailHeaderActions);
+        finActions.forEach(act => {
+          const btn = el('button', {
+            class: 'btn btn-secondary btn-xs',
+            html: `${act.toolbarIconHtml} ${act.title}`
+          });
+          btn.addEventListener('click', (e) => { e.stopPropagation(); act.handler(); });
+          detailToolbar.appendChild(btn);
+        });
+
+        detailToolbar.appendChild(editTaskHeaderBtn);
 
         // Attached Documents Section
         const canHandover = Auth.can('dms:handover');
@@ -5813,7 +5929,7 @@ const Workflow = {
         docsHeader.appendChild(el('span', { text: 'Attached Documents' }));
         const canUploadTaskDocs = Auth.can('workflow:edit') || Auth.can('workflow:task_upload');
         if ((canHandover || canUploadTaskDocs) && !isArchived) {
-          const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload Scanned' });
+          const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload' });
           addDocBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddDocumentModal(t.id); });
           docsHeader.appendChild(addDocBtn);
         }
@@ -6027,164 +6143,6 @@ const Workflow = {
         const depHeader = el('div', { class: 'detail-section-title' });
         depHeader.appendChild(el('span', { text: 'Dependency Map' }));
         depSection.appendChild(depHeader);
-
-        // Generate action buttons inside task detail pane
-        if (!isArchived) {
-          const genActionsBar = el('div', { class: 'detail-block', style: 'border-top: 1px solid var(--border); padding-top: var(--space-4); margin-top: var(--space-4);' });
-          const genHeader = el('div', { class: 'detail-section-title' });
-          genHeader.appendChild(el('span', { text: 'Quick Actions' }));
-          genActionsBar.appendChild(genHeader);
-
-          const actionsWrap = el('div', { style: 'display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-top: var(--space-2);' });
-
-          const createActionCard = (icon, title, type, handler, isSpan = false) => {
-            let cardStyle = `
-              position: relative;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              gap: var(--space-2);
-              padding: var(--space-3);
-              background: var(--color-surface);
-              border: 1px solid var(--color-border);
-              border-radius: var(--radius-md);
-              cursor: pointer;
-              font-family: inherit;
-              font-size: 0.875rem;
-              font-weight: 600;
-              color: var(--color-text);
-              transition: all 0.2s ease-in-out;
-              min-height: 70px;
-              text-align: center;
-            `;
-            if (isSpan) {
-              cardStyle += ' grid-column: span 2;';
-            }
-
-            const card = el('button', { type: 'button', style: cardStyle, class: 'quick-action-card' });
-            
-            card.addEventListener('mouseenter', () => {
-              card.style.borderColor = 'var(--color-primary)';
-              card.style.boxShadow = 'var(--shadow-sm)';
-              card.style.transform = 'translateY(-1px)';
-            });
-            card.addEventListener('mouseleave', () => {
-              card.style.borderColor = 'var(--color-border)';
-              card.style.boxShadow = 'none';
-              card.style.transform = 'none';
-            });
-
-            const iconEl = el('span', { text: icon, style: 'font-size: 1.25rem;' });
-            const titleEl = el('span', { text: title, style: 'line-height: 1.2;' });
-            card.appendChild(iconEl);
-            card.appendChild(titleEl);
-
-            card.addEventListener('click', (e) => {
-              e.stopPropagation();
-              handler();
-            });
-
-            // Status Badge Overlay
-            const req = DB.getWhere('operationsRequests', r => r.workRequestId === wr.id && r.type === type).sort((a,b) => new Date(b.requestedAt) - new Date(a.requestedAt))[0];
-            if (req) {
-              let dotColor = '';
-              let badgeText = '';
-              if (req.status === 'pending') {
-                dotColor = '#eab308'; // Amber yellow
-                badgeText = 'Pending';
-              } else if (req.status === 'fulfilled') {
-                dotColor = '#22c55e'; // Emerald green
-                badgeText = 'Fulfilled';
-              } else if (req.status === 'rejected') {
-                dotColor = '#ef4444'; // Red
-                badgeText = 'Rejected';
-              }
-
-              if (badgeText) {
-                const badge = el('span', { 
-                  style: `
-                    position: absolute;
-                    top: 6px;
-                    right: 6px;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                    font-size: 0.6875rem;
-                    font-weight: 500;
-                    padding: 2px 6px;
-                    border-radius: 9999px;
-                    background: ${dotColor}15;
-                    color: ${dotColor};
-                    border: 1px solid ${dotColor}30;
-                  `
-                });
-                
-                const dot = el('span', {
-                  style: `
-                    width: 6px;
-                    height: 6px;
-                    border-radius: 50%;
-                    background: ${dotColor};
-                  `
-                });
-                badge.appendChild(dot);
-                badge.appendChild(document.createTextNode(badgeText));
-                card.appendChild(badge);
-              }
-            }
-
-            return card;
-          };
-
-          // Billing Card
-          let billingTitle = 'Billing';
-          let billingHandler = null;
-          if (Auth.can('billing:edit')) {
-            billingTitle = 'Generate Billing';
-            billingHandler = () => this.openGenerateBillingModal(wr, t);
-          } else if (Auth.can('billing:request')) {
-            billingTitle = 'Request Billing';
-            billingHandler = () => this.submitOperationsRequest('billing', wr, t);
-          }
-
-          // Disbursement Card
-          let disbTitle = 'Disbursement';
-          let disbHandler = null;
-          if (Auth.can('disbursement:create')) {
-            disbTitle = 'Generate Disbursement';
-            disbHandler = () => this.openGenerateDisbursementModal(wr, t);
-          } else if (Auth.can('disbursement:request')) {
-            disbTitle = 'Request Disbursement';
-            disbHandler = () => this.submitOperationsRequest('disbursement', wr, t);
-          }
-
-          // Transmittal Card
-          let transTitle = 'Transmittal';
-          let transHandler = null;
-          if (Auth.can('transmittal:create')) {
-            transTitle = 'Generate Transmittal';
-            transHandler = () => this.openGenerateTransmittalModal(wr, t);
-          } else if (Auth.can('transmittal:request')) {
-            transTitle = 'Request Transmittal';
-            transHandler = () => this.submitOperationsRequest('transmittal', wr, t);
-          }
-
-          const cardsToRender = [];
-          if (billingHandler) cardsToRender.push({ icon: '📄', title: billingTitle, type: 'billing', handler: billingHandler });
-          if (disbHandler) cardsToRender.push({ icon: '💸', title: disbTitle, type: 'disbursement', handler: disbHandler });
-          if (transHandler) cardsToRender.push({ icon: '📦', title: transTitle, type: 'transmittal', handler: transHandler });
-
-          cardsToRender.forEach((c, idx) => {
-            const isSpan = (cardsToRender.length === 3 && idx === 2) || (cardsToRender.length === 1);
-            const card = createActionCard(c.icon, c.title, c.type, c.handler, isSpan);
-            actionsWrap.appendChild(card);
-          });
-
-          genActionsBar.appendChild(actionsWrap);
-          rightPane.appendChild(genActionsBar);
-        }
-
         const depContent = el('div', { class: 'dep-list' });
         const taskPreds = t.predecessors || [];
         const checklistDeps = (t.checklist || []).filter(item => item.dependsOn);
@@ -6199,18 +6157,19 @@ const Workflow = {
             depItem.appendChild(el('span', { class: 'text-muted', text: t.title }));
             depContent.appendChild(depItem);
           });
-           checklistDeps.forEach(item => {
-             const prereq = item.dependsOn === '*' ? null : (t.checklist || []).find(c => c.id === item.dependsOn);
-             const depItem = el('div', { class: 'dep-item' });
-             depItem.appendChild(el('span', { text: item.dependsOn === '*' ? 'All Task (*)' : (prereq ? prereq.text : 'Unknown') }));
-             depItem.appendChild(el('span', { class: 'dep-arrow', text: '→' }));
-             depItem.appendChild(el('span', { class: 'text-muted', text: `${t.title}: ${item.text}` }));
-             depContent.appendChild(depItem);
-           });
+          checklistDeps.forEach(item => {
+            const prereq = item.dependsOn === '*' ? null : (t.checklist || []).find(c => c.id === item.dependsOn);
+            const depItem = el('div', { class: 'dep-item' });
+            depItem.appendChild(el('span', { text: item.dependsOn === '*' ? 'All Task (*)' : (prereq ? prereq.text : 'Unknown') }));
+            depItem.appendChild(el('span', { class: 'dep-arrow', text: '→' }));
+            depItem.appendChild(el('span', { class: 'text-muted', text: `${t.title}: ${item.text}` }));
+            depContent.appendChild(depItem);
+          });
         }
         depSection.appendChild(depContent);
         rightPane.appendChild(depSection);
 
+        detailsDiv.appendChild(detailToolbar);
         detailsDiv.appendChild(leftPane);
         detailsDiv.appendChild(rightPane);
         groupEl.appendChild(detailsDiv);
