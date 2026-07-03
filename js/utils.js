@@ -3,19 +3,28 @@
  * Safe DOM builder, formatting helpers, and general utilities.
  */
 
-// Centralized Loading Manager to handle state and threshold constants.
-// Scoped to window.LoadingManager to avoid global namespace pollution and DOM dataset coupling.
+// Centralized Loading Manager to handle state and timing concerns.
+// Scoped to window.LoadingManager to avoid global namespace pollution. Timings are derived from CSS variables.
 window.LoadingManager = {
   timeoutId: null,
-  DELAY_MS: 250,       // Threshold for visible delay before showing loader
-  TRANSITION_MS: 250,  // Matches CSS transition duration (--transition-loading: 0.25s)
+
+  getTiming: function(cssVar, defaultVal) {
+    const val = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || defaultVal;
+    return parseFloat(val) * (val.endsWith('ms') ? 1 : 1000);
+  },
+
+  get DELAY_MS() {
+    return this.getTiming('--delay-loading', '0.25s');
+  },
+
+  get TRANSITION_MS() {
+    return this.getTiming('--transition-loading', '0.25s');
+  },
 
   start: function() {
-    if (sessionStorage.getItem('is_syncing') === 'true') {
-      this.timeoutId = setTimeout(() => {
-        document.documentElement.classList.add('loading-active');
-      }, this.DELAY_MS);
-    }
+    this.timeoutId = setTimeout(() => {
+      document.documentElement.classList.add('loading-active');
+    }, this.DELAY_MS);
   },
 
   clear: function() {
@@ -26,7 +35,9 @@ window.LoadingManager = {
   }
 };
 
-window.LoadingManager.start();
+if (sessionStorage.getItem('is_syncing') === 'true') {
+  window.LoadingManager.start();
+}
 
 function formatPHP(n) {
   return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
