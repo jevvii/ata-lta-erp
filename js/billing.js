@@ -732,27 +732,18 @@ const Billing = {
     this.pendingPrefill = null; // consume once
     const container = el('div');
 
-    // Header bar
-    const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: inv ? 'Edit Invoice' : 'Create Sales Invoice' }));
-    const topActions = el('div', { class: 'form-actions-top' });
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Invoice', form: 'invoice-form' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { location.hash = '#billing'; });
-    topActions.appendChild(saveBtn);
-    topActions.appendChild(cancelBtn);
-    headerBar.appendChild(topActions);
-    container.appendChild(headerBar);
+    const form = el('form', { id: 'invoice-form', class: 'form-stacked notion-form' });
 
-    const form = el('form', { id: 'invoice-form', class: 'form-stacked' });
+    // ── Top property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
     // Client
-    const clientGroup = el('div', { class: 'form-group' });
-    clientGroup.appendChild(el('label', { text: 'Client *' }));
-    const clientSelAttrs = { name: 'clientId', required: true };
+    const clientGroup = el('div', { class: 'notion-prop' });
+    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client' }));
+    const clientSelAttrs = { name: 'clientId', required: true, class: 'notion-prop-select' };
     if (prefill) clientSelAttrs.disabled = true;
     const clientSel = el('select', clientSelAttrs);
-    clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
+    clientSel.appendChild(el('option', { value: '', text: '— Select —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
       const opt = el('option', { value: c.id, text: c.name });
       if (inv && inv.clientId === c.id) opt.selected = true;
@@ -760,15 +751,13 @@ const Billing = {
       clientSel.appendChild(opt);
     });
     clientGroup.appendChild(clientSel);
-    if (prefill) {
-      clientGroup.appendChild(el('input', { type: 'hidden', name: 'clientId', value: prefill.clientId }));
-    }
-    form.appendChild(clientGroup);
+    if (prefill) clientGroup.appendChild(el('input', { type: 'hidden', name: 'clientId', value: prefill.clientId }));
+    propsGrid.appendChild(clientGroup);
 
     // Work Request link
-    const wrGroup = el('div', { class: 'form-group' });
-    wrGroup.appendChild(el('label', { text: 'Link to Work Request' }));
-    const wrSelAttrs = { name: 'workRequestId' };
+    const wrGroup = el('div', { class: 'notion-prop' });
+    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request' }));
+    const wrSelAttrs = { name: 'workRequestId', class: 'notion-prop-select' };
     if (prefill) wrSelAttrs.disabled = true;
     const wrSel = el('select', wrSelAttrs);
     wrSel.appendChild(el('option', { value: '', text: '— None —' }));
@@ -779,18 +768,16 @@ const Billing = {
       wrSel.appendChild(opt);
     });
     wrGroup.appendChild(wrSel);
-    if (prefill && prefill.workRequestId) {
-      wrGroup.appendChild(el('input', { type: 'hidden', name: 'workRequestId', value: prefill.workRequestId }));
-    }
-    form.appendChild(wrGroup);
+    if (prefill && prefill.workRequestId) wrGroup.appendChild(el('input', { type: 'hidden', name: 'workRequestId', value: prefill.workRequestId }));
+    propsGrid.appendChild(wrGroup);
 
     // Task link (Dynamic based on WR)
-    const taskGroup = el('div', { class: 'form-group' });
-    taskGroup.appendChild(el('label', { text: 'Link to Specific Task' }));
-    const taskSel = el('select', { name: 'linkedTaskId' });
+    const taskGroup = el('div', { class: 'notion-prop' });
+    taskGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> Task' }));
+    const taskSel = el('select', { name: 'linkedTaskId', class: 'notion-prop-select' });
     taskSel.appendChild(el('option', { value: '', text: '— Whole Project —' }));
     taskGroup.appendChild(taskSel);
-    form.appendChild(taskGroup);
+    propsGrid.appendChild(taskGroup);
 
     const updateTasks = () => {
       while (taskSel.firstChild) taskSel.removeChild(taskSel.firstChild);
@@ -806,33 +793,39 @@ const Billing = {
       }
     };
     wrSel.addEventListener('change', updateTasks);
-    updateTasks(); // Initial load
+    updateTasks();
 
-    // Dates
-    const dateGroup = el('div', { class: 'form-group' });
-    dateGroup.appendChild(el('label', { text: 'Issue Date *' }));
-    dateGroup.appendChild(el('input', { type: 'date', name: 'issueDate', value: inv ? inv.issueDate : new Date().toISOString().slice(0, 10), required: true }));
-    form.appendChild(dateGroup);
+    // Issue Date
+    const issueDateProp = el('div', { class: 'notion-prop' });
+    issueDateProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Issue Date' }));
+    issueDateProp.appendChild(el('input', { type: 'date', name: 'issueDate', class: 'notion-prop-input', value: inv ? inv.issueDate : new Date().toISOString().slice(0, 10), required: true }));
+    propsGrid.appendChild(issueDateProp);
 
-    const dueGroup = el('div', { class: 'form-group' });
-    dueGroup.appendChild(el('label', { text: 'Due Date *' }));
-    dueGroup.appendChild(el('input', { type: 'date', name: 'dueDate', value: inv ? inv.dueDate : '', required: true }));
-    form.appendChild(dueGroup);
+    // Due Date
+    const dueDateProp = el('div', { class: 'notion-prop' });
+    dueDateProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Due Date' }));
+    dueDateProp.appendChild(el('input', { type: 'date', name: 'dueDate', class: 'notion-prop-input', value: inv ? inv.dueDate : '', required: true }));
+    propsGrid.appendChild(dueDateProp);
 
     // Invoice Number (auto)
-    const numGroup = el('div', { class: 'form-group' });
-    numGroup.appendChild(el('label', { text: 'Invoice Number' }));
-    const numInput = el('input', { type: 'text', name: 'invoiceNumber', value: inv ? inv.invoiceNumber : this.nextInvoiceNumber(entity), readonly: true });
-    numGroup.appendChild(numInput);
-    form.appendChild(numGroup);
+    const numProp = el('div', { class: 'notion-prop' });
+    numProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><line x1="16" y1="3" x2="16" y2="7"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="4" y1="11" x2="20" y2="11"/></svg> Invoice Number' }));
+    numProp.appendChild(el('input', { type: 'text', name: 'invoiceNumber', class: 'notion-prop-input', value: inv ? inv.invoiceNumber : this.nextInvoiceNumber(entity), readonly: true }));
+    propsGrid.appendChild(numProp);
 
-    // Line Items
-    const itemsSection = el('div', { class: 'form-section' });
-    itemsSection.appendChild(el('h3', { text: 'Line Items' }));
-    const itemsList = el('div', { id: 'line-item-rows' });
+    form.appendChild(propsGrid);
+
+    // Line Items — Notion-style editable list
+    const itemsSection = el('div', { class: 'form-section notion-line-items' });
+    itemsSection.appendChild(el('h3', { class: 'form-section-title', text: 'Line Items' }));
+    const itemsList = el('div', { class: 'notion-line-item-list', id: 'line-item-rows' });
     itemsSection.appendChild(itemsList);
 
-    const addItemBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: '+ Add Line Item' });
+    const addItemBtn = el('button', {
+      type: 'button',
+      class: 'notion-add-line-item',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add line item'
+    });
     addItemBtn.addEventListener('click', () => this.addLineItemRow(itemsList));
     itemsSection.appendChild(addItemBtn);
     form.appendChild(itemsSection);
@@ -841,43 +834,27 @@ const Billing = {
     if (inv && inv.lineItems) {
       inv.lineItems.forEach(item => this.addLineItemRow(itemsList, item));
     } else if (opReq) {
-      this.addLineItemRow(itemsList, { 
-        type: 'Professional Fee', 
-        description: opReq.notes || 'Operations Request Billing', 
-        amount: opReq.amount ? String(opReq.amount) : '' 
+      this.addLineItemRow(itemsList, {
+        type: 'Professional Fee',
+        description: opReq.notes || 'Operations Request Billing',
+        amount: opReq.amount ? String(opReq.amount) : ''
       });
     } else {
       this.addLineItemRow(itemsList, { type: 'Professional Fee', description: '', amount: '' });
       this.addLineItemRow(itemsList, { type: 'Government Fee', description: '', amount: '' });
     }
 
-    // Totals (no VAT)
-    const totals = el('div', { class: 'invoice-totals' });
-    totals.appendChild(el('div', { class: 'total-row' }, [el('span', { text: 'Subtotal:' }), el('span', { id: 'inv-subtotal', text: '₱0.00' })]));
-    totals.appendChild(el('div', { class: 'total-row total-grand' }, [el('span', { text: 'Total:' }), el('span', { id: 'inv-total', text: '₱0.00' })]));
+    // Totals (no VAT) — Notion-style summary row
+    const totals = el('div', { class: 'notion-totals' });
+    totals.appendChild(el('div', { class: 'notion-total-row' }, [
+      el('span', { text: 'Subtotal' }),
+      el('span', { id: 'inv-subtotal', text: '₱0.00' })
+    ]));
+    totals.appendChild(el('div', { class: 'notion-total-row notion-total-grand' }, [
+      el('span', { text: 'Total' }),
+      el('span', { id: 'inv-total', text: '₱0.00' })
+    ]));
     form.appendChild(totals);
-
-    // Seller / Buyer info preview
-    const infoSection = el('div', { class: 'form-section' });
-    infoSection.appendChild(el('h3', { text: 'Seller / Buyer Info' }));
-    const infoBox = el('div', { class: 'invoice-info-box' });
-    infoBox.appendChild(el('p', { text: 'Seller: ' + entity + ' Accounting Firm | TIN: 000-000-000-0000 | Branch: 0001' }));
-    infoBox.appendChild(el('p', { id: 'buyer-info', text: 'Buyer: —' }));
-    infoSection.appendChild(infoBox);
-    form.appendChild(infoSection);
-
-    // Update buyer info on client change
-    clientSel.addEventListener('change', () => {
-      const cid = clientSel.value;
-      const c = cid ? DB.getById('clients', cid) : null;
-      const buyerEl = document.getElementById('buyer-info');
-      if (buyerEl && c) {
-        buyerEl.textContent = 'Buyer: ' + c.name + ' | TIN: ' + (c.tin || '—');
-      } else if (buyerEl) {
-        buyerEl.textContent = 'Buyer: —';
-      }
-    });
-    if (clientSel.value) clientSel.dispatchEvent(new Event('change'));
 
     // Recalculate totals on input changes
     form.addEventListener('input', () => this.recalcTotals(form));
@@ -890,9 +867,16 @@ const Billing = {
   },
 
   addLineItemRow(container, item) {
-    const row = el('div', { class: 'line-item-row' });
+    const row = el('div', { class: 'notion-line-item-row' });
 
-    const typeSel = el('select', { class: 'item-type' });
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
+    const typeSel = el('select', { class: 'item-type notion-line-item-type' });
     ['Professional Fee', 'Government Fee'].forEach(t => {
       const opt = el('option', { value: t, text: t });
       if (item?.type === t) opt.selected = true;
@@ -900,13 +884,18 @@ const Billing = {
     });
     row.appendChild(typeSel);
 
-    const descIn = el('input', { type: 'text', placeholder: 'Description', class: 'item-desc', value: item?.description || '' });
+    const descIn = el('input', { type: 'text', placeholder: 'Description', class: 'item-desc notion-line-item-desc', value: item?.description || '' });
     row.appendChild(descIn);
 
-    const amtIn = el('input', { type: 'number', placeholder: 'Amount', class: 'item-amt', value: item?.amount || '', min: 0, step: 0.01 });
+    const amtIn = el('input', { type: 'number', placeholder: '0.00', class: 'item-amt notion-line-item-amt', value: item?.amount || '', min: 0, step: 0.01 });
     row.appendChild(amtIn);
 
-    const removeBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: '×' });
+    const removeBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     removeBtn.addEventListener('click', () => {
       row.remove();
       const form = container.closest('form');
@@ -1071,6 +1060,8 @@ const Billing = {
       title: isNew ? 'Create Sales Invoice' : `Edit Invoice ${inv?.invoiceNumber || ''}`.trim(),
       formContent: this.renderForm(invoiceId),
       formId: 'invoice-form',
+      viewContext: 'invoice-form',
+      fullPageRoute: isNew ? '#billing/form/new' : `#billing/form/${invoiceId}`,
       actions: [
         { text: isNew ? 'Save Invoice' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'invoice-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#billing') }
@@ -2623,7 +2614,11 @@ const Billing = {
     container.appendChild(footer);
 
     if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
-      window.SidePaneInstance.open({ content: container });
+      window.SidePaneInstance.open({
+        title: existing ? 'Edit Billing Template' : 'New Billing Template',
+        content: container,
+        viewContext: 'billing-template-form'
+      });
     }
   },
 

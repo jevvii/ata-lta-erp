@@ -36,6 +36,8 @@ const Disbursement = {
             openFormPanel({
               icon: '💰', title: 'Edit Expense',
               formContent: this.renderForm(), formId: 'disbursement-form',
+              viewContext: 'expense-form',
+              fullPageRoute: `#disbursement/form/${d.id}`,
               actions: [
                 { text: 'Update Expense', class: 'btn btn-primary', type: 'submit', form: 'disbursement-form', testId: 'submit-expense-btn' },
                 { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement/detail/' + d.id), testId: 'cancel-expense-btn' }
@@ -257,6 +259,8 @@ const Disbursement = {
       title: isNew ? 'File Expense' : `Edit Expense — ${existing?.description || ''}`.trim(),
       formContent: this.renderForm(),
       formId: 'disbursement-form',
+      viewContext: 'expense-form',
+      fullPageRoute: isNew ? '#disbursement/form/new' : `#disbursement/form/${disbId}`,
       actions: [
         { text: isNew ? 'Submit Expense' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'disbursement-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement') }
@@ -840,25 +844,15 @@ const Disbursement = {
 
     const container = el('div');
 
-    // Form header bar
-    const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: isNew ? 'File Expense' : 'Edit Expense' }));
-    const headerActions = el('div', { class: 'form-actions-top' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { location.hash = '#disbursement'; });
-    headerActions.appendChild(cancelBtn);
+    const form = el('form', { class: 'form-stacked notion-form', id: 'disbursement-form' });
 
-    const saveBtnTop = el('button', { type: 'submit', class: 'btn btn-primary', text: isNew ? 'Submit Expense' : 'Save Changes', form: 'disbursement-form' });
-    headerActions.appendChild(saveBtnTop);
+    // ── Top property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
-    headerBar.appendChild(headerActions);
-    container.appendChild(headerBar);
-
-    const form = el('form', { class: 'form-stacked', id: 'disbursement-form' });
-
-    const catGroup = el('div', { class: 'form-group' });
-    catGroup.appendChild(el('label', { text: 'Category *' }));
-    const catSel = el('select', { name: 'category', required: true, class: 'form-select' });
+    // Category
+    const catGroup = el('div', { class: 'notion-prop' });
+    catGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Category' }));
+    const catSel = el('select', { name: 'category', required: true, class: 'notion-prop-select' });
     ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
       const opt = el('option', { value: c, text: c });
       if (existing && existing.category === c) opt.selected = true;
@@ -866,32 +860,12 @@ const Disbursement = {
       catSel.appendChild(opt);
     });
     catGroup.appendChild(catSel);
-    form.appendChild(catGroup);
-
-    const descGroup = el('div', { class: 'form-group' });
-    descGroup.appendChild(el('label', { text: 'Description *' }));
-    descGroup.appendChild(el('input', { type: 'text', name: 'description', required: true, value: existing ? (existing.description || '') : (opReq ? (opReq.notes || 'Operations Disbursement Request') : '') }));
-    form.appendChild(descGroup);
-
-    const amtGroup = el('div', { class: 'form-group' });
-    amtGroup.appendChild(el('label', { text: 'Amount (₱) *' }));
-    amtGroup.appendChild(el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true, value: existing ? String(existing.amount) : (opReq ? String(opReq.amount) : '') }));
-    form.appendChild(amtGroup);
-
-    const receiptGroup = el('div', { class: 'form-group' });
-    receiptGroup.appendChild(el('label', { text: 'Receipt (optional)' }));
-    receiptGroup.appendChild(el('input', { type: 'file', name: 'receipt' }));
-    if (existing && existing.receiptFilename) {
-      receiptGroup.appendChild(el('p', { text: 'Current: ' + existing.receiptFilename, style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    } else if (!existing && opReq && opReq.receiptFilename) {
-      receiptGroup.appendChild(el('p', { text: 'Requested receipt: ' + opReq.receiptFilename, style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    }
-    form.appendChild(receiptGroup);
+    propsGrid.appendChild(catGroup);
 
     // Linked Work Request
-    const wrGroup = el('div', { class: 'form-group' });
-    wrGroup.appendChild(el('label', { text: 'Linked Work Request' }));
-    const wrSelAttrs = { name: 'linkedWorkRequestId', class: 'form-select' };
+    const wrGroup = el('div', { class: 'notion-prop' });
+    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request' }));
+    const wrSelAttrs = { name: 'linkedWorkRequestId', class: 'notion-prop-select' };
     if (prefill) wrSelAttrs.disabled = true;
     const wrSel = el('select', wrSelAttrs);
     wrSel.appendChild(el('option', { value: '', text: '— None —' }));
@@ -903,18 +877,57 @@ const Disbursement = {
       wrSel.appendChild(opt);
     });
     wrGroup.appendChild(wrSel);
-    if (prefill && prefill.workRequestId) {
-      wrGroup.appendChild(el('input', { type: 'hidden', name: 'linkedWorkRequestId', value: prefill.workRequestId }));
-    }
-    form.appendChild(wrGroup);
+    if (prefill && prefill.workRequestId) wrGroup.appendChild(el('input', { type: 'hidden', name: 'linkedWorkRequestId', value: prefill.workRequestId }));
+    propsGrid.appendChild(wrGroup);
 
     // Task link (Dynamic based on WR)
-    const taskGroup = el('div', { class: 'form-group' });
-    taskGroup.appendChild(el('label', { text: 'Link to Specific Task' }));
-    const taskSel = el('select', { name: 'linkedTaskId', class: 'form-select' });
+    const taskGroup = el('div', { class: 'notion-prop' });
+    taskGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> Task' }));
+    const taskSel = el('select', { name: 'linkedTaskId', class: 'notion-prop-select' });
     taskSel.appendChild(el('option', { value: '', text: '— Whole Project —' }));
     taskGroup.appendChild(taskSel);
-    form.appendChild(taskGroup);
+    propsGrid.appendChild(taskGroup);
+
+    // Amount
+    const amtGroup = el('div', { class: 'notion-prop' });
+    amtGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Amount (₱)' }));
+    amtGroup.appendChild(el('input', { type: 'number', name: 'amount', class: 'notion-prop-input', min: 0, step: 0.01, required: true, value: existing ? String(existing.amount) : (opReq ? String(opReq.amount) : '') }));
+    propsGrid.appendChild(amtGroup);
+
+    // Fund Source
+    const fundGroup = el('div', { class: 'notion-prop' });
+    fundGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Fund Source' }));
+    const fundWrap = el('div', { class: 'radio-group notion-radio-group' });
+    ['Firm Fund', 'Client Fund'].forEach(f => {
+      const label = el('label', { class: 'radio-label' });
+      const radio = el('input', { type: 'radio', name: 'fundSource', value: f, required: true });
+      if (existing ? existing.fundSource === f : f === 'Firm Fund') radio.checked = true;
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(' ' + f));
+      fundWrap.appendChild(label);
+    });
+    fundGroup.appendChild(fundWrap);
+    propsGrid.appendChild(fundGroup);
+
+    form.appendChild(propsGrid);
+
+    // Description free-form
+    const descSection = el('div', { class: 'notion-freeform' });
+    descSection.appendChild(el('label', { class: 'notion-section-label', text: 'Description' }));
+    const descInput = el('input', { type: 'text', name: 'description', class: 'notion-freeform-input', placeholder: 'What is this expense for?', required: true, value: existing ? (existing.description || '') : (opReq ? (opReq.notes || 'Operations Disbursement Request') : '') });
+    descSection.appendChild(descInput);
+    form.appendChild(descSection);
+
+    // Receipt upload
+    const receiptGroup = el('div', { class: 'notion-freeform' });
+    receiptGroup.appendChild(el('label', { class: 'notion-section-label', text: 'Receipt' }));
+    receiptGroup.appendChild(el('input', { type: 'file', name: 'receipt', class: 'notion-file-input' }));
+    if (existing && existing.receiptFilename) {
+      receiptGroup.appendChild(el('p', { text: 'Current: ' + existing.receiptFilename, style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+    } else if (!existing && opReq && opReq.receiptFilename) {
+      receiptGroup.appendChild(el('p', { text: 'Requested receipt: ' + opReq.receiptFilename, style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
+    }
+    form.appendChild(receiptGroup);
 
     const updateTasks = () => {
       while (taskSel.firstChild) taskSel.removeChild(taskSel.firstChild);
@@ -932,25 +945,11 @@ const Disbursement = {
     wrSel.addEventListener('change', updateTasks);
     updateTasks(); // Initial load
 
-    // Fund Source
-    const fundGroup = el('div', { class: 'form-group' });
-    fundGroup.appendChild(el('label', { text: 'Fund Source *' }));
-    const fundWrap = el('div', { class: 'radio-group' });
-    ['Firm Fund', 'Client Fund'].forEach(f => {
-      const label = el('label', { class: 'radio-label' });
-      const radio = el('input', { type: 'radio', name: 'fundSource', value: f, required: true });
-      if (existing ? existing.fundSource === f : f === 'Firm Fund') radio.checked = true;
-      label.appendChild(radio);
-      label.appendChild(document.createTextNode(' ' + f));
-      fundWrap.appendChild(label);
-    });
-    fundGroup.appendChild(fundWrap);
-    form.appendChild(fundGroup);
-
-    // Linked invoice (only for Client Fund)
-    const invGroup = el('div', { class: 'form-group hidden', id: 'linked-invoice-group' });
-    invGroup.appendChild(el('label', { text: 'Linked Billing Invoice' }));
-    const invSel = el('select', { name: 'linkedInvoiceId', class: 'form-select' });
+    // Linked invoice (only for Client Fund) — collapsible notion section
+    const invGroup = el('div', { class: 'notion-collapsible hidden', id: 'linked-invoice-group' });
+    const invToggle = el('div', { class: 'notion-toggle-header', text: 'Linked Billing Invoice' });
+    const invBody = el('div', { class: 'notion-toggle-body' });
+    const invSel = el('select', { name: 'linkedInvoiceId', class: 'notion-prop-select' });
     invSel.appendChild(el('option', { value: '', text: '— Select Invoice —' }));
     DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Cancelled').forEach(inv => {
       const client = DB.getById('clients', inv.clientId);
@@ -958,8 +957,15 @@ const Disbursement = {
       if (existing && existing.linkedInvoiceId === inv.id) opt.selected = true;
       invSel.appendChild(opt);
     });
-    invGroup.appendChild(invSel);
+    invBody.appendChild(invSel);
+    invGroup.appendChild(invToggle);
+    invGroup.appendChild(invBody);
     form.appendChild(invGroup);
+
+    invToggle.addEventListener('click', () => {
+      invGroup.classList.toggle('open');
+      invToggle.classList.toggle('collapsed');
+    });
 
     form.querySelectorAll('input[name="fundSource"]').forEach(r => {
       r.addEventListener('change', () => {
@@ -967,7 +973,6 @@ const Disbursement = {
         invGroup.classList.toggle('hidden', !isClient);
       });
     });
-    // Trigger initial state
     const initialClientFund = existing && existing.fundSource === 'Client Fund';
     if (initialClientFund) invGroup.classList.remove('hidden');
 
@@ -2185,7 +2190,11 @@ const Disbursement = {
     container.appendChild(footer);
 
     if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
-      window.SidePaneInstance.open({ content: container });
+      window.SidePaneInstance.open({
+        title: 'New Disbursement Template',
+        content: container,
+        viewContext: 'disbursement-template-form'
+      });
     }
   },
 

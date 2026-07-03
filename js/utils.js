@@ -526,159 +526,471 @@ function manilaToday() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' })).toISOString().slice(0, 10);
 }
 
+// ============================================================
+// Notion-inspired Side Pane with view-mode options
+// Supports: side-peek, center-peek, full-page, new-tab
+// ============================================================
+
+const PaneMode = {
+  SIDE_PEEK: 'side-peek',
+  CENTER_PEEK: 'center-peek',
+  FULL_PAGE: 'full-page',
+  NEW_TAB: 'new-tab'
+};
+
+const VALID_PANE_MODES = Object.values(PaneMode);
+
+function getPaneDefault(viewContext) {
+  if (!viewContext) return null;
+  try {
+    const stored = localStorage.getItem(`erp_pane_default_${viewContext}`);
+    return VALID_PANE_MODES.includes(stored) ? stored : null;
+  } catch (e) { return null; }
+}
+
+function setPaneDefault(viewContext, mode) {
+  if (!viewContext || !VALID_PANE_MODES.includes(mode)) return;
+  try { localStorage.setItem(`erp_pane_default_${viewContext}`, mode); } catch (e) {}
+}
+
+function getPaneWidth() {
+  try {
+    const w = localStorage.getItem('erp_pane_width');
+    return w && !isNaN(parseInt(w, 10)) ? parseInt(w, 10) : null;
+  } catch (e) { return null; }
+}
+
+function setPaneWidth(width) {
+  try { localStorage.setItem('erp_pane_width', String(width)); } catch (e) {}
+}
+
+const PaneIcons = {
+  sidePeek: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>',
+  centerPeek: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/></svg>',
+  fullPage: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="8" x2="22" y2="8"/></svg>',
+  newTab: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v2H6v12h12v-4h2v6H4V4z"/><path d="M14 4h6v6"/><path d="M20 4l-8 8"/></svg>',
+  editDefault: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+  viewOptions: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>'
+};
+
 class SidePane {
   constructor() {
     this.overlay = null;
     this.pane = null;
     this.body = null;
+    this.header = null;
+    this.viewMenu = null;
+    this.resizeHandle = null;
     this.activeElement = null;
+    this.triggerElement = null;
     this.onCloseCallback = null;
     this.onExpandCallback = null;
+    this.mode = PaneMode.SIDE_PEEK;
+    this.viewContext = null;
+    this.recordId = null;
+    this.fullPageRoute = null;
+    this.newTabRoute = null;
+    this.previouslyFocused = null;
+    this._lastContent = null;
+    this.isResizing = false;
+    this._ignoreNextClick = false;
     this.init();
   }
 
   init() {
     let overlay = document.getElementById('global-side-pane-overlay');
     let pane = document.getElementById('global-side-pane');
-    
+
     if (!overlay) {
-      overlay = el('div', { id: 'global-side-pane-overlay', class: 'side-pane-overlay' });
+      overlay = el('div', { id: 'global-side-pane-overlay', class: 'side-pane-overlay', 'aria-hidden': 'true' });
       document.body.appendChild(overlay);
-      overlay.addEventListener('click', () => this.close());
+      overlay.addEventListener('click', () => {
+        if (this.mode === PaneMode.CENTER_PEEK) this.close();
+      });
     }
-    
+
     if (!pane) {
-      pane = el('div', { id: 'global-side-pane', class: 'side-pane' });
+      pane = el('div', { id: 'global-side-pane', class: 'side-pane side-pane--side-peek', role: 'region' });
       document.body.appendChild(pane);
     }
-    
+
     this.overlay = overlay;
     this.pane = pane;
-    
-    // Close on ESC key
+
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.isOpen()) {
+      if (!this.isOpen()) return;
+      if (e.key === 'Escape') {
+        if (this.viewMenu && this.viewMenu.classList.contains('open')) {
+          this.hideViewMenu();
+          return;
+        }
         this.close();
+      } else if (this.mode === PaneMode.CENTER_PEEK && e.key === 'Tab') {
+        this.handleFocusTrap(e);
       }
     });
 
-    // Close when clicking outside (since overlay is hidden/non-blocking)
     document.addEventListener('click', (e) => {
-      if (this.isOpen()) {
-        let path = e.composedPath ? e.composedPath() : null;
-        if (!path) {
-          path = [];
-          let currentEl = e.target;
-          while (currentEl) {
-            path.push(currentEl);
-            currentEl = currentEl.parentNode;
-          }
-          path.push(document);
-          path.push(window);
-        }
-        const clickedTrigger = path.some(el => {
-          if (!el || !el.classList) return false;
-          return el.classList.contains('board-card') ||
-                 el.classList.contains('list-item') ||
-                 el.classList.contains('task-row') ||
-                 el.classList.contains('status-select') ||
-                 el.classList.contains('modal-overlay') ||
-                 el.classList.contains('modal') ||
-                 el.classList.contains('searchable-dropdown') ||
-                 el.classList.contains('mdp-wrapper') ||
-                 el.classList.contains('mtp-wrapper') ||
-                 el.classList.contains('mdp-overlay') ||
-                 el.classList.contains('mtp-overlay') ||
-                 el.classList.contains('sidebar') ||
-                 el.classList.contains('sidebar-collapse-btn') ||
-                 el.classList.contains('notion-embed-popover');
-        });
-        const clickedInsidePane = path.some(el => el === this.pane);
-        if (!clickedInsidePane && !clickedTrigger) {
-          this.close();
-        }
+      if (!this.isOpen()) return;
+      if (this._ignoreNextClick) {
+        this._ignoreNextClick = false;
+        return;
       }
+      const path = e.composedPath ? e.composedPath() : this.composedPathPolyfill(e.target);
+      const clickedInsidePane = path.some(el => el === this.pane || el === this.viewMenu);
+      const clickedTrigger = path.some(el => {
+        if (!el || !el.classList) return false;
+        if (el instanceof Element && (el.dataset?.paneTrigger === 'true' || el.closest('[data-pane-trigger]'))) return true;
+        return el.classList.contains('board-card') ||
+               el.classList.contains('board-card-v2') ||
+               el.classList.contains('list-item') ||
+               el.classList.contains('task-row') ||
+               el.classList.contains('status-select') ||
+               el.classList.contains('modal-overlay') ||
+               el.classList.contains('modal') ||
+               el.classList.contains('searchable-dropdown') ||
+               el.classList.contains('mdp-wrapper') ||
+               el.classList.contains('mtp-wrapper') ||
+               el.classList.contains('mdp-overlay') ||
+               el.classList.contains('mtp-overlay') ||
+               el.classList.contains('sidebar') ||
+               el.classList.contains('sidebar-collapse-btn') ||
+               el.classList.contains('notion-embed-popover');
+      });
+      if (!clickedInsidePane && !clickedTrigger) this.close();
     });
+  }
+
+  composedPathPolyfill(target) {
+    const path = [];
+    let current = target;
+    while (current) { path.push(current); current = current.parentNode; }
+    path.push(document, window);
+    return path;
   }
 
   isOpen() {
     return this.pane && this.pane.classList.contains('open');
   }
 
-  open({ title, content, onClose, onExpand, triggerElement }) {
-    this.close(); // Close any currently open pane first (clears active classes)
-    
-    this.onCloseCallback = onClose;
-    this.onExpandCallback = onExpand;
-    this.activeElement = triggerElement;
-    
-    if (this.activeElement) {
+  resolveMode(opts) {
+    if (opts.mode && VALID_PANE_MODES.includes(opts.mode)) return opts.mode;
+    if (opts.viewContext) {
+      const def = getPaneDefault(opts.viewContext);
+      if (def) return def;
+    }
+    return PaneMode.SIDE_PEEK;
+  }
+
+  open(opts = {}) {
+    const mode = this.resolveMode(opts);
+    this.viewContext = opts.viewContext || null;
+    this.recordId = opts.recordId || null;
+    this.triggerElement = opts.triggerElement || null;
+    this.fullPageRoute = opts.fullPageRoute || null;
+    this.newTabRoute = opts.newTabRoute || null;
+    this.onCloseCallback = opts.onClose || null;
+    this.onExpandCallback = opts.onExpand || null;
+    this._lastContent = opts.content || null;
+
+    if (mode === PaneMode.FULL_PAGE) { this.goFullPage(); return; }
+    if (mode === PaneMode.NEW_TAB) { this.goNewTab(); return; }
+
+    if (this.isOpen() && this.mode !== mode) this.close({ silent: true });
+    this.mode = mode;
+
+    if (this.triggerElement) {
+      this.activeElement = this.triggerElement;
       this.activeElement.classList.add('side-pane-active');
     }
-    
+    this.previouslyFocused = document.activeElement;
+
+    this.render(mode);
+
+    if (opts.title) {
+      this.pane.setAttribute('aria-label', opts.title);
+    }
+
+    if (opts.content) {
+      if (typeof opts.content === 'string') {
+        console.warn('SidePane.open received string content; rejecting for security. Pass an HTMLElement or DocumentFragment.');
+        this.body.innerHTML = '<p class="empty-state">Unable to load panel content.</p>';
+      } else {
+        this.body.innerHTML = '';
+        this.body.appendChild(opts.content);
+      }
+    } else {
+      this.body.innerHTML = '';
+    }
+
+    this._ignoreNextClick = true;
+    setTimeout(() => { this._ignoreNextClick = false; }, 0);
+
+    requestAnimationFrame(() => {
+      this.overlay.classList.toggle('open', this.mode === PaneMode.CENTER_PEEK);
+      this.pane.classList.remove('side-pane--side-peek', 'side-pane--center-peek');
+      this.pane.classList.add(this.mode === PaneMode.CENTER_PEEK ? 'side-pane--center-peek' : 'side-pane--side-peek');
+      this.pane.classList.add('open');
+      if (this.mode === PaneMode.CENTER_PEEK) this.trapFocus();
+    });
+  }
+
+  render(mode) {
     this.pane.innerHTML = '';
-    
-    // Header
-    const headerLeft = el('div', { class: 'side-pane-header-left', style: 'display: flex; align-items: center; gap: 4px;' });
-    
-    // Close button (Notion-style double chevron right >>)
-    const closeBtn = el('button', { 
-      class: 'side-pane-close-btn', 
-      title: 'Close',
+
+    if (mode === PaneMode.SIDE_PEEK) {
+      this.resizeHandle = el('div', { class: 'side-pane-resize-handle', title: 'Resize panel', 'aria-label': 'Resize panel' });
+      this.resizeHandle.addEventListener('mousedown', (e) => this.startResize(e));
+      this.pane.appendChild(this.resizeHandle);
+      this.applyPersistedWidth();
+    }
+
+    this.header = el('div', { class: 'side-pane-header' });
+    const headerLeft = el('div', { class: 'side-pane-header-left' });
+
+    const closeBtn = el('button', {
+      class: 'side-pane-close-btn',
+      title: 'Close (Esc)',
+      'aria-label': 'Close panel',
       html: '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5"/></svg>'
     });
     closeBtn.addEventListener('click', () => this.close());
     headerLeft.appendChild(closeBtn);
-    
-    // Expand button (diagonal resize icon next to Close)
-    if (onExpand) {
-      const expandBtn = el('button', { 
-        class: 'side-pane-expand-btn', 
+    this.header.appendChild(headerLeft);
+
+    const headerRight = el('div', { class: 'side-pane-header-right' });
+
+    const hasFullPage = this.fullPageRoute || this.onExpandCallback;
+    if (hasFullPage) {
+      const expandBtn = el('button', {
+        class: 'side-pane-expand-btn',
         title: 'Open as full page',
+        'aria-label': 'Open as full page',
         html: '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
       });
-      expandBtn.addEventListener('click', () => {
-        this.close();
-        onExpand();
-      });
-      headerLeft.appendChild(expandBtn);
+      expandBtn.addEventListener('click', () => this.goFullPage());
+      headerRight.appendChild(expandBtn);
     }
-    
-    const header = el('div', { class: 'side-pane-header' }, [headerLeft]);
-    this.pane.appendChild(header);
-    
-    // Body
+
+    const viewMenuBtn = el('button', {
+      class: 'side-pane-view-menu-btn',
+      title: 'View options',
+      'aria-label': 'View options',
+      'aria-haspopup': 'true',
+      'aria-expanded': 'false',
+      html: PaneIcons.viewOptions
+    });
+    viewMenuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleViewMenu();
+    });
+    headerRight.appendChild(viewMenuBtn);
+    this.header.appendChild(headerRight);
+
+    this.pane.appendChild(this.header);
+
     this.body = el('div', { class: 'side-pane-body' });
-    if (content) {
-      if (typeof content === 'string') {
-        this.body.innerHTML = content;
-      } else {
-        this.body.appendChild(content);
-      }
-    }
     this.pane.appendChild(this.body);
-    
-    // Transition classes
+
+    this.viewMenu = this.buildViewMenu();
+    this.pane.appendChild(this.viewMenu);
+  }
+
+  buildViewMenu() {
+    const menu = el('div', { class: 'side-pane-view-menu', 'aria-hidden': 'true' });
+    [
+      { key: PaneMode.SIDE_PEEK, label: 'Side peek', icon: PaneIcons.sidePeek },
+      { key: PaneMode.CENTER_PEEK, label: 'Center peek', icon: PaneIcons.centerPeek },
+      { key: PaneMode.FULL_PAGE, label: 'Full page', icon: PaneIcons.fullPage },
+      { key: PaneMode.NEW_TAB, label: 'New tab', icon: PaneIcons.newTab }
+    ].forEach(item => {
+      const row = el('button', {
+        class: 'side-pane-view-menu-item',
+        type: 'button',
+        'data-mode': item.key,
+        html: `<span class="side-pane-view-menu-icon">${item.icon}</span><span class="side-pane-view-menu-label">${item.label}</span>`
+      });
+      if (this.mode === item.key) row.classList.add('active');
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.switchMode(item.key);
+      });
+      menu.appendChild(row);
+    });
+
+    menu.appendChild(el('div', { class: 'side-pane-view-menu-divider' }));
+
+    const defaultRow = el('button', {
+      class: 'side-pane-view-menu-item',
+      type: 'button',
+      html: `<span class="side-pane-view-menu-icon">${PaneIcons.editDefault}</span><span class="side-pane-view-menu-label">Edit view default</span>`
+    });
+    defaultRow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.viewContext) {
+        setPaneDefault(this.viewContext, this.mode);
+      }
+      this.hideViewMenu();
+    });
+    menu.appendChild(defaultRow);
+    return menu;
+  }
+
+  switchMode(newMode) {
+    if (!VALID_PANE_MODES.includes(newMode)) return;
+    if (newMode === PaneMode.FULL_PAGE) { this.hideViewMenu(); this.goFullPage(); return; }
+    if (newMode === PaneMode.NEW_TAB) { this.hideViewMenu(); this.goNewTab(); return; }
+
+    this.mode = newMode;
+    this.render(newMode);
+    if (this._lastContent && this._lastContent instanceof Node) {
+      this.body.innerHTML = '';
+      this.body.appendChild(this._lastContent);
+    }
     requestAnimationFrame(() => {
-      this.overlay.classList.add('open');
+      this.overlay.classList.toggle('open', this.mode === PaneMode.CENTER_PEEK);
+      this.pane.classList.remove('side-pane--side-peek', 'side-pane--center-peek');
+      this.pane.classList.add(this.mode === PaneMode.CENTER_PEEK ? 'side-pane--center-peek' : 'side-pane--side-peek');
       this.pane.classList.add('open');
-      // Do NOT set document.body.style.overflow = 'hidden' to match Notion's scrollable canvas behavior
+      this.updateViewMenuActiveState();
+      if (this.mode === PaneMode.CENTER_PEEK) this.trapFocus();
     });
   }
 
-  close() {
+  updateViewMenuActiveState() {
+    if (!this.viewMenu) return;
+    this.viewMenu.querySelectorAll('.side-pane-view-menu-item[data-mode]').forEach(item => {
+      item.classList.toggle('active', item.dataset.mode === this.mode);
+    });
+  }
+
+  toggleViewMenu() {
+    if (!this.viewMenu) return;
+    if (this.viewMenu.classList.contains('open')) this.hideViewMenu();
+    else this.showViewMenu();
+  }
+
+  showViewMenu() {
+    this.viewMenu.classList.add('open');
+    this.viewMenu.setAttribute('aria-hidden', 'false');
+    const btn = this.header?.querySelector('.side-pane-view-menu-btn');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+  }
+
+  hideViewMenu() {
+    if (!this.viewMenu) return;
+    this.viewMenu.classList.remove('open');
+    this.viewMenu.setAttribute('aria-hidden', 'true');
+    const btn = this.header?.querySelector('.side-pane-view-menu-btn');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  goFullPage() {
+    this.close({ silent: true });
+    this.recordId = null;
+    if (this.onExpandCallback) {
+      this.onExpandCallback();
+    } else if (this.fullPageRoute) {
+      location.hash = this.fullPageRoute;
+      if (window.App && typeof App.handleRoute === 'function') App.handleRoute();
+    } else {
+      console.warn('SidePane: full-page requested but no route or onExpand provided.');
+    }
+  }
+
+  goNewTab() {
+    const route = this.newTabRoute || this.fullPageRoute;
+    if (!route) {
+      console.warn('SidePane: new-tab requested but no route provided.');
+      return;
+    }
+    window.open(location.origin + location.pathname + route, '_blank', 'noopener,noreferrer');
+  }
+
+  startResize(e) {
+    if (this.mode !== PaneMode.SIDE_PEEK) return;
+    e.preventDefault();
+    this.isResizing = true;
+    this.resizeHandle.classList.add('active');
+    this.pane.classList.add('resizing');
+    const startX = e.clientX;
+    const startWidth = this.pane.getBoundingClientRect().width;
+    const minWidth = 420;
+    const maxWidth = Math.min(window.innerWidth * 0.85, 1200);
+
+    const onMove = (ev) => {
+      if (!this.isResizing) return;
+      const delta = startX - ev.clientX;
+      const newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + delta));
+      this.pane.style.width = newWidth + 'px';
+      this.pane.style.setProperty('--pane-width', newWidth + 'px');
+    };
+    const onUp = () => {
+      if (!this.isResizing) return;
+      this.isResizing = false;
+      this.resizeHandle.classList.remove('active');
+      this.pane.classList.remove('resizing');
+      setPaneWidth(this.pane.getBoundingClientRect().width);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  applyPersistedWidth() {
+    const width = getPaneWidth();
+    if (width) {
+      this.pane.style.width = width + 'px';
+      this.pane.style.setProperty('--pane-width', width + 'px');
+    } else {
+      this.pane.style.width = '';
+      this.pane.style.setProperty('--pane-width', '50vw');
+    }
+  }
+
+  trapFocus() {
+    const focusable = this.getFocusableElements();
+    if (focusable.length) focusable[0].focus();
+  }
+
+  getFocusableElements() {
+    return Array.from(this.pane.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+      .filter(el => !el.disabled && el.offsetParent !== null && !el.closest('.side-pane-view-menu'));
+  }
+
+  handleFocusTrap(e) {
+    const focusable = this.getFocusableElements();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  close(opts = {}) {
     if (!this.isOpen()) return;
-    
-    if (this.overlay) this.overlay.classList.remove('open');
-    if (this.pane) this.pane.classList.remove('open');
-    // Do NOT reset document.body.style.overflow
-    
+    this.overlay.classList.remove('open');
+    this.pane.classList.remove('open');
+    this.hideViewMenu();
+
     if (this.activeElement) {
       this.activeElement.classList.remove('side-pane-active');
       this.activeElement = null;
     }
-    
-    if (this.onCloseCallback) {
+
+    if (this.mode === PaneMode.CENTER_PEEK && this.previouslyFocused && typeof this.previouslyFocused.focus === 'function') {
+      try { this.previouslyFocused.focus(); } catch (e) {}
+    }
+
+    this.mode = PaneMode.SIDE_PEEK;
+
+    if (this.onCloseCallback && !opts.silent) {
       const cb = this.onCloseCallback;
       this.onCloseCallback = null;
       cb();
@@ -698,23 +1010,41 @@ window.SidePaneInstance = new SidePane();
  * @param {HTMLElement} opts.formContent - The rendered form DOM (from renderForm())
  * @param {string} opts.formId - The form element's ID to find within the content
  * @param {Array<{text: string, class: string, type?: string, onClick?: Function}>} opts.actions - Footer buttons
+ * @param {string} [opts.mode] - 'side-peek' | 'center-peek' | 'full-page' | 'new-tab'
+ * @param {string} [opts.viewContext] - context for default persistence, e.g. 'client-form'
+ * @param {string} [opts.fullPageRoute] - hash route for full-page / new-tab, e.g. '#clients/form/new'
+ * @param {string} [opts.newTabRoute] - optional override for new-tab URL
  */
-function openFormPanel({ icon, title, formContent, formId, actions }) {
+function openFormPanel({ icon, title, formContent, formId, actions, mode, viewContext, fullPageRoute, newTabRoute }) {
+  const context = viewContext || (formId ? formId.replace(/-form$/, '') : 'form');
+
+  if (mode === PaneMode.FULL_PAGE || mode === PaneMode.NEW_TAB) {
+    const route = newTabRoute || fullPageRoute;
+    if (route) {
+      if (mode === PaneMode.FULL_PAGE) {
+        location.hash = route;
+        if (window.App && typeof App.handleRoute === 'function') App.handleRoute();
+      } else {
+        window.open(location.origin + location.pathname + route, '_blank', 'noopener,noreferrer');
+      }
+    } else {
+      console.warn('openFormPanel: full-page/new-tab requested without fullPageRoute/newTabRoute.');
+    }
+    return;
+  }
+
   const wrapper = el('div');
 
-  // Notion-style title section
   const titleSec = el('div', { class: 'side-pane-form-title' });
   titleSec.appendChild(el('div', { class: 'side-pane-icon', text: icon || '📝' }));
   titleSec.appendChild(el('h2', { text: title }));
   wrapper.appendChild(titleSec);
 
-  // Form content area — wrap to hide the form's built-in header
   const contentArea = el('div', { class: 'side-pane-form-content' });
   formContent.classList.add('side-pane-form-wrapper');
   contentArea.appendChild(formContent);
   wrapper.appendChild(contentArea);
 
-  // Sticky footer with action buttons
   if (actions && actions.length > 0) {
     const footer = el('div', { class: 'side-pane-form-footer' });
     actions.forEach(a => {
@@ -729,7 +1059,14 @@ function openFormPanel({ icon, title, formContent, formId, actions }) {
   }
 
   if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
-    window.SidePaneInstance.open({ content: wrapper });
+    window.SidePaneInstance.open({
+      title,
+      content: wrapper,
+      mode,
+      viewContext: context,
+      fullPageRoute,
+      newTabRoute
+    });
   }
 }
 

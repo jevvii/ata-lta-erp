@@ -600,6 +600,8 @@ const Transmittal = {
       title: isNew ? 'Create Transmittal' : `Edit Transmittal — ${existing?.trackingNumber || ''}`.trim(),
       formContent: this.renderForm(),
       formId: 'transmittal-form',
+      viewContext: 'transmittal-form',
+      fullPageRoute: isNew ? '#transmittal/form/new' : `#transmittal/form/${txId}`,
       actions: [
         { text: isNew ? 'Create Transmittal' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'transmittal-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#transmittal') }
@@ -617,26 +619,16 @@ const Transmittal = {
 
     const container = el('div');
 
-    // Form header bar
-    const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: isNew ? 'Create Transmittal' : 'Edit Transmittal' }));
-    const headerActions = el('div', { class: 'form-actions-top' });
-    const saveTopBtn = el('button', { type: 'button', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
-    saveTopBtn.addEventListener('click', () => { this.submitForm(form); });
-    headerActions.appendChild(saveTopBtn);
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { location.hash = '#transmittal'; });
-    headerActions.appendChild(cancelBtn);
-    headerBar.appendChild(headerActions);
-    container.appendChild(headerBar);
+    const form = el('form', { id: 'transmittal-form', class: 'form-stacked notion-form' });
 
-    const form = el('form', { id: 'transmittal-form', class: 'form-stacked' });
+    // ── Top property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
     // Work Request
-    const wrGroup = el('div', { class: 'form-group' });
-    wrGroup.appendChild(el('label', { text: 'Work Request *' }));
-    const wrSel = el('select', { name: 'workRequestId', required: true });
-    wrSel.appendChild(el('option', { value: '', text: '— Select Work Request —' }));
+    const wrGroup = el('div', { class: 'notion-prop' });
+    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request' }));
+    const wrSel = el('select', { name: 'workRequestId', required: true, class: 'notion-prop-select' });
+    wrSel.appendChild(el('option', { value: '', text: '— Select —' }));
     DB.getWhere('workRequests', wr => wr.entity === entity).forEach(wr => {
       const opt = el('option', { value: wr.id, text: wr.title });
       if (existing && existing.workRequestId === wr.id) opt.selected = true;
@@ -644,17 +636,32 @@ const Transmittal = {
       wrSel.appendChild(opt);
     });
     wrGroup.appendChild(wrSel);
-    form.appendChild(wrGroup);
+    propsGrid.appendChild(wrGroup);
 
-    // Client display (auto-populated from WR)
-    const clientGroup = el('div', { class: 'form-group' });
-    clientGroup.appendChild(el('label', { text: 'Client' }));
+    // Client (read-only derived from WR)
+    const clientGroup = el('div', { class: 'notion-prop' });
+    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client' }));
     const prefilledClient = this.prefilledClientId ? this.getClientName(this.prefilledClientId) : '';
-    const clientDisplay = el('input', { type: 'text', name: 'clientDisplay', disabled: true, value: existing ? this.getClientName(existing.clientId) : prefilledClient });
+    const clientDisplay = el('input', { type: 'text', name: 'clientDisplay', class: 'notion-prop-input', disabled: true, value: existing ? this.getClientName(existing.clientId) : prefilledClient });
     clientGroup.appendChild(clientDisplay);
     const clientIdInput = el('input', { type: 'hidden', name: 'clientId', value: existing ? existing.clientId : (this.prefilledClientId || '') });
     clientGroup.appendChild(clientIdInput);
-    form.appendChild(clientGroup);
+    propsGrid.appendChild(clientGroup);
+
+    // Tracking Number
+    const tnGroup = el('div', { class: 'notion-prop' });
+    tnGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h3M4 17v3h3M20 7V4h-3M20 17v3h-3M9 9h6v6H9z"/></svg> Tracking Number' }));
+    const tnWrap = el('div', { class: 'notion-input-with-btn' });
+    const tnInput = el('input', { type: 'text', name: 'trackingNumber', class: 'notion-prop-input', readonly: true, value: existing ? existing.trackingNumber : '' });
+    tnInput.style.flex = '1';
+    tnWrap.appendChild(tnInput);
+    const genBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Generate' });
+    genBtn.addEventListener('click', () => { tnInput.value = this.generateTrackingNumber(entity); });
+    tnWrap.appendChild(genBtn);
+    tnGroup.appendChild(tnWrap);
+    propsGrid.appendChild(tnGroup);
+
+    form.appendChild(propsGrid);
 
     wrSel.addEventListener('change', () => {
       const wr = DB.getById('workRequests', wrSel.value);
@@ -667,54 +674,35 @@ const Transmittal = {
       }
     });
 
-    // Tracking Number
-    const tnGroup = el('div', { class: 'form-group' });
-    tnGroup.appendChild(el('label', { text: 'Tracking Number' }));
-    const tnWrap = el('div', { style: 'display:flex; gap: var(--spacing-sm); align-items:center;' });
-    const tnInput = el('input', { type: 'text', name: 'trackingNumber', readonly: true, value: existing ? existing.trackingNumber : '' });
-    tnInput.style.flex = '1';
-    tnWrap.appendChild(tnInput);
-    const genBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Generate' });
-    genBtn.addEventListener('click', () => {
-      tnInput.value = this.generateTrackingNumber(entity);
+    // Itemized document list — Notion-style editable list
+    const itemsSection = el('div', { class: 'form-section notion-line-items' });
+    itemsSection.appendChild(el('h3', { class: 'form-section-title', text: 'Transmittal Items' }));
+    const itemsList = el('div', { class: 'notion-line-item-list', id: 'transmittal-items-list' });
+    itemsSection.appendChild(itemsList);
+
+    const addRowBtn = el('button', {
+      type: 'button',
+      class: 'notion-add-line-item',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add item'
     });
-    tnWrap.appendChild(genBtn);
-    tnGroup.appendChild(tnWrap);
-    form.appendChild(tnGroup);
-
-    // Itemized document list
-    const itemsSection = el('div', { class: 'form-group' });
-    itemsSection.appendChild(el('label', { text: 'Items *' }));
-    const itemsTable = el('table', { class: 'data-table', style: 'margin-bottom: var(--spacing-sm);' });
-    const itemsThead = el('thead');
-    const itemsThr = el('tr');
-    ['Document Type', 'Description', ''].forEach(h => itemsThr.appendChild(el('th', { text: h })));
-    itemsThead.appendChild(itemsThr);
-    itemsTable.appendChild(itemsThead);
-    const itemsTbody = el('tbody');
-    itemsTbody.id = 'transmittal-items-tbody';
-    itemsTable.appendChild(itemsTbody);
-    itemsSection.appendChild(itemsTable);
-
-    const addRowBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Item' });
-    addRowBtn.addEventListener('click', () => this.addItemRow(itemsTbody));
+    addRowBtn.addEventListener('click', () => this.addItemRow(itemsList));
     itemsSection.appendChild(addRowBtn);
     form.appendChild(itemsSection);
 
     // Pre-populate rows for existing
     if (existing && existing.items && existing.items.length > 0) {
-      existing.items.forEach(item => this.addItemRow(itemsTbody, item.description, item.documentType));
+      existing.items.forEach(item => this.addItemRow(itemsList, item.description, item.documentType));
     } else {
-      this.addItemRow(itemsTbody);
+      this.addItemRow(itemsList);
     }
 
-    // Notes
-    const notesGroup = el('div', { class: 'form-group' });
-    notesGroup.appendChild(el('label', { text: 'Notes' }));
-    const notesTextarea = el('textarea', { name: 'notes', rows: 3 });
+    // Notes — Notion free-form section
+    const notesSection = el('div', { class: 'notion-freeform' });
+    notesSection.appendChild(el('label', { class: 'notion-section-label', text: 'Notes' }));
+    const notesTextarea = el('textarea', { name: 'notes', class: 'notion-freeform-textarea', rows: 3, placeholder: 'Add any extra details...' });
     notesTextarea.textContent = existing ? (existing.notes || '') : '';
-    notesGroup.appendChild(notesTextarea);
-    form.appendChild(notesGroup);
+    notesSection.appendChild(notesTextarea);
+    form.appendChild(notesSection);
 
     form.addEventListener('submit', (e) => { e.preventDefault(); this.submitForm(form); });
 
@@ -722,36 +710,42 @@ const Transmittal = {
     return container;
   },
 
-  addItemRow(tbody, description = '', documentType = '') {
-    const tr = el('tr');
+  addItemRow(container, description = '', documentType = '') {
+    const row = el('div', { class: 'notion-line-item-row' });
 
-    const typeTd = el('td');
-    const typeSel = el('select', { class: 'item-doc-type', required: true });
-    typeSel.appendChild(el('option', { value: '', text: '— Select Type —' }));
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
+    const typeSel = el('select', { class: 'item-doc-type notion-line-item-type', required: true });
+    typeSel.appendChild(el('option', { value: '', text: '— Type —' }));
     ['Original Scan', 'Generated Copy', 'Government Receipt', 'Final Deliverable', 'Other'].forEach(t => {
       const opt = el('option', { value: t, text: t });
       if (documentType === t) opt.selected = true;
       typeSel.appendChild(opt);
     });
-    typeTd.appendChild(typeSel);
-    tr.appendChild(typeTd);
+    row.appendChild(typeSel);
 
-    const descTd = el('td');
-    const descInput = el('input', { type: 'text', class: 'item-description', required: true, value: description, placeholder: 'Description' });
-    descTd.appendChild(descInput);
-    tr.appendChild(descTd);
+    const descInput = el('input', { type: 'text', class: 'item-description notion-line-item-desc', required: true, value: description, placeholder: 'Description' });
+    row.appendChild(descInput);
 
-    const actTd = el('td');
-    const remBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: 'Remove' });
+    const remBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     remBtn.addEventListener('click', () => {
-      if (tbody.querySelectorAll('tr').length > 1) {
-        tbody.removeChild(tr);
+      if (container.querySelectorAll('.notion-line-item-row').length > 1) {
+        row.remove();
       }
     });
-    actTd.appendChild(remBtn);
-    tr.appendChild(actTd);
+    row.appendChild(remBtn);
 
-    tbody.appendChild(tr);
+    container.appendChild(row);
   },
 
   submitForm(form) {
@@ -760,10 +754,10 @@ const Transmittal = {
     const entity = Auth.activeEntity;
     const data = Object.fromEntries(new FormData(form).entries());
     const isNew = !this.detailId;
-    const tbody = document.getElementById('transmittal-items-tbody');
+    const itemsList = document.getElementById('transmittal-items-list');
 
     const items = [];
-    tbody.querySelectorAll('tr').forEach(row => {
+    itemsList.querySelectorAll('.notion-line-item-row').forEach(row => {
       const desc = row.querySelector('.item-description')?.value.trim();
       const type = row.querySelector('.item-doc-type')?.value;
       if (desc && type) {

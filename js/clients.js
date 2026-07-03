@@ -242,6 +242,8 @@ const Clients = {
       title: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
       formContent: formContainer,
       formId: 'client-form',
+      viewContext: 'client-form',
+      fullPageRoute: isNew ? '#clients/form/new' : `#clients/form/${clientId}`,
       actions: [
         { text: isNew ? 'Save Client' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'client-form', testId: 'client-save' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showList(), testId: 'client-cancel' }
@@ -265,56 +267,46 @@ const Clients = {
     headerBar.appendChild(headerActions);
     container.appendChild(headerBar);
 
-    const form = el('form', { id: 'client-form', class: 'form-stacked' });
+    const form = el('form', { id: 'client-form', class: 'form-stacked notion-form' });
 
-    // Taxpayer name
-    const nameGroup = el('div', { class: 'form-group' });
-    nameGroup.appendChild(el('label', { text: 'Taxpayer *' }));
-    const nameInput = el('input', { type: 'text', name: 'name', required: true, value: client ? (client.name || '') : '' });
-    nameGroup.appendChild(nameInput);
-    form.appendChild(nameGroup);
+    // ── Identity free-form block ──
+    const identitySection = el('div', { class: 'notion-freeform' });
+    identitySection.appendChild(el('label', { class: 'notion-section-label', text: 'Client Name' }));
+    identitySection.appendChild(el('input', { type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input', placeholder: 'Taxpayer / company name', required: true, value: client ? (client.name || '') : '' }));
+    form.appendChild(identitySection);
 
-    // TIN
-    const tinGroup = el('div', { class: 'form-group' });
-    tinGroup.appendChild(el('label', { text: 'TIN *' }));
-    const tinInput = el('input', { type: 'text', name: 'tin', required: true, placeholder: 'XXX-XXX-XXX-XXXX', value: client ? (client.tin || '') : '' });
-    tinGroup.appendChild(tinInput);
-    form.appendChild(tinGroup);
+    // ── Property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
-    // Trade Name
-    const tradeGroup = el('div', { class: 'form-group' });
-    tradeGroup.appendChild(el('label', { text: 'Trade Name' }));
-    const tradeInput = el('input', { type: 'text', name: 'tradeName', value: client ? (client.tradeName || '') : '' });
-    tradeGroup.appendChild(tradeInput);
-    form.appendChild(tradeGroup);
+    const tinProp = el('div', { class: 'notion-prop' });
+    tinProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> TIN' }));
+    tinProp.appendChild(el('input', { type: 'text', name: 'tin', class: 'notion-prop-input', placeholder: 'XXX-XXX-XXX-XXXX', required: true, value: client ? (client.tin || '') : '' }));
+    propsGrid.appendChild(tinProp);
 
-    // Business Address
-    const addrGroup = el('div', { class: 'form-group' });
-    addrGroup.appendChild(el('label', { text: 'Business Address' }));
-    const addrInput = el('input', { type: 'text', name: 'address', value: client ? (client.address || '') : '' });
-    addrGroup.appendChild(addrInput);
-    form.appendChild(addrGroup);
+    const tradeProp = el('div', { class: 'notion-prop' });
+    tradeProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20M2 6h20M2 10h20M2 14h20"/></svg> Trade Name' }));
+    tradeProp.appendChild(el('input', { type: 'text', name: 'tradeName', class: 'notion-prop-input', placeholder: 'e.g. DBA name', value: client ? (client.tradeName || '') : '' }));
+    propsGrid.appendChild(tradeProp);
 
-    // Point of Contact (combobox)
-    const pocGroup = el('div', { class: 'form-group' });
-    pocGroup.appendChild(el('label', { text: 'Point of Contact' }));
-    
-    const pocInput = el('input', { 
-      type: 'text', 
-      name: 'pointOfContactInput', 
-      list: 'staff-list', 
-      placeholder: '— Select or type Staff —'
+    const entityProp = el('div', { class: 'notion-prop' });
+    entityProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Entity' }));
+    const entitySel = el('select', { name: 'entity', class: 'notion-prop-select', required: true });
+    ['ATA', 'LTA'].forEach(e => {
+      const opt = el('option', { value: e, text: e });
+      if (client ? client.entity === e : Auth.activeEntity === e) opt.selected = true;
+      entitySel.appendChild(opt);
     });
-    const datalist = el('datalist', { id: 'staff-list' });
+    entityProp.appendChild(entitySel);
+    propsGrid.appendChild(entityProp);
 
-    const entityUsers = DB.getWhere('users', u => {
+    const pocProp = el('div', { class: 'notion-prop' });
+    pocProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Point of Contact' }));
+    const pocInput = el('input', { type: 'text', name: 'pointOfContactInput', class: 'notion-prop-input', list: 'staff-list', placeholder: '— Select or type Staff —' });
+    const datalist = el('datalist', { id: 'staff-list' });
+    DB.getWhere('users', u => {
       const userEntities = (u.entities || []).map(e => e.toUpperCase());
       return Auth.ALL_ROLES.includes(u.role) && userEntities.includes(Auth.activeEntity);
-    });
-    entityUsers.forEach(u => {
-      datalist.appendChild(el('option', { value: u.name + ' (' + u.role + ')' }));
-    });
-    
+    }).forEach(u => { datalist.appendChild(el('option', { value: u.name + ' (' + u.role + ')' })); });
     if (client) {
       if (client.contactUserId) {
         const u = DB.getById('users', client.contactUserId);
@@ -323,59 +315,50 @@ const Clients = {
         pocInput.value = client.contactPerson;
       }
     }
-    
-    pocGroup.appendChild(pocInput);
-    pocGroup.appendChild(datalist);
-    form.appendChild(pocGroup);
+    pocProp.appendChild(pocInput);
+    pocProp.appendChild(datalist);
+    propsGrid.appendChild(pocProp);
 
-    // Contact Details (multi-entry)
-    const cdSection = el('div', { class: 'form-section' });
-    cdSection.appendChild(el('h3', { text: 'Contact Details' }));
-    const cdContainer = el('div', { id: 'contact-details-container' });
-    const contactDetails = client && Array.isArray(client.contactDetails) ? client.contactDetails : [];
-    contactDetails.forEach((cd, idx) => this.addContactDetailRow(cdContainer, cd, idx));
-    cdSection.appendChild(cdContainer);
-    const addCdBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Contact Detail' });
-    addCdBtn.addEventListener('click', () => this.addContactDetailRow(cdContainer, null, cdContainer.childElementCount));
-    cdSection.appendChild(addCdBtn);
-    form.appendChild(cdSection);
-
-    // Related Companies (multi-entry)
-    const rcSection = el('div', { class: 'form-section' });
-    rcSection.appendChild(el('h3', { text: 'Related Companies' }));
-    const rcContainer = el('div', { id: 'related-companies-container' });
-    const relatedCompanies = client && Array.isArray(client.relatedCompanies) ? client.relatedCompanies : [];
-    relatedCompanies.forEach((rc, idx) => this.addRelatedCompanyRow(rcContainer, rc, idx));
-    rcSection.appendChild(rcContainer);
-    const addRcBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Related Company' });
-    addRcBtn.addEventListener('click', () => this.addRelatedCompanyRow(rcContainer, null, rcContainer.childElementCount));
-    rcSection.appendChild(addRcBtn);
-    form.appendChild(rcSection);
-
-    // Entity radio
-    const entityGroup = el('div', { class: 'form-group' });
-    entityGroup.appendChild(el('label', { text: 'Entity *' }));
-    const radioWrap = el('div', { class: 'radio-group' });
-    ['ATA', 'LTA'].forEach(e => {
-      const label = el('label', { class: 'radio-label' });
-      const radio = el('input', { type: 'radio', name: 'entity', value: e, required: true });
-      if (client ? client.entity === e : Auth.activeEntity === e) radio.checked = true;
-      label.appendChild(radio);
-      label.appendChild(document.createTextNode(' ' + e));
-      radioWrap.appendChild(label);
-    });
-    entityGroup.appendChild(radioWrap);
-    form.appendChild(entityGroup);
-
-    // Retainer checkbox
-    const retainerGroup = el('div', { class: 'form-group' });
+    const retainerProp = el('div', { class: 'notion-prop notion-prop-checkbox' });
     const retainerLabel = el('label', { class: 'checkbox-label' });
     const retainerCb = el('input', { type: 'checkbox', name: 'retainer' });
     if (client && (client.retainer || client.isRetainer)) retainerCb.checked = true;
     retainerLabel.appendChild(retainerCb);
-    retainerLabel.appendChild(document.createTextNode(' This client is on retainer'));
-    retainerGroup.appendChild(retainerLabel);
-    form.appendChild(retainerGroup);
+    retainerLabel.appendChild(document.createTextNode(' On retainer'));
+    retainerProp.appendChild(retainerLabel);
+    propsGrid.appendChild(retainerProp);
+
+    form.appendChild(propsGrid);
+
+    // Address free-form
+    const addrSection = el('div', { class: 'notion-freeform' });
+    addrSection.appendChild(el('label', { class: 'notion-section-label', text: 'Business Address' }));
+    addrSection.appendChild(el('input', { type: 'text', name: 'address', class: 'notion-freeform-input', placeholder: 'Enter business address', value: client ? (client.address || '') : '' }));
+    form.appendChild(addrSection);
+
+    // Contact Details (multi-entry) — Notion-style
+    const cdSection = el('div', { class: 'form-section notion-line-items' });
+    cdSection.appendChild(el('h3', { class: 'form-section-title', text: 'Contact Details' }));
+    const cdContainer = el('div', { id: 'contact-details-container' });
+    const contactDetails = client && Array.isArray(client.contactDetails) ? client.contactDetails : [];
+    contactDetails.forEach((cd, idx) => this.addContactDetailRow(cdContainer, cd, idx));
+    cdSection.appendChild(cdContainer);
+    const addCdBtn = el('button', { type: 'button', class: 'notion-add-line-item', text: '+ Add Contact Detail' });
+    addCdBtn.addEventListener('click', () => this.addContactDetailRow(cdContainer, null, cdContainer.childElementCount));
+    cdSection.appendChild(addCdBtn);
+    form.appendChild(cdSection);
+
+    // Related Companies (multi-entry) — Notion-style
+    const rcSection = el('div', { class: 'form-section notion-line-items' });
+    rcSection.appendChild(el('h3', { class: 'form-section-title', text: 'Related Companies' }));
+    const rcContainer = el('div', { id: 'related-companies-container' });
+    const relatedCompanies = client && Array.isArray(client.relatedCompanies) ? client.relatedCompanies : [];
+    relatedCompanies.forEach((rc, idx) => this.addRelatedCompanyRow(rcContainer, rc, idx));
+    rcSection.appendChild(rcContainer);
+    const addRcBtn = el('button', { type: 'button', class: 'notion-add-line-item', text: '+ Add Related Company' });
+    addRcBtn.addEventListener('click', () => this.addRelatedCompanyRow(rcContainer, null, rcContainer.childElementCount));
+    rcSection.appendChild(addRcBtn);
+    form.appendChild(rcSection);
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -386,14 +369,22 @@ const Clients = {
   },
 
   addContactDetailRow(container, data, idx) {
-    const row = el('div', { class: 'multi-entry-row' });
-    const typeSel = el('select', { class: 'form-select', name: 'cd-type-' + idx, style: 'flex: 0 0 120px;' });
+    const row = el('div', { class: 'notion-line-item-row notion-sub-row' });
+
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
+    const typeSel = el('select', { class: 'notion-line-item-type', name: 'cd-type-' + idx, style: 'flex: 0 0 100px;' });
     ['mobile', 'landline', 'email'].forEach(t => {
       typeSel.appendChild(el('option', { value: t, text: t.charAt(0).toUpperCase() + t.slice(1) }));
     });
     if (data && data.type) typeSel.value = data.type;
-    const valueInput = el('input', { type: 'text', placeholder: 'Value', name: 'cd-value-' + idx, value: data ? (data.value || '') : '' });
-    
+    const valueInput = el('input', { type: 'text', class: 'notion-line-item-desc', placeholder: 'Value', name: 'cd-value-' + idx, value: data ? (data.value || '') : '' });
+
     const updatePlaceholder = () => {
       if (typeSel.value === 'mobile') {
         valueInput.placeholder = 'e.g. 09123456789 (11 digits)';
@@ -405,23 +396,25 @@ const Clients = {
         valueInput.placeholder = 'e.g. user@theiremail.com';
         valueInput.removeAttribute('maxLength');
       }
-      // Re-trigger restriction on type change if value exists
-      if (valueInput.value) {
-        valueInput.dispatchEvent(new Event('input'));
-      }
+      if (valueInput.value) valueInput.dispatchEvent(new Event('input'));
     };
-    
+
     valueInput.addEventListener('input', (e) => {
       if (typeSel.value === 'mobile' || typeSel.value === 'landline') {
-        e.target.value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+        e.target.value = e.target.value.replace(/\D/g, '');
       }
     });
 
     typeSel.addEventListener('change', updatePlaceholder);
     updatePlaceholder();
 
-    const labelInput = el('input', { type: 'text', placeholder: 'Label (e.g. Work, Home)', name: 'cd-label-' + idx, value: data ? (data.label || '') : '' });
-    const removeBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Remove' });
+    const labelInput = el('input', { type: 'text', class: 'notion-line-item-desc', style: 'flex: 0 0 140px;', placeholder: 'Label', name: 'cd-label-' + idx, value: data ? (data.label || '') : '' });
+    const removeBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     removeBtn.addEventListener('click', () => row.remove());
     row.appendChild(typeSel);
     row.appendChild(valueInput);
@@ -431,21 +424,34 @@ const Clients = {
   },
 
   addRelatedCompanyRow(container, data, idx) {
-    const row = el('div', { class: 'multi-entry-row' });
+    const row = el('div', { class: 'notion-line-item-row notion-sub-row' });
+
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
     const entity = Auth.activeEntity;
-    const clientSel = el('select', { class: 'form-select', name: 'rc-client-' + idx });
+    const clientSel = el('select', { class: 'notion-line-item-type', name: 'rc-client-' + idx, style: 'flex: 1 1 auto; min-width: 160px;' });
     clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
-      if (this.editingId && c.id === this.editingId) return; // skip self
+      if (this.editingId && c.id === this.editingId) return;
       clientSel.appendChild(el('option', { value: c.id, text: c.name }));
     });
     if (data && data.clientId) clientSel.value = data.clientId;
-    const relSel = el('select', { class: 'form-select', name: 'rc-relation-' + idx, style: 'flex: 0 0 160px;' });
+    const relSel = el('select', { class: 'notion-line-item-type', name: 'rc-relation-' + idx, style: 'flex: 0 0 150px;' });
     ['Parent', 'Subsidiary', 'Sister Company', 'Affiliate'].forEach(r => {
       relSel.appendChild(el('option', { value: r, text: r }));
     });
     if (data && data.relationType) relSel.value = data.relationType;
-    const removeBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Remove' });
+    const removeBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     removeBtn.addEventListener('click', () => row.remove());
     row.appendChild(clientSel);
     row.appendChild(relSel);

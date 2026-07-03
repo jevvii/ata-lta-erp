@@ -428,10 +428,14 @@ const App = {
       } else if (pathParts[1] === 'form') {
         Workflow.view = 'form';
         Workflow.editingId = pathParts[2] || null;
-      } else if (!Workflow.view || Workflow.view === 'detail' || Workflow.view === 'form') {
+      } else if (pathParts[1] === 'templateForm') {
+        Workflow.view = 'templateForm';
+        Workflow.templateEditingId = pathParts[2] || null;
+      } else if (!Workflow.view || Workflow.view === 'detail' || Workflow.view === 'form' || Workflow.view === 'templateForm') {
         Workflow.view = 'list';
         Workflow.detailWrId = null;
         Workflow.editingId = null;
+        Workflow.templateEditingId = null;
       }
     } else if (baseHash === '#billing') {
       if (pathParts[1] === 'detail' && pathParts[2]) {

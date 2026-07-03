@@ -1863,6 +1863,8 @@ const Workflow = {
         openFormPanel({
           icon: '📝', title: 'Add Work Request',
           formContent: this.renderForm(), formId: 'wr-form',
+          viewContext: 'work-request-form',
+          fullPageRoute: '#operations/form/new',
           actions: [
             { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
             { text: 'Cancel', class: 'btn btn-secondary', onClick: () => { closeFormPanelAndRoute('#operations'); } }
@@ -2209,6 +2211,8 @@ const Workflow = {
           openFormPanel({
             icon: '📝', title: 'Add Work Request',
             formContent: this.renderForm(), formId: 'wr-form',
+            viewContext: 'work-request-form',
+            fullPageRoute: '#operations/form/new',
             actions: [
               { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
               { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
@@ -3330,10 +3334,14 @@ const Workflow = {
       paneContent.appendChild(transRequestsContentToggle);
     }
 
+    const fullPageRoute = wr ? `#operations/detail/${wr.id}` : null;
     window.SidePaneInstance.recordId = task.id;
     window.SidePaneInstance.open({
-      title: `Task Details`,
+      title: task.title || 'Task Details',
       content: paneContent,
+      viewContext: 'task-detail',
+      recordId: task.id,
+      fullPageRoute,
       onClose: () => {
         window.SidePaneInstance.recordId = null;
       },
@@ -3457,125 +3465,111 @@ const Workflow = {
     }
     const container = el('div');
 
-    // Header bar
-    const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: wr ? 'Edit Work Request' : 'Add Work Request' }));
-    const topActions = el('div', { class: 'form-actions-top' });
+    const form = el('form', { id: 'wr-form', class: 'form-stacked notion-form' });
 
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Work Request', form: 'wr-form' });
-    topActions.appendChild(saveBtn);
+    // ── Title free-form ──
+    const titleSection = el('div', { class: 'notion-freeform' });
+    titleSection.appendChild(el('input', {
+      type: 'text', name: 'title', class: 'notion-freeform-input notion-title-input',
+      placeholder: 'Work request title', required: true,
+      value: wr ? (wr.title || '') : ''
+    }));
+    form.appendChild(titleSection);
 
-    // Use Retainer Template button (only on creation, not edit)
-    const templates = DB.getWhere('retainerTemplates', t => t.entity === entity);
-    let selectedTemplateId = null;
-    let templateBtnRef = null;
-    if (!wr && templates.length > 0) {
-      const templateWrapper = el('div', { class: 'template-btn-wrapper' });
-      const templateBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Use Retainer Template' });
-      templateBtnRef = templateBtn;
-      const templateDropdown = el('div', { class: 'template-dropdown hidden' });
+    // ── Top property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
-      // "None" option to clear template
-      const noneItem = el('div', { class: 'template-dropdown-item active', text: '— None —' });
-      noneItem.dataset.templateId = '';
-      templateDropdown.appendChild(noneItem);
-
-      templates.forEach(t => {
-        const item = el('div', { class: 'template-dropdown-item', text: t.name });
-        item.dataset.templateId = t.id;
-        templateDropdown.appendChild(item);
-      });
-
-      templateBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        templateDropdown.classList.toggle('hidden');
-      });
-
-      // Close dropdown when clicking outside
-      document.addEventListener('click', () => {
-        templateDropdown.classList.add('hidden');
-      });
-      templateDropdown.addEventListener('click', (e) => e.stopPropagation());
-
-      templateWrapper.appendChild(templateBtn);
-      templateWrapper.appendChild(templateDropdown);
-      topActions.appendChild(templateWrapper);
-    }
-
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { location.hash = '#operations'; });
-    topActions.appendChild(cancelBtn);
-    headerBar.appendChild(topActions);
-    container.appendChild(headerBar);
-
-    const form = el('form', { id: 'wr-form', class: 'form-stacked' });
-
-    const fields = [
-      { label: 'Title', name: 'title', type: 'text', required: true },
-      { label: 'Description', name: 'description', type: 'text' },
-      { label: 'Due Date', name: 'dueDate', type: 'date' },
-    ];
-    fields.forEach(f => {
-      const group = el('div', { class: 'form-group' });
-      group.appendChild(el('label', { text: f.label + (f.required ? ' *' : '') }));
-      const inputAttrs = {
-        type: f.type, name: f.name,
-        value: wr ? (wr[f.name] || '') : ''
-      };
-      if (f.required) inputAttrs.required = true;
-      const input = el('input', inputAttrs);
-      group.appendChild(input);
-      form.appendChild(group);
-    });
-
-    // Priority dropdown
-    const priorityGroup = el('div', { class: 'form-group' });
-    priorityGroup.appendChild(el('label', { text: 'Priority' }));
-    const prioritySel = el('select', { name: 'priority' });
-    ['Urgent', 'Priority', 'Low Priority'].forEach(p => {
-      const opt = el('option', { value: p, text: p });
-      if (wr && wr.priority === p) opt.selected = true;
-      prioritySel.appendChild(opt);
-    });
-    // Fallback selection if existing priority doesn't match
-    if (wr && wr.priority && !['Urgent','Priority','Low Priority'].includes(wr.priority)) {
-      const fallbackOpt = el('option', { value: wr.priority, text: wr.priority });
-      fallbackOpt.selected = true;
-      prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
-    }
-    priorityGroup.appendChild(prioritySel);
-    form.appendChild(priorityGroup);
-
-    // Client dropdown
-    const clientGroup = el('div', { class: 'form-group' });
-    clientGroup.appendChild(el('label', { text: 'Client *' }));
-    const clientSel = el('select', { name: 'clientId', required: true });
-    clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
+    // Client
+    const clientGroup = el('div', { class: 'notion-prop' });
+    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client' }));
+    const clientSel = el('select', { name: 'clientId', class: 'notion-prop-select', required: true });
+    clientSel.appendChild(el('option', { value: '', text: '— Select —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
       const opt = el('option', { value: c.id, text: c.name });
       if (wr && wr.clientId === c.id) opt.selected = true;
       clientSel.appendChild(opt);
     });
     clientGroup.appendChild(clientSel);
-    form.appendChild(clientGroup);
+    propsGrid.appendChild(clientGroup);
 
-    // Assignee dropdown
-    const assigneeGroup = el('div', { class: 'form-group' });
-    assigneeGroup.appendChild(el('label', { text: 'Assignee' }));
-    const assigneeSel = el('select', { name: 'assignedTo' });
-    assigneeSel.appendChild(el('option', { value: '', text: '— Select Assignee —' }));
+    // Priority
+    const priorityGroup = el('div', { class: 'notion-prop' });
+    priorityGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Priority' }));
+    const prioritySel = el('select', { name: 'priority', class: 'notion-prop-select' });
+    ['Urgent', 'Priority', 'Low Priority'].forEach(p => {
+      const opt = el('option', { value: p, text: p });
+      if (wr && wr.priority === p) opt.selected = true;
+      prioritySel.appendChild(opt);
+    });
+    if (wr && wr.priority && !['Urgent','Priority','Low Priority'].includes(wr.priority)) {
+      const fallbackOpt = el('option', { value: wr.priority, text: wr.priority });
+      fallbackOpt.selected = true;
+      prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
+    }
+    priorityGroup.appendChild(prioritySel);
+    propsGrid.appendChild(priorityGroup);
+
+    // Due Date
+    const dueGroup = el('div', { class: 'notion-prop' });
+    dueGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Due Date' }));
+    dueGroup.appendChild(el('input', { type: 'date', name: 'dueDate', class: 'notion-prop-input', value: wr ? (wr.dueDate || '') : '' }));
+    propsGrid.appendChild(dueGroup);
+
+    // Assignee
+    const assigneeGroup = el('div', { class: 'notion-prop' });
+    assigneeGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Assignee' }));
+    const assigneeSel = el('select', { name: 'assignedTo', class: 'notion-prop-select' });
+    assigneeSel.appendChild(el('option', { value: '', text: '— Unassigned —' }));
     DB.getWhere('users', u => u.entities.includes(entity) || u.entities.includes(entity.toLowerCase())).forEach(u => {
       const opt = el('option', { value: u.id, text: u.name });
       if (wr && wr.assignedTo === u.id) opt.selected = true;
       assigneeSel.appendChild(opt);
     });
     assigneeGroup.appendChild(assigneeSel);
-    form.appendChild(assigneeGroup);
+    propsGrid.appendChild(assigneeGroup);
+
+    form.appendChild(propsGrid);
+
+    // ── Description free-form ──
+    const descSection = el('div', { class: 'notion-freeform' });
+    descSection.appendChild(el('label', { class: 'notion-section-label', text: 'Description' }));
+    descSection.appendChild(el('input', { type: 'text', name: 'description', class: 'notion-freeform-input', placeholder: 'What is this work request about?', value: wr ? (wr.description || '') : '' }));
+    form.appendChild(descSection);
+
+    // Use Retainer Template button (only on creation, not edit) — placed above tasks
+    const templates = DB.getWhere('retainerTemplates', t => t.entity === entity);
+    let selectedTemplateId = null;
+    let templateBtnRef = null;
+    if (!wr && templates.length > 0) {
+      const templateWrapper = el('div', { class: 'notion-template-picker' });
+      const templateBtn = el('button', {
+        type: 'button', class: 'notion-add-line-item',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Use Retainer Template'
+      });
+      templateBtnRef = templateBtn;
+      const templateDropdown = el('div', { class: 'template-dropdown hidden' });
+      const noneItem = el('div', { class: 'template-dropdown-item active', text: '— None —' });
+      noneItem.dataset.templateId = '';
+      templateDropdown.appendChild(noneItem);
+      templates.forEach(t => {
+        const item = el('div', { class: 'template-dropdown-item', text: t.name });
+        item.dataset.templateId = t.id;
+        templateDropdown.appendChild(item);
+      });
+      templateBtn.addEventListener('click', (e) => { e.stopPropagation(); templateDropdown.classList.toggle('hidden'); });
+      document.addEventListener('click', () => { templateDropdown.classList.add('hidden'); });
+      templateDropdown.addEventListener('click', (e) => e.stopPropagation());
+      templateWrapper.appendChild(templateBtn);
+      templateWrapper.appendChild(templateDropdown);
+      form.appendChild(templateWrapper);
+    }
 
     // Template dropdown item click handler (wired after form fields exist)
     if (!wr && templates.length > 0) {
-      const templateDropdown = topActions.querySelector('.template-dropdown');
+      const templateDropdown = form.querySelector('.template-dropdown');
       const dropdownItems = templateDropdown.querySelectorAll('.template-dropdown-item');
+      const clientSel = form.querySelector('[name="clientId"]');
+      const prioritySel = form.querySelector('[name="priority"]');
       dropdownItems.forEach(item => {
         item.addEventListener('click', () => {
           const templateId = item.dataset.templateId;
@@ -3583,16 +3577,13 @@ const Workflow = {
           const tasksList = document.getElementById('task-rows');
           const template = templateId ? DB.getById('retainerTemplates', templateId) : null;
 
-          // Update active state on dropdown items
           dropdownItems.forEach(di => di.classList.remove('active'));
           item.classList.add('active');
 
-          // Update button text
           if (templateBtnRef) {
             templateBtnRef.textContent = template ? template.name : 'Use Retainer Template';
           }
 
-          // Close dropdown
           templateDropdown.classList.add('hidden');
 
           if (tasksList) {
@@ -3607,7 +3598,6 @@ const Workflow = {
               if (titleInput) titleInput.value = `${template.name} (${titleSuffix})`;
               if (descInput) descInput.value = template.description || '';
 
-              // Set due date: monthly = 1 month, quarterly = 3 months
               if (dueDateInput) {
                 const dueDate = new Date(now);
                 if (template.schedule === 'quarterly') {
@@ -3618,10 +3608,7 @@ const Workflow = {
                 dueDateInput.value = dueDate.toISOString().slice(0, 10);
               }
 
-              // Set client
               if (clientSel && template.clientId) clientSel.value = template.clientId;
-
-              // Set priority to Normal for template-generated WRs
               if (prioritySel) prioritySel.value = 'Normal';
 
               // Load template tasks
@@ -3679,16 +3666,18 @@ const Workflow = {
     });
     form.appendChild(retainerGroup);
 
-    // Tasks section
-    const tasksSection = el('div', { class: 'form-section' });
-    tasksSection.appendChild(el('h3', { text: 'Tasks' }));
-    const tasksList = el('div', { id: 'task-rows' });
+    // Tasks section — Notion-style editable list
+    const tasksSection = el('div', { class: 'form-section notion-line-items' });
+    tasksSection.appendChild(el('h3', { class: 'form-section-title', text: 'Tasks' }));
+    const tasksList = el('div', { class: 'notion-line-item-list', id: 'task-rows' });
     tasksSection.appendChild(tasksList);
 
-
-
-    const addTaskBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: '+ Add Task' });
-    addTaskBtn.setAttribute('data-role', 'add-task');
+    const addTaskBtn = el('button', {
+      type: 'button',
+      class: 'notion-add-line-item',
+      'data-role': 'add-task',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add task'
+    });
     addTaskBtn.addEventListener('click', () => this.addTaskRow(tasksList, null, true));
     tasksSection.appendChild(addTaskBtn);
     form.appendChild(tasksSection);
@@ -3711,10 +3700,17 @@ const Workflow = {
 
   addTaskRow(container, taskData, collapseOthers = false) {
     if (collapseOthers) {
-      container.querySelectorAll('.task-row').forEach(r => r.classList.add('collapsed'));
+      container.querySelectorAll('.task-row, .notion-line-item-row, .wr-task-row').forEach(r => r.classList.add('collapsed'));
     }
-    const row = el('div', { class: 'task-row' });
+    const row = el('div', { class: 'notion-line-item-row wr-task-row task-row' });
     row.dataset.taskKey = taskData?.id || generateId('tmp');
+
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
 
     // Toggle caret for collapse/expand
     const caret = el('button', { type: 'button', class: 'task-row-toggle', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>' });
@@ -3725,7 +3721,7 @@ const Workflow = {
 
     // Detect if existing task depends on every previous task -> show as "All (*)"
     const existingPreds = taskData?.predecessors || taskData?.dependencies || [];
-    const previousTaskKeys = Array.from(container.querySelectorAll('.task-row')).map(r => r.dataset.taskKey);
+    const previousTaskKeys = Array.from(container.querySelectorAll('.wr-task-row')).map(r => r.dataset.taskKey);
     const dependsOnAllPrevious = previousTaskKeys.length > 0 && previousTaskKeys.every(k => existingPreds.includes(k));
     if (dependsOnAllPrevious) {
       row.dataset.predKeys = '*';
@@ -3812,7 +3808,12 @@ const Workflow = {
 
     row.appendChild(predWrapper);
 
-    const removeBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: '×' });
+    const removeBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     removeBtn.addEventListener('click', () => {
       row.remove();
       this.updatePredecessorOptions(container);
@@ -3824,7 +3825,7 @@ const Workflow = {
   },
 
   updatePredecessorOptions(container) {
-    const rows = Array.from(container.querySelectorAll('.task-row'));
+    const rows = Array.from(container.querySelectorAll('.wr-task-row'));
     const tasks = rows.map((row, idx) => ({
       key: row.dataset.taskKey,
       label: row.querySelector('.task-title-input').value.trim() || `Task ${idx + 1}`
@@ -8104,6 +8105,8 @@ const Workflow = {
       openFormPanel({
         icon: '📋', title: 'Create Template',
         formContent: this.renderTemplateForm(), formId: 'template-form',
+        viewContext: 'retainer-template-form',
+        fullPageRoute: '#operations/templateForm/new',
         actions: [
           { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
           { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
@@ -8143,6 +8146,8 @@ const Workflow = {
         openFormPanel({
           icon: '📋', title: tpl ? tpl.name : 'Edit Template',
           formContent: this.renderTemplateForm(), formId: 'template-form',
+          viewContext: 'retainer-template-form',
+          fullPageRoute: `#operations/templateForm/${this.templateEditingId || 'new'}`,
           actions: [
             { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
             { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
