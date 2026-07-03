@@ -646,16 +646,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.classList.remove('loading-active');
   }
 
-  // Handle fading out of loading screen if active
-  if (document.documentElement.classList.contains('loading-active') && loadingScreen) {
-    setTimeout(() => {
-      loadingScreen.style.transition = 'opacity 0.2s ease-in-out';
-      loadingScreen.style.opacity = '0';
+  // Handle fading out of loading screen if active, or ensure it is hidden
+  if (loadingScreen) {
+    if (document.documentElement.classList.contains('loading-active')) {
+      loadingScreen.classList.remove('hidden');
       setTimeout(() => {
-        document.documentElement.classList.remove('loading-active');
-        loadingScreen.style.transition = '';
-      }, 200);
-    }, 450); // Keep it visible for 450ms for a smooth syncing transition feel
-    sessionStorage.removeItem('is_syncing');
+        loadingScreen.style.transition = 'opacity 0.2s ease-in-out';
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => {
+          document.documentElement.classList.remove('loading-active');
+          loadingScreen.classList.add('hidden');
+          loadingScreen.style.transition = '';
+          loadingScreen.style.opacity = '';
+        }, 200);
+      }, 450); // Keep it visible for 450ms for a smooth syncing transition feel
+      sessionStorage.removeItem('is_syncing');
+    } else {
+      loadingScreen.classList.add('hidden');
+    }
   }
 });

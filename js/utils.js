@@ -7,6 +7,10 @@
 (function() {
   if (sessionStorage.getItem('is_syncing') === 'true') {
     document.documentElement.classList.add('loading-active');
+    document.addEventListener('DOMContentLoaded', () => {
+      const ls = document.getElementById('loading-screen');
+      if (ls) ls.classList.remove('hidden');
+    });
   }
 })();
 
