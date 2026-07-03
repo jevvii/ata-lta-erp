@@ -7066,6 +7066,8 @@ tbody tr:hover {
   color: var(--muted);
 }
 
+.status-select,
+.status-dropdown-wrapper-v2 .status-select,
 .task-list .status-select {
   appearance: none;
   -webkit-appearance: none;
@@ -7085,12 +7087,14 @@ tbody tr:hover {
   box-sizing: border-box;
 }
 
+.status-select:focus-visible,
 .task-list .status-select:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
 }
 
+.status-select option,
 .task-list .status-select option {
   font-weight: 500;
 }
