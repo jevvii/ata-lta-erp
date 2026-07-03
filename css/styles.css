@@ -3189,12 +3189,13 @@ tbody tr:hover {
   display: inline-flex;
   align-items: center;
   width: 100%;
-  max-width: 130px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .status-dropdown-wrapper-v2 .status-dropdown-caret {
   position: absolute;
-  right: 8px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
@@ -3202,7 +3203,7 @@ tbody tr:hover {
   align-items: center;
   justify-content: center;
   color: currentColor;
-  opacity: 0.9;
+  opacity: 0.85;
   z-index: 5;
 }
 
@@ -7087,14 +7088,18 @@ tbody tr:hover {
   -moz-appearance: none !important;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 5px 26px 5px 10px !important;
+  padding: 4px 20px 4px 6px !important;
   font-size: var(--text-xs);
   font-weight: 600;
   background: var(--surface);
   cursor: pointer;
   width: 100%;
-  min-width: 125px;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .status-select:focus-visible,
