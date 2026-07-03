@@ -263,6 +263,7 @@ async function runTests() {
   // ─── TEST 15: Disbursement view toggle under filters ─────────────
   await page.goto(BASE + '/#disbursement');
   await page.waitForTimeout(800);
+  const disActionsBar = await page.$('.actions-bar');
   const disFiltersBar = await page.$('.filters-bar');
   let toggleUnderFilters = false;
   if (!disActionsBar && disFiltersBar) {
