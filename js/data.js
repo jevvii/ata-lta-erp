@@ -1625,6 +1625,7 @@ const seedData = {
 
 const DB = {
   SCHEMA_VERSION: 13,
+  _pendingWrIdsCache: null,
 
   init() {
     const stored = localStorage.getItem('erp_schema_version');
@@ -1831,22 +1832,24 @@ const DB = {
     let records = JSON.parse(localStorage.getItem('erp_' + table) || '[]');
     if (table === 'workRequests' && records.length > 0) {
       records = records.map(r => ({ ...r }));
-      const pcStr = localStorage.getItem('erp_pendingChanges') || '[]';
-      try {
-        const pcs = JSON.parse(pcStr);
-        const pendingWrIds = new Set(
-          pcs.filter(pc => pc.status === 'pending' && pc.table === 'workRequests')
-             .map(pc => pc.proposedData.id || pc.proposedData.key || pc.proposedData.workRequestId)
-             .filter(Boolean)
-        );
-        records.forEach(r => {
-          if (pendingWrIds.has(r.id)) {
-            r.isPendingApproval = true;
-          }
-        });
-      } catch (e) {
-        // ignore errors
+      if (!this._pendingWrIdsCache) {
+        const pcStr = localStorage.getItem('erp_pendingChanges') || '[]';
+        try {
+          const pcs = JSON.parse(pcStr);
+          this._pendingWrIdsCache = new Set(
+            pcs.filter(pc => pc.status === 'pending' && pc.table === 'workRequests' && pc.proposedData)
+               .map(pc => pc.proposedData.id || pc.proposedData.key || pc.proposedData.workRequestId)
+               .filter(Boolean)
+          );
+        } catch (e) {
+          this._pendingWrIdsCache = new Set();
+        }
       }
+      records.forEach(r => {
+        if (this._pendingWrIdsCache.has(r.id)) {
+          r.isPendingApproval = true;
+        }
+      });
     }
     return records;
   },
@@ -1864,6 +1867,7 @@ const DB = {
   },
 
   insert(table, record) {
+    this._pendingWrIdsCache = null;
     const all = this.getAll(table);
     const cleanRecord = { ...record };
     if (table === 'workRequests') {
@@ -1874,6 +1878,7 @@ const DB = {
   },
 
   update(table, id, changes) {
+    this._pendingWrIdsCache = null;
     const all = this.getAll(table);
     const idx = all.findIndex(r => r.id === id);
     if (idx !== -1) {
@@ -1890,6 +1895,7 @@ const DB = {
   },
 
   delete(table, id) {
+    this._pendingWrIdsCache = null;
     const all = this.getAll(table).filter(r => r.id !== id);
     this.save(table, all);
   },
