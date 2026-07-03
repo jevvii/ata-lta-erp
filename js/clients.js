@@ -151,22 +151,6 @@ const Clients = {
       );
     }
 
-    // Staff-level visibility filter: only see clients they're assigned to
-    if (!Auth.can('clients:edit')) {
-      const userId = Auth.user.id;
-      const tasks = DB.getAll('tasks');
-      const workRequests = DB.getAll('workRequests');
-      // Find clients where user is assigned to any task
-      const assignedClientIds = new Set();
-      tasks.forEach(t => {
-        if (t.assigneeId === userId) {
-          const wr = workRequests.find(w => w.id === t.workRequestId);
-          if (wr) assignedClientIds.add(wr.clientId);
-        }
-      });
-      clients = clients.filter(c => c.contactUserId === userId || assignedClientIds.has(c.id));
-    }
-
     return clients;
   },
 
@@ -259,8 +243,8 @@ const Clients = {
       formContent: formContainer,
       formId: 'client-form',
       actions: [
-        { text: isNew ? 'Save Client' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'client-form', testId: 'save-client-btn' },
-        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showList(), testId: 'cancel-client-btn' }
+        { text: isNew ? 'Save Client' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'client-form', testId: 'client-save' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showList(), testId: 'client-cancel' }
       ]
     });
   },
@@ -589,14 +573,15 @@ const Clients = {
     }
 
     const isNew = !this.editingId || this.editingId === 'new';
-    this.showList();
-    if (typeof Workflow !== 'undefined' && Workflow.showMessage) {
-      Workflow.showMessage(
-        !isNew ? 'Client Updated' : 'Client Created',
-        'Client has been ' + (!isNew ? 'updated' : 'created') + ' successfully.',
-        'success'
-      );
-    }
+    const isApproved = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+    const msgConfig = {
+      title: isNew ? 'Client Created' : 'Client Updated',
+      message: isApproved 
+        ? `Client ${record.name} has been successfully ${isNew ? 'created' : 'updated'}.` 
+        : `Client ${record.name} ${isNew ? 'creation' : 'update'} request has been submitted for Admin approval.`,
+      type: 'success'
+    };
+    closeFormPanelAndRoute('#clients', msgConfig);
   },
 
   archiveClientDirectly(clientId) {
@@ -682,20 +667,6 @@ const Clients = {
       );
     }
 
-    // Staff-level visibility filter
-    if (!Auth.can('clients:edit')) {
-      const userId = Auth.user.id;
-      const tasks = DB.getAll('tasks');
-      const workRequests = DB.getAll('workRequests');
-      const assignedClientIds = new Set();
-      tasks.forEach(t => {
-        if (t.assigneeId === userId) {
-          const wr = workRequests.find(w => w.id === t.workRequestId);
-          if (wr) assignedClientIds.add(wr.clientId);
-        }
-      });
-      clients = clients.filter(c => c.contactUserId === userId || assignedClientIds.has(c.id));
-    }
     return clients;
   },
 
