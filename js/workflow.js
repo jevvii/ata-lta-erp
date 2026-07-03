@@ -2103,6 +2103,7 @@ const Workflow = {
         });
         tdAct.appendChild(cancelBtn);
       }
+      tr.appendChild(tdAct);
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
