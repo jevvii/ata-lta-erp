@@ -1677,11 +1677,9 @@ const Workflow = {
     const entity = Auth.activeEntity;
     const wrCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).filter(wr => wr.status !== 'Cancelled').length;
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
+      return matchesEntity && wr.status !== 'Cancelled' && Auth.canViewWr(wr);
+    }).length;
 
     const templateCount = DB.getWhere('retainerTemplates', t => {
       const tEnt = (t.entity || '').toUpperCase();
@@ -1693,11 +1691,9 @@ const Workflow = {
 
     const archiveCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).filter(wr => wr.status === 'Cancelled').length;
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
+      return matchesEntity && wr.status === 'Cancelled' && Auth.canViewWr(wr);
+    }).length;
 
     const tabs = [
       { key: 'list', label: 'Work Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: wrCount }
@@ -1891,24 +1887,8 @@ const Workflow = {
         return matchesEntity;
       }));
 
-      // Scope visibility for staff-level roles to only show work requests they are added to
-      if (!Auth.isManagerial()) {
-        const myTasks = DB.getWhere('tasks', t => {
-          if (t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id) return true;
-          if (t.assigneeName && Auth.user?.name && t.assigneeName === Auth.user.name) return true;
-          if ((t.coAssignees || []).some(n => n && n === Auth.user?.name)) return true;
-          return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === Auth.user.name);
-        });
-        const myWrIds = new Set(myTasks.map(t => t.workRequestId));
-        wrs = wrs.filter(r => {
-          if (r.isPendingApproval) {
-            const tasks = r.tasks || [];
-            const isAssignedToStagedTasks = tasks.some(t => t.assigneeId === Auth.user.id || t.assigneeName === Auth.user.name || (t.coAssignees || []).includes(Auth.user.name));
-            return r.submittedBy === Auth.user.id || r.assignedTo === Auth.user.id || isAssignedToStagedTasks;
-          }
-          return myWrIds.has(r.id) || r.assignedTo === Auth.user.id || r.requestedBy === Auth.user.id;
-        });
-      }
+      // Scope visibility for Manager and Staff roles using central visibility helper
+      wrs = wrs.filter(r => Auth.canViewWr(r));
       if (priorityFilter.value) wrs = wrs.filter(r => r.priority === priorityFilter.value);
       if (empFilter.searchText && empFilter.searchText.trim() !== '') {
         const query = empFilter.searchText.trim().toLowerCase();

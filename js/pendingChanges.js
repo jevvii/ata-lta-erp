@@ -12,9 +12,8 @@ const PendingChanges = {
    * Manager bypasses for tasks only (WRs still need Admin approval).
    * All other roles stage changes in pendingChanges.
    */
-  submit(table, record, isNew) {
-    const role = Auth.user?.role;
-    if (role === 'Admin' || (role === 'Manager' && table === 'tasks')) {
+   submit(table, record, isNew) {
+    if (Auth.can('bypass_review:' + table)) {
       const cleanRecord = { ...record };
       delete cleanRecord.tasks;
       if (isNew) {
@@ -64,10 +63,7 @@ const PendingChanges = {
    */
   canApproveChange(pc) {
     if (!pc) return false;
-    const role = Auth.user?.role;
-    if (role === 'Admin') return true;
-    if (role === 'Manager' && pc.table === 'tasks') return true;
-    return false;
+    return Auth.can('approve_change:' + pc.table);
   },
 
   approve(pendingId) {
