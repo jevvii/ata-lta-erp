@@ -20,6 +20,7 @@
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --font-sans: "Poppins", "Inter", system-ui, -apple-system, sans-serif;
+  --transition-loading: 0.25s;
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 24px;
@@ -8958,7 +8959,7 @@ tbody tr * {
   justify-content: center;
   z-index: 99999;
   opacity: 0;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--transition-loading, 0.25s) cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 html.loading-active #loading-screen {

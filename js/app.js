@@ -643,10 +643,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Clear the show timeout to prevent it from firing if the page loaded fast
-  const loadingTimeoutId = document.documentElement.dataset.loadingTimeout;
-  if (loadingTimeoutId) {
-    clearTimeout(parseInt(loadingTimeoutId, 10));
-    delete document.documentElement.dataset.loadingTimeout;
+  if (window.LoadingManager && typeof window.LoadingManager.clear === 'function') {
+    window.LoadingManager.clear();
   }
 
   // Handle fading out of loading screen if active
@@ -656,7 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       document.documentElement.classList.remove('loading-active');
       loadingScreen.style.opacity = '';
-    }, 250); // Matches the 0.25s duration defined in CSS
+    }, window.LoadingManager ? window.LoadingManager.TRANSITION_MS : 250);
   }
   
   // Always ensure is_syncing is cleared after routing and initialization

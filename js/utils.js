@@ -3,16 +3,30 @@
  * Safe DOM builder, formatting helpers, and general utilities.
  */
 
-// Set loading-active class with a small delay if reload was triggered by a sync operation.
-// This prevents the loading screen from flashing on immediate loads/reloads.
-(function() {
-  if (sessionStorage.getItem('is_syncing') === 'true') {
-    const timeoutId = setTimeout(function() {
-      document.documentElement.classList.add('loading-active');
-    }, 250); // 250ms threshold for visible delay
-    document.documentElement.dataset.loadingTimeout = timeoutId.toString();
+// Centralized Loading Manager to handle state and threshold constants.
+// Scoped to window.LoadingManager to avoid global namespace pollution and DOM dataset coupling.
+window.LoadingManager = {
+  timeoutId: null,
+  DELAY_MS: 250,       // Threshold for visible delay before showing loader
+  TRANSITION_MS: 250,  // Matches CSS transition duration (--transition-loading: 0.25s)
+
+  start: function() {
+    if (sessionStorage.getItem('is_syncing') === 'true') {
+      this.timeoutId = setTimeout(() => {
+        document.documentElement.classList.add('loading-active');
+      }, this.DELAY_MS);
+    }
+  },
+
+  clear: function() {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
   }
-})();
+};
+
+window.LoadingManager.start();
 
 function formatPHP(n) {
   return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
