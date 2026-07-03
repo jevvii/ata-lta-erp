@@ -133,7 +133,7 @@ const Auth = {
     if (!this.user) return false;
     if (this.user.role === 'Admin') return true;
     if (this.user.role === 'Manager') {
-      return wr && wr.assignedTo === this.user.id;
+      return wr && (wr.assignedTo === this.user.id || wr.submittedBy === this.user.id || wr.requestedBy === this.user.id);
     }
     // Staff roles (non-managerial)
     if (!wr) return false;
