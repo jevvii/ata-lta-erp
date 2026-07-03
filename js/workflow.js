@@ -4547,16 +4547,33 @@ const Workflow = {
       style: 'margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;'
     });
 
+    const searchWrap = el('div', {
+      class: 'search-input-wrapper',
+      style: 'position: relative; display: flex; align-items: center;'
+    });
+
+    const searchIcon = el('span', {
+      class: 'search-icon',
+      style: 'position: absolute; left: 10px; pointer-events: none; display: flex; align-items: center; color: var(--muted);',
+      html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`
+    });
+
     const searchInput = el('input', {
       type: 'search',
       class: 'search-input form-control',
       placeholder: 'Search tasks, assignees, records…',
-      id: 'taskSearch'
+      id: 'taskSearch',
+      style: 'padding-left: 32px;'
     });
     searchInput.addEventListener('input', (e) => {
       container.searchQuery = e.target.value.toLowerCase();
       renderGroups();
     });
+
+    searchWrap.appendChild(searchIcon);
+    searchWrap.appendChild(searchInput);
+
+    actionsWrap.appendChild(searchWrap);
 
     const canAddTaskInToolbar = Auth.can('workflow:edit') || Auth.can('workflow:task_add');
     if (canAddTaskInToolbar && !isArchived) {
@@ -4571,7 +4588,6 @@ const Workflow = {
       actionsWrap.appendChild(addTaskBtn);
     }
 
-    actionsWrap.appendChild(searchInput);
     toolbar.appendChild(actionsWrap);
 
     container.appendChild(toolbar);
@@ -5897,7 +5913,6 @@ const Workflow = {
           html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`
         });
         editTaskHeaderBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showEditTaskModal(t.id, () => App.handleRoute()); });
-        detailToolbar.appendChild(editTaskHeaderBtn);
 
         if (!isArchived) {
           if (billingHandler) {
@@ -5925,6 +5940,8 @@ const Workflow = {
             detailToolbar.appendChild(trBtn);
           }
         }
+
+        detailToolbar.appendChild(editTaskHeaderBtn);
 
         // Attached Documents Section
         const canHandover = Auth.can('dms:handover');
