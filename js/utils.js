@@ -775,3 +775,15 @@ function closeFormPanelAndRoute(hash, messageConfig) {
   }
 }
 
+/**
+ * Utility to compose CSS class strings from primitives, arrays, or objects.
+ * Flattens nested arguments and filters out falsy values.
+ */
+function classNames(...args) {
+  return args
+    .flat(Infinity)
+    .filter(Boolean)
+    .join(' ');
+}
+
+
