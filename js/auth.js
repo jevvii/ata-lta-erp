@@ -115,6 +115,14 @@ const Auth = {
     return perms[role]?.includes(action) || false;
   },
 
+  canBypassReview(table) {
+    return this.can('bypass_review:' + table);
+  },
+
+  canApproveChange(table) {
+    return this.can('approve_change:' + table);
+  },
+
   isManagerial() {
     const role = this.user?.role;
     return role === 'Admin' || role === 'Manager';
@@ -150,6 +158,27 @@ const Auth = {
     return isAssigned;
   },
 
+  /**
+   * canViewWr variant that accepts a pre-built task map to avoid N+1 DB lookups.
+   * taskMap: { [workRequestId]: Task[] }
+   */
+  canViewWrWithTasks(wr, taskMap) {
+    if (!this.user) return false;
+    if (this.user.role === 'Admin') return true;
+    if (this.user.role === 'Manager') {
+      return wr && (wr.assignedTo === this.user.id || wr.submittedBy === this.user.id || wr.requestedBy === this.user.id);
+    }
+    if (!wr) return false;
+    if (wr.submittedBy === this.user.id || wr.assignedTo === this.user.id || wr.requestedBy === this.user.id) return true;
+    const tasks = wr.isPendingApproval ? (wr.tasks || []) : (taskMap[wr.id] || []);
+    return tasks.some(t => {
+      if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
+      if (t.assigneeName && t.assigneeName === this.user.name) return true;
+      if ((t.coAssignees || []).includes(this.user.name)) return true;
+      return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === this.user.name);
+    });
+  },
+
   canViewDisbursement(d) {
     if (!this.user) return false;
     if (this.user.role === 'Admin' || this.user.role === 'Accounting') return true;
@@ -158,7 +187,11 @@ const Auth = {
       const wr = DB.getById('workRequests', d.linkedWorkRequestId);
       return wr && this.canViewWr(wr);
     }
-    // Operations, Documentation, and HR
+    // Operations, Documentation, and HR:
+    // Staff can see WR-linked disbursements if they can view the WR,
+    // or non-linked disbursements they personally requested.
+    // This is intentionally more restrictive than the previous blanket 'return true'
+    // to match the documented role matrix (see file header).
     if (d.linkedWorkRequestId) {
       const wr = DB.getById('workRequests', d.linkedWorkRequestId);
       return wr && this.canViewWr(wr);

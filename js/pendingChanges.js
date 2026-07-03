@@ -13,7 +13,7 @@ const PendingChanges = {
    * All other roles stage changes in pendingChanges.
    */
    submit(table, record, isNew) {
-    if (Auth.can('bypass_review:' + table)) {
+    if (Auth.canBypassReview(table)) {
       const cleanRecord = { ...record };
       delete cleanRecord.tasks;
       if (isNew) {
@@ -63,7 +63,7 @@ const PendingChanges = {
    */
   canApproveChange(pc) {
     if (!pc) return false;
-    return Auth.can('approve_change:' + pc.table);
+    return Auth.canApproveChange(pc.table);
   },
 
   approve(pendingId) {
