@@ -271,6 +271,10 @@ const Workflow = {
   },
 
   transitionWorkRequest(wrId) {
+    if (!Auth.can('workflow:approve')) {
+      this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
+      return;
+    }
     const status = this.getPhaseTransitionStatus(wrId);
     if (!status || !status.canTransition) {
       this.showMessage('Routing Error', 'Cannot transition phase:\n- ' + (status?.missing.join('\n- ') || 'Requirements not met'), 'danger');
@@ -372,6 +376,210 @@ const Workflow = {
     okBtn.addEventListener('click', () => overlay.remove());
   },
 
+  toggleChecklistItem(task, itemId, isCompleted) {
+    if (!task) return;
+    const checklist = task.checklist || [];
+    const item = checklist.find(c => c.id === itemId);
+    if (!item) return;
+
+    item.completed = !!isCompleted;
+    if (!isCompleted) {
+      checklist.forEach(other => {
+        if (isChecklistBlocked(other, checklist)) {
+          other.completed = false;
+        }
+      });
+    }
+
+    DB.update('tasks', task.id, { checklist: checklist, updatedAt: new Date().toISOString() });
+  },
+
+  ensureTaskChecklistNormalized(task, persist = false) {
+    if (!task) return;
+    const checklist = task.checklist || [];
+    const hasUnnormalized = checklist.some(item => 
+      typeof item === 'string' || 
+      !item.id || 
+      !('completed' in item) || 
+      !('dependsOn' in item) || 
+      !('timeLogs' in item)
+    );
+    if (hasUnnormalized) {
+      const normalized = checklist.map(item => {
+        const text = typeof item === 'string' ? item : (item.text || '');
+        const id = (typeof item === 'object' && item && item.id) ? item.id : generateId('chk');
+
+        return {
+          id: id,
+          text: text,
+          completed: typeof item === 'object' && item ? !!item.completed : false,
+          assigneeId: typeof item === 'object' && item ? item.assigneeId || null : null,
+          assigneeName: typeof item === 'object' && item ? item.assigneeName || null : null,
+          dependsOn: typeof item === 'object' && item ? item.dependsOn || null : null,
+          timeLogs: typeof item === 'object' && item ? item.timeLogs || [] : []
+        };
+      });
+
+      task.checklist = normalized;
+      if (persist && task.id && !task.id.startsWith('tmp')) {
+        DB.update('tasks', task.id, { checklist: normalized, updatedAt: new Date().toISOString() });
+      }
+    }
+  },
+
+  renderChecklistView(filteredTasks, isArchived) {
+    // Ensure all tasks have normalized checklists before rendering
+    filteredTasks.forEach(t => {
+      this.ensureTaskChecklistNormalized(t, true);
+    });
+
+    const clContainer = el('div', { class: 'checklist-view-container', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-3);' });
+    
+    if (filteredTasks.length === 0) {
+      clContainer.appendChild(el('div', { class: 'empty-state', text: 'No tasks found.' }));
+    } else {
+      filteredTasks.forEach(t => {
+        const taskCard = el('div', { class: 'checklist-view-item-wrap' });
+        
+        // Primary Task Row
+        const taskRow = el('div', { class: 'checklist-view-row task-level' + (t.status === 'Completed' ? ' completed' : '') });
+        
+        if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
+          taskRow.classList.add('side-pane-active');
+          window.SidePaneInstance.activeElement = taskRow;
+        }
+
+        // Task Checkbox
+        const taskCb = el('input', { type: 'checkbox', class: 'checklist-view-cb' });
+        taskCb.checked = t.status === 'Completed';
+        taskCb.disabled = isArchived;
+        taskCb.addEventListener('click', (e) => e.stopPropagation());
+        taskCb.addEventListener('change', () => {
+          const nextStatus = taskCb.checked ? 'Completed' : 'In Progress';
+          this.showConfirm('Confirm Status Change',
+            `Are you sure you want to mark this task as "${nextStatus}"?`,
+            () => {
+              const res = this.updateTaskStatus(t.id, nextStatus);
+              if (res.error) {
+                this.showMessage('Error', res.error, 'danger');
+                taskCb.checked = !taskCb.checked;
+              } else {
+                App.handleRoute();
+              }
+            },
+            'warning',
+            () => { taskCb.checked = !taskCb.checked; }
+          );
+        });
+        taskRow.appendChild(taskCb);
+        
+        // Task Title
+        const titleEl = el('div', { class: 'checklist-view-title', text: t.title });
+        taskRow.appendChild(titleEl);
+        
+        // Task Meta Details
+        const metaWrap = el('div', { class: 'checklist-view-meta' });
+        
+        // Priority Badge
+        const pClass = { 'Urgent': 'badge-danger', 'Priority': 'badge-warn', 'Low Priority': 'badge-info' }[t.priority] || 'badge-muted';
+        metaWrap.appendChild(el('span', { class: `badge ${pClass}`, text: t.priority || 'Normal' }));
+        
+        // Due date
+        if (t.dueDate) {
+          metaWrap.appendChild(el('span', { class: 'checklist-view-date', text: formatDate(t.dueDate) }));
+        }
+        
+        // Assignees
+        const allAssigneeNames = getTaskAllAssigneeNames(t);
+        if (allAssigneeNames.length > 0) {
+          metaWrap.appendChild(this.renderAssigneeAvatarsList(allAssigneeNames));
+        }
+        
+        taskRow.appendChild(metaWrap);
+        
+        // Click to open Task Details
+        taskRow.addEventListener('click', () => {
+          this.showTaskSidePane(t.id, taskRow);
+        });
+        
+        taskCard.appendChild(taskRow);
+        
+        // Sub-checklist items nested
+        const normalizedCL = t.checklist || [];
+        
+        if (normalizedCL.length > 0) {
+          const subItemsWrap = el('div', { class: 'checklist-view-sub-container' });
+          
+          normalizedCL.forEach(item => {
+            const blocked = isChecklistBlocked(item, normalizedCL);
+            const subRow = el('div', { class: 'checklist-view-row sub-level' + (item.completed ? ' completed' : '') + (blocked ? ' blocked' : '') });
+            
+            // Indent spacer
+            subRow.appendChild(el('div', { class: 'inline-cl-spacer' }));
+            
+            // Checkbox
+            const subCb = el('input', { type: 'checkbox', class: 'checklist-view-cb' });
+            subCb.checked = !!item.completed;
+            subCb.disabled = blocked || isArchived;
+            subCb.addEventListener('click', (e) => e.stopPropagation());
+            subCb.addEventListener('change', (e) => {
+              e.stopPropagation();
+              this.toggleChecklistItem(t, item.id, subCb.checked);
+              App.handleRoute();
+            });
+            subRow.appendChild(subCb);
+            
+            // Subtask title
+            const subTextEl = el('div', { class: 'checklist-view-title' });
+            if (blocked) {
+              const prereq = item.dependsOn === '*' ? null : normalizedCL.find(c => c.id === item.dependsOn);
+              subTextEl.textContent = '🔒 ' + item.text;
+              subTextEl.title = 'Waiting for: ' + (item.dependsOn === '*' ? 'All items' : (prereq ? prereq.text : 'Unknown'));
+            } else {
+              subTextEl.textContent = item.text;
+            }
+            subRow.appendChild(subTextEl);
+            
+            // Subtask meta
+            const subMeta = el('div', { class: 'checklist-view-meta' });
+            
+            // Subtask Assignees
+            const itemAssigneeNames = [];
+            if (item.assigneeName) itemAssigneeNames.push(item.assigneeName);
+            if (item.coAssignees && Array.isArray(item.coAssignees)) {
+              item.coAssignees.forEach(name => {
+                if (name && !itemAssigneeNames.includes(name)) itemAssigneeNames.push(name);
+              });
+            }
+            if (itemAssigneeNames.length > 0) {
+              subMeta.appendChild(this.renderAssigneeAvatarsList(itemAssigneeNames));
+            }
+            
+            // Subtask hours
+            const itemHours = getChecklistItemTotalHours(item);
+            if (itemHours > 0) {
+              subMeta.appendChild(el('span', { class: 'checklist-view-hours font-mono', text: itemHours + 'h' }));
+            }
+            
+            subRow.appendChild(subMeta);
+            
+            // Click opens task side pane
+            subRow.addEventListener('click', () => {
+              this.showTaskSidePane(t.id, subRow);
+            });
+            
+            subItemsWrap.appendChild(subRow);
+          });
+          
+          taskCard.appendChild(subItemsWrap);
+        }
+        
+        clContainer.appendChild(taskCard);
+      });
+    }
+    return clContainer;
+  },
+
   showConfirm(title, message, onConfirm, type = 'warning', onCancel = null) {
     const wrapper = el('div', { class: `modal-message-wrapper type-${type}` });
 
@@ -392,7 +600,7 @@ const Workflow = {
     footer.appendChild(cancelBtn);
     wrapper.appendChild(footer);
 
-    const overlay = this.showModal(title, wrapper);
+    const overlay = this.showModal(title, wrapper, onCancel);
     cancelBtn.addEventListener('click', () => {
       overlay.remove();
       if (onCancel) onCancel();
@@ -1351,7 +1559,8 @@ const Workflow = {
       h1.appendChild(document.createTextNode(wr.title || 'Untitled Work Request'));
       titleBar.appendChild(h1);
       const actions = el('div', { class: 'title-bar-actions' });
-      if (canEdit && wr && !isArchived) {
+      const canAddTask = canEdit || Auth.can('workflow:task_add');
+      if (canAddTask && wr && !isArchived) {
         const addBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ Add Task', style: 'margin-right: var(--spacing-sm);' });
         addBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
         actions.appendChild(addBtn);
@@ -1682,9 +1891,14 @@ const Workflow = {
         return matchesEntity;
       }));
 
-      // Scope visibility for all non-managerial staff roles to only show work requests they are added to
-      if (!canApprove) {
-        const myTasks = DB.getWhere('tasks', t => t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id);
+      // Scope visibility for staff-level roles to only show work requests they are added to
+      if (!Auth.isManagerial()) {
+        const myTasks = DB.getWhere('tasks', t => {
+          if (t.assigneeId === Auth.user.id || t.assignedTo === Auth.user.id) return true;
+          if (t.assigneeName && Auth.user?.name && t.assigneeName === Auth.user.name) return true;
+          if ((t.coAssignees || []).some(n => n && n === Auth.user?.name)) return true;
+          return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === Auth.user.name);
+        });
         const myWrIds = new Set(myTasks.map(t => t.workRequestId));
         wrs = wrs.filter(r => {
           if (r.isPendingApproval) {
@@ -1742,6 +1956,7 @@ const Workflow = {
 
   refreshTable(container, wrs) {
     const canEdit = Auth.can('workflow:edit');
+    const canApprove = Auth.can('workflow:approve');
     if (wrs.length === 0) {
       container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
       return;
@@ -1799,7 +2014,7 @@ const Workflow = {
           editBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#operations/form/' + wr.id; });
           tdAct.appendChild(editBtn);
         }
-        if (canEdit && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+        if (canApprove && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
           const ts = this.getPhaseTransitionStatus(wr.id);
           if (ts && ts.canTransition && ts.nextPhase) {
             const routeBtn = el('button', { 
@@ -1871,7 +2086,7 @@ const Workflow = {
 
       const cardContainer = el('div', { class: 'board-cards-scroll' });
 
-      if (st === 'Draft') {
+      if (st === 'Draft' && Auth.can('workflow:edit')) {
         const addCard = el('div', {
           class: 'board-card-v2 add-wr-card',
           style: 'border: 1px dashed #94a3b8; background: rgba(148, 163, 184, 0.02); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: #94a3b8; margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
@@ -1891,7 +2106,7 @@ const Workflow = {
         cardContainer.appendChild(addCard);
       }
 
-      if (colWrs.length === 0 && st !== 'Draft') {
+      if (colWrs.length === 0 && (st !== 'Draft' || !Auth.can('workflow:edit'))) {
         cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No work requests' }));
       }
 
@@ -2018,6 +2233,7 @@ const Workflow = {
 
   refreshListCompact(container, wrs) {
     const canEdit = Auth.can('workflow:edit');
+    const canApprove = Auth.can('workflow:approve');
     if (wrs.length === 0) {
       container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
       return;
@@ -2057,7 +2273,7 @@ const Workflow = {
       }
       
       if (!wr.isPendingApproval) {
-        if (canEdit && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+        if (canApprove && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
           const ts = this.getPhaseTransitionStatus(wr.id);
           if (ts && ts.canTransition && ts.nextPhase) {
             const readyBadge = el('span', {
@@ -2119,6 +2335,7 @@ const Workflow = {
       }
     }
     if (!task) return;
+    this.ensureTaskChecklistNormalized(task);
 
     const assignedUser = task.assignedTo || task.assigneeId ? DB.getById('users', task.assignedTo || task.assigneeId) : null;
     const assigneeName = task.assigneeName || assignedUser?.name || '—';
@@ -2314,10 +2531,7 @@ const Workflow = {
       const listContainer = el('div', { class: 'details-content-list' });
       let populatePrereqSelect = () => {};
       
-      const normalizedChecklist = (task.checklist || []).map(item => {
-        if (typeof item === 'string') return { id: generateId('chk'), text: item, completed: false, assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] };
-        return item;
-      });
+      const normalizedChecklist = task.checklist || [];
 
       const renderChecklist = () => {
         listContainer.innerHTML = '';
@@ -2334,16 +2548,7 @@ const Workflow = {
             cb.disabled = blocked || (wr && wr.isPendingApproval);
             
             cb.addEventListener('change', () => {
-              const now = new Date().toISOString();
-              if (cb.checked) {
-                item.completed = true;
-              } else {
-                item.completed = false;
-                normalizedChecklist.forEach(other => {
-                  if (other.dependsOn === item.id || other.dependsOn === '*') other.completed = false;
-                });
-              }
-              DB.update('tasks', task.id, { checklist: normalizedChecklist, updatedAt: now });
+              this.toggleChecklistItem(task, item.id, cb.checked);
               this.showTaskSidePane(taskId, triggerElement);
               App.handleRoute(); // Refresh background
             });
@@ -2670,8 +2875,9 @@ const Workflow = {
       }
       cont.appendChild(docsList);
 
-      // Notion-style Embed Options
-      if (!isArchived) {
+      // Notion-style Embed Options — only for roles that can upload (Admin, Manager, Operations)
+      const canUploadDocs = Auth.can('workflow:edit') || Auth.can('workflow:task_upload');
+      if (!isArchived && canUploadDocs) {
         const embedContainer = el('div', { class: 'embed-options', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: 8px;' });
         
         // 1. Upload Document
@@ -2990,7 +3196,7 @@ const Workflow = {
         // Transmittal Card
         let transTitle = 'Transmittal';
         let transHandler = null;
-        if (Auth.can('transmittal:edit')) {
+        if (Auth.can('transmittal:create')) {
           transTitle = 'Generate Transmittal';
           transHandler = () => this.openGenerateTransmittalModal(wr, task);
         } else if (Auth.can('transmittal:request')) {
@@ -3199,11 +3405,12 @@ const Workflow = {
     fields.forEach(f => {
       const group = el('div', { class: 'form-group' });
       group.appendChild(el('label', { text: f.label + (f.required ? ' *' : '') }));
-      const input = el('input', {
+      const inputAttrs = {
         type: f.type, name: f.name,
-        value: wr ? (wr[f.name] || '') : '',
-        required: f.required
-      });
+        value: wr ? (wr[f.name] || '') : ''
+      };
+      if (f.required) inputAttrs.required = true;
+      const input = el('input', inputAttrs);
       group.appendChild(input);
       form.appendChild(group);
     });
@@ -3832,12 +4039,15 @@ const Workflow = {
       });
     }
 
-    closeFormPanelAndRoute('#operations');
-    this.showMessage(
-      isNew ? 'Work Request Created' : 'Work Request Saved',
-      isNew ? 'Work Request has been successfully created.' : 'Work Request has been successfully updated.',
-      'success'
-    );
+    const isApproved = result.approved;
+    const msgConfig = {
+      title: isNew ? 'Work Request Created' : 'Work Request Saved',
+      message: isApproved
+        ? (isNew ? 'Work Request has been successfully created.' : 'Work Request has been successfully updated.')
+        : `Work Request ${isNew ? 'creation' : 'update'} request has been submitted for Admin approval.`,
+      type: 'success'
+    };
+    closeFormPanelAndRoute('#operations', msgConfig);
   },
 
   /**
@@ -4009,6 +4219,7 @@ const Workflow = {
     }
     const client = DB.getById('clients', wr.clientId);
     const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
+    tasks.forEach(t => this.ensureTaskChecklistNormalized(t));
     const canApprove = Auth.can('workflow:approve');
     const isDraft = wr.status === 'Draft';
 
@@ -4052,7 +4263,7 @@ const Workflow = {
       lifecycleActions.appendChild(cancelWrBtn);
     }
 
-    if (showRouteButton) {
+    if (showRouteButton && canApprove) {
       const routeBtn = el('button', {
         class: 'btn btn-sm btn-primary',
         text: `Route to ${ts.nextPhase}`,
@@ -4219,12 +4430,16 @@ const Workflow = {
     // Initialize task view mode
     this.taskViewMode = this.taskViewMode || 'table';
 
+    if (!ViewIcons.checklist) {
+      ViewIcons.checklist = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+    }
+
     const viewToggle = el('div', { class: 'group-toggle', style: 'margin-right: 8px;' });
     const viewButtons = {};
-    ['table', 'board', 'list'].forEach(mode => {
+    ['table', 'board', 'list', 'checklist'].forEach(mode => {
       const btn = el('button', {
         type: 'button',
-        html: ViewIcons[mode] + ' ' + (mode === 'table' ? 'Table' : mode === 'board' ? 'Board' : 'List'),
+        html: ViewIcons[mode] + ' ' + (mode === 'table' ? 'Table' : mode === 'board' ? 'Board' : mode === 'list' ? 'List' : 'Checklist'),
         class: this.taskViewMode === mode ? 'active' : ''
       });
       viewButtons[mode] = btn;
@@ -4239,6 +4454,7 @@ const Workflow = {
       viewToggle.appendChild(btn);
     });
     toolbar.appendChild(viewToggle);
+
 
     // Employee Filter Options
     const empOptions = [{ value: '', text: 'All Employees' }];
@@ -4348,17 +4564,20 @@ const Workflow = {
       renderGroups();
     });
 
-    const addTaskBtn = el('button', {
-      type: 'button',
-      class: 'btn btn-primary btn-sm',
-      text: '+ Add Task'
-    });
-    addTaskBtn.addEventListener('click', () => {
-      this.showAddTaskModal(wr.id, () => App.handleRoute());
-    });
+    const canAddTaskInToolbar = Auth.can('workflow:edit') || Auth.can('workflow:task_add');
+    if (canAddTaskInToolbar && !isArchived) {
+      const addTaskBtn = el('button', {
+        type: 'button',
+        class: 'btn btn-primary btn-sm',
+        text: '+ Add Task'
+      });
+      addTaskBtn.addEventListener('click', () => {
+        this.showAddTaskModal(wr.id, () => App.handleRoute());
+      });
+      actionsWrap.appendChild(addTaskBtn);
+    }
 
     actionsWrap.appendChild(searchInput);
-    actionsWrap.appendChild(addTaskBtn);
     toolbar.appendChild(actionsWrap);
 
     container.appendChild(toolbar);
@@ -4367,16 +4586,76 @@ const Workflow = {
     const bulkBar = el('div', { class: 'bulk-action-bar' });
     container.appendChild(bulkBar);
 
+    // Pending tasks section — show pending tasks awaiting approval
+    const pendingTaskChanges = DB.getWhere('pendingChanges', pc =>
+      pc.status === 'pending' && pc.table === 'tasks' && pc.proposedData && pc.proposedData.workRequestId === wr.id
+    );
+    if (pendingTaskChanges.length > 0) {
+      const pendingSection = el('div', { class: 'pending-tasks-section', style: 'margin-bottom: 16px; padding: 16px; background: #fef9c3; border: 1px solid #fde68a; border-radius: 8px;' });
+      pendingSection.appendChild(el('div', {
+        html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <strong>Pending Task Approvals (' + pendingTaskChanges.length + ')</strong>',
+        style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.875rem; color: #92400e;'
+      }));
+
+      pendingTaskChanges.forEach(pc => {
+        const task = pc.proposedData;
+        const submitter = DB.getById('users', pc.submittedBy);
+        const row = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #fff; border: 1px solid #fde68a; border-radius: 6px; margin-bottom: 8px;' });
+
+        const infoCol = el('div');
+        infoCol.appendChild(el('div', { style: 'font-weight: 600; font-size: 0.875rem; color: #1f2937;', text: task.title }));
+        infoCol.appendChild(el('div', {
+          style: 'font-size: 0.75rem; color: #6b7280; margin-top: 2px;',
+          text: 'Submitted by ' + (submitter?.name || 'Unknown') + ' • ' + new Date(pc.submittedAt).toLocaleDateString()
+        }));
+        if (task.assigneeName) {
+          infoCol.appendChild(el('div', { style: 'font-size: 0.75rem; color: #6b7280;', text: 'Assignee: ' + task.assigneeName }));
+        }
+        row.appendChild(infoCol);
+
+        if (PendingChanges.canApproveChange(pc)) {
+          const btnRow = el('div', { style: 'display: flex; gap: 8px;' });
+          const approveBtn = el('button', { class: 'btn btn-primary btn-xs', text: 'Approve' });
+          approveBtn.addEventListener('click', () => {
+            PendingChanges.approve(pc.id);
+            App.handleRoute();
+          });
+          const rejectBtn = el('button', { class: 'btn btn-danger btn-xs', text: 'Reject' });
+          rejectBtn.addEventListener('click', () => {
+            const reason = prompt('Rejection reason (optional):');
+            if (reason !== null) {
+              PendingChanges.reject(pc.id, reason || '');
+              App.handleRoute();
+            }
+          });
+          btnRow.appendChild(approveBtn);
+          btnRow.appendChild(rejectBtn);
+          row.appendChild(btnRow);
+        } else {
+          row.appendChild(el('span', {
+            text: 'Awaiting Approval',
+            style: 'background: #fef3c7; color: #d97706; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;'
+          }));
+        }
+
+        pendingSection.appendChild(row);
+      });
+
+      container.appendChild(pendingSection);
+    }
+
     // Empty-state guidance when WR has no tasks
-    if (tasks.length === 0) {
+    if (tasks.length === 0 && pendingTaskChanges.length === 0) {
       const emptyState = el('div', { class: 'task-empty-state' });
       emptyState.appendChild(el('div', {
         html: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M17.636 18.364l-.707-.707M6.343 5.343l-.707-.707M3 12h1M5.343 18.364l.707-.707M12 21v-1M12 7a5 5 0 110 10 5 5 0 010-10z"/></svg>'
       }));
       emptyState.appendChild(el('p', { text: 'No tasks have been added to this work request yet.' }));
-      const addFirstBtn = el('button', { type: 'button', class: 'btn btn-primary', text: '+ Add First Task' });
-      addFirstBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
-      emptyState.appendChild(addFirstBtn);
+      if (canAddTaskInToolbar && !isArchived) {
+        const addFirstBtn = el('button', { type: 'button', class: 'btn btn-primary', text: '+ Add First Task' });
+        addFirstBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
+        emptyState.appendChild(addFirstBtn);
+      }
       container.appendChild(emptyState);
     }
 
@@ -4824,6 +5103,12 @@ const Workflow = {
         return;
       }
 
+      if (this.taskViewMode === 'checklist') {
+        const clContainer = this.renderChecklistView(filteredTasks, isArchived);
+        listWrapper.appendChild(clContainer);
+        return;
+      }
+
       let groups = {};
       if (container.groupBy === 'phase') {
         const name = wr.status ? `${wr.status} Tasks` : 'General Tasks';
@@ -5250,10 +5535,7 @@ const Workflow = {
         let populatePrereqSelect = () => {};
         const allowAssignChecklist = !wr || wr.status === 'Draft' || wr.status === 'Pre-processing';
         const allowAddRequirements = allowAssignChecklist;
-        const normalizedChecklist = (t.checklist || []).map(item => {
-          if (typeof item === 'string') return { id: generateId('chk'), text: item, completed: false, assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] };
-          return item;
-        });
+        const normalizedChecklist = t.checklist || [];
 
         const renderChecklist = () => {
           checklistList.innerHTML = '';
@@ -5276,16 +5558,7 @@ const Workflow = {
               
               cb.addEventListener('change', (e) => {
                 e.stopPropagation();
-                const now = new Date().toISOString();
-                if (cb.checked) {
-                  item.completed = true;
-                } else {
-                  item.completed = false;
-                  normalizedChecklist.forEach(other => {
-                    if (other.dependsOn === item.id || other.dependsOn === '*') other.completed = false;
-                  });
-                }
-                DB.update('tasks', t.id, { checklist: normalizedChecklist, updatedAt: now });
+                this.toggleChecklistItem(t, item.id, cb.checked);
                 renderChecklist();
               });
               row.appendChild(cb);
@@ -5558,7 +5831,8 @@ const Workflow = {
         const docsSection = el('div', { class: 'detail-block' });
         const docsHeader = el('div', { class: 'detail-section-title' });
         docsHeader.appendChild(el('span', { text: 'Attached Documents' }));
-        if (canHandover && !isArchived) {
+        const canUploadTaskDocs = Auth.can('workflow:edit') || Auth.can('workflow:task_upload');
+        if ((canHandover || canUploadTaskDocs) && !isArchived) {
           const addDocBtn = el('button', { class: 'btn btn-primary btn-xs btn-add-inline', text: '+ Upload Scanned' });
           addDocBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showAddDocumentModal(t.id); });
           docsHeader.appendChild(addDocBtn);
@@ -5908,7 +6182,7 @@ const Workflow = {
           // Transmittal Card
           let transTitle = 'Transmittal';
           let transHandler = null;
-          if (Auth.can('transmittal:edit')) {
+          if (Auth.can('transmittal:create')) {
             transTitle = 'Generate Transmittal';
             transHandler = () => this.openGenerateTransmittalModal(wr, t);
           } else if (Auth.can('transmittal:request')) {
@@ -7256,9 +7530,15 @@ const Workflow = {
         taskDocuments: [],
         comments: []
       };
-      DB.insert('tasks', newTask);
-      overlay.remove();
-      if (onAdded) onAdded();
+      const result = PendingChanges.submit('tasks', newTask, true);
+      if (result.approved) {
+        overlay.remove();
+        if (onAdded) onAdded();
+      } else {
+        overlay.remove();
+        Workflow.showMessage('Task Submitted', 'Your task has been submitted and is pending Manager approval.', 'success');
+        if (onAdded) onAdded();
+      }
     });
   },
 
@@ -7684,10 +7964,7 @@ const Workflow = {
 
     // Block terminal statuses if checklist has incomplete items
     const checklist = task.checklist || [];
-    const hasIncomplete = checklist.some(item => {
-      if (typeof item === 'string') return true;
-      return !item.completed;
-    });
+    const hasIncomplete = checklist.some(item => !item.completed);
     if (hasIncomplete) {
       result = result.filter(s => s !== 'Completed' && s !== 'For Review');
     }
@@ -7731,10 +8008,7 @@ const Workflow = {
 
     if (newStatus === 'Completed' || newStatus === 'For Review') {
       const checklist = task.checklist || [];
-      const hasIncomplete = checklist.some(item => {
-        if (typeof item === 'string') return true;
-        return !item.completed;
-      });
+      const hasIncomplete = checklist.some(item => !item.completed);
       if (hasIncomplete) {
         return { error: `All checklist items must be completed before marking this task as ${newStatus}.` };
       }

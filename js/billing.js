@@ -484,7 +484,7 @@ const Billing = {
       viewBtn.addEventListener('click', () => { location.hash = '#billing/detail/' + inv.id; });
       tdAct.appendChild(viewBtn);
 
-      if (inv.status === 'Draft') {
+      if (inv.status === 'Draft' && Auth.can('billing:edit')) {
         const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
         editBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -612,8 +612,8 @@ const Billing = {
         metaRow.appendChild(financials);
         card.appendChild(metaRow);
 
-        // Card actions for Draft invoices
-        if (inv.status === 'Draft') {
+        // Card actions for Draft invoices (only users with billing:edit)
+        if (inv.status === 'Draft' && Auth.can('billing:edit')) {
           const cardActions = el('div', { style: 'display:flex; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0;' });
           const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
           editBtn.addEventListener('click', (e) => {
@@ -672,8 +672,8 @@ const Billing = {
       if (inv.fromTemplate) badgeWrap.appendChild(this.recurringBadge(inv));
       rightWrap.appendChild(badgeWrap);
 
-      // List actions for Draft invoices
-      if (inv.status === 'Draft') {
+      // List actions for Draft invoices (only users with billing:edit)
+      if (inv.status === 'Draft' && Auth.can('billing:edit')) {
         const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -998,6 +998,7 @@ const Billing = {
       record.updatedAt = new Date().toISOString();
     }
 
+    let result = { approved: true };
     if (isNew || record.status === 'Draft') {
       if (isNew) {
         DB.insert('invoices', record);
@@ -1012,7 +1013,7 @@ const Billing = {
         }
       }
     } else {
-      const result = PendingChanges.submit('invoices', record, isNew);
+      result = PendingChanges.submit('invoices', record, isNew);
 
       if (result.approved) {
         // Clean up old WR back-link if WR changed during edit
@@ -1033,17 +1034,6 @@ const Billing = {
       }
     }
 
-    // Success feedback
-    if (typeof Workflow !== 'undefined' && Workflow.showMessage) {
-      const wrName = data.workRequestId ? (DB.getById('workRequests', data.workRequestId)?.title || '') : '';
-      const linkMsg = wrName ? ' Linked to "' + wrName + '".' : '';
-      Workflow.showMessage(
-        'Invoice ' + (isNew ? 'Created' : 'Updated'),
-        'Invoice ' + record.invoiceNumber + ' has been ' + (isNew ? 'created' : 'updated') + ' successfully.' + linkMsg,
-        'success'
-      );
-    }
-
     // Fulfill pending operations request if any
     const reqId = this.prefilledRequestId || (data.workRequestId ? DB.getWhere('operationsRequests', r => r.workRequestId === data.workRequestId && r.type === 'billing' && r.status === 'pending')[0]?.id : null);
     if (reqId) {
@@ -1058,7 +1048,17 @@ const Billing = {
     this.prefilledWrId = null;
     this.prefilledClientId = null;
 
-    closeFormPanelAndRoute('#billing');
+    const isApproved = result ? result.approved : true;
+    const wrName = data.workRequestId ? (DB.getById('workRequests', data.workRequestId)?.title || '') : '';
+    const linkMsg = wrName ? ' Linked to "' + wrName + '".' : '';
+    const msgConfig = {
+      title: 'Invoice ' + (isNew ? 'Created' : 'Updated'),
+      message: isApproved
+        ? 'Invoice ' + record.invoiceNumber + ' has been ' + (isNew ? 'created' : 'updated') + ' successfully.' + linkMsg
+        : 'Invoice ' + record.invoiceNumber + ' ' + (isNew ? 'creation' : 'update') + ' request has been submitted for Admin approval.',
+      type: 'success'
+    };
+    closeFormPanelAndRoute('#billing', msgConfig);
   },
 
   showForm(invoiceId = null) {
@@ -1383,8 +1383,9 @@ const Billing = {
       container.appendChild(payHist);
     }
 
-    // Payment recording
-    if (Auth.can('billing:edit') && inv.status !== 'Paid' && inv.status !== 'Cancelled' && inv.status !== 'Pending') {
+    // Payment recording — billing:edit (Accounting/Admin) or billing:mark_paid (Manager)
+    const canRecordPayment = Auth.can('billing:edit') || Auth.can('billing:mark_paid');
+    if (canRecordPayment && inv.status !== 'Paid' && inv.status !== 'Cancelled' && inv.status !== 'Pending') {
       const paySection = el('div', { class: 'form-section' });
       paySection.appendChild(el('h3', { text: 'Record Payment' }));
       const payForm = el('form', { class: 'form-stacked' });
@@ -1525,7 +1526,15 @@ const Billing = {
         let newStatus = inv.status;
         if (newPaid >= inv.total) newStatus = 'Paid';
         else if (newPaid > 0 && newPaid < inv.total) newStatus = 'Partially Paid';
-        DB.update('invoices', inv.id, { payments, paidAmount: newPaid, status: newStatus, updatedAt: new Date().toISOString() });
+
+        // Manager (billing:mark_paid without billing:edit) routes through Admin approval
+        if (Auth.can('billing:mark_paid') && !Auth.can('billing:edit')) {
+          const proposedInv = { ...inv, payments, paidAmount: newPaid, status: newStatus, updatedAt: new Date().toISOString() };
+          PendingChanges.submit('invoices', proposedInv, false);
+          Workflow.showMessage('Submitted', 'Payment has been submitted for administrative approval.', 'success');
+        } else {
+          DB.update('invoices', inv.id, { payments, paidAmount: newPaid, status: newStatus, updatedAt: new Date().toISOString() });
+        }
         App.handleRoute();
       });
       paySection.appendChild(payForm);
@@ -1542,7 +1551,9 @@ const Billing = {
     const canApprove = Auth.can('billing:approve');
     const canEdit = Auth.can('billing:edit');
     
+    
     if (inv.status === 'Draft') {
+      // Edit & Trash — only billing:edit (Admin, Accounting)
       if (canEdit) {
         const editBtn = el('button', { class: 'btn btn-secondary', text: 'Edit Invoice', style: 'margin-right:8px;' });
         editBtn.addEventListener('click', () => {
@@ -1557,6 +1568,7 @@ const Billing = {
         actions.appendChild(trashBtn);
       }
 
+      // Approve — only billing:approve (Admin)
       if (canApprove) {
         const approveBtn = el('button', { class: 'btn btn-success', text: 'Approve' });
         approveBtn.addEventListener('click', () => {
@@ -1572,6 +1584,7 @@ const Billing = {
         });
         actions.appendChild(approveBtn);
       } else if (canEdit) {
+        // Send for Approval — billing:edit without billing:approve (Accounting)
         const sendBtn = el('button', { class: 'btn btn-primary', text: 'Send for Approval' });
         sendBtn.addEventListener('click', () => {
           // Set local status to Pending
@@ -1585,9 +1598,17 @@ const Billing = {
         actions.appendChild(sendBtn);
       }
     } else if (inv.status === 'Approved' && canEdit) {
+      // Mark as Sent — billing:edit (Accounting), pending Admin approval
       const sentBtn = el('button', { class: 'btn btn-primary', text: 'Mark as Sent' });
       sentBtn.addEventListener('click', () => {
-        DB.update('invoices', inv.id, { status: 'Sent', updatedAt: new Date().toISOString() });
+        if (canApprove) {
+          // Admin: direct update
+          DB.update('invoices', inv.id, { status: 'Sent', updatedAt: new Date().toISOString() });
+        } else {
+          // Accounting: submit for Admin approval
+          PendingChanges.submit('invoices', { ...inv, status: 'Sent', updatedAt: new Date().toISOString() }, false);
+          Workflow.showMessage('Submitted', 'Mark as Sent has been submitted for administrative approval.', 'success');
+        }
         App.handleRoute();
       });
       actions.appendChild(sentBtn);
