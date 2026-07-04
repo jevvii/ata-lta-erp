@@ -2476,18 +2476,17 @@ const Workflow = {
 
     function statusIconSvg(phase) {
       const color = escapeHtml(phase.color);
-      // Moon-phase icons matching the reference image.
-      if (phase.key === 'new') {
-        // New: empty circle (new moon).
+      if (phase.key === 'draft') {
+        // Draft: empty circle outline.
         return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>`;
       }
-      if (phase.key === 'in-progress') {
-        // In Progress: first-quarter half moon (left half filled).
-        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9" fill="${color}" fill-opacity="0.15"/><path d="M12 3a9 9 0 1 1 0 18V3z" fill="${color}"/></svg>`;
+      if (phase.key === 'pre-processing') {
+        // Pre-processing: small filled dot inside an outline circle.
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="${color}"/></svg>`;
       }
-      if (phase.key === 'testing') {
-        // Testing: gibbous / nearly full moon.
-        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9" fill="${color}" fill-opacity="0.15"/><path d="M12 3a9 9 0 1 1 0 18c0-5-2-8-6-9 4-1 6-4 6-9z" fill="${color}"/></svg>`;
+      if (phase.key === 'processing') {
+        // Processing: filled circle centered inside an outline circle.
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5" fill="${color}"/></svg>`;
       }
       // Completed: full circle with white check.
       return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="${color}"/><polyline points="8 12 11 15 16 9" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -2646,7 +2645,7 @@ const Workflow = {
       const actionsWrap = el('div', { class: 'board-column-actions' });
 
       // Header plus button — quick add a work request.
-      if (phase.key === 'new' && canEdit) {
+      if (phase.key === 'draft' && canEdit) {
         const addBtn = el('button', {
           class: 'board-column-add',
           type: 'button',
@@ -2671,7 +2670,7 @@ const Workflow = {
       col.addEventListener('dragleave', handleDragLeave);
       col.addEventListener('drop', handleDrop.bind(this));
 
-      if (phase.key === 'new' && canEdit) {
+      if (phase.key === 'draft' && canEdit) {
         const addCard = el('div', {
           class: 'board-card-v2 add-wr-card',
           style: 'background: transparent; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
@@ -2681,7 +2680,7 @@ const Workflow = {
         cardContainer.appendChild(addCard);
       }
 
-      if (colWrs.length === 0 && (phase.key !== 'new' || !canEdit)) {
+      if (colWrs.length === 0 && (phase.key !== 'draft' || !canEdit)) {
         cardContainer.appendChild(renderEmptyStateV2({
           variant: 'compact',
           title: 'No work requests',
