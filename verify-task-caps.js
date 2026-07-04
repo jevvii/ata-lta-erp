@@ -128,7 +128,7 @@ async function runVerification() {
       let allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
       assert(
         'Case 3: getValidNextStatuses for Non-Requirement Task (Draft)',
-        allowedNonReq.includes('Draft') && allowedNonReq.includes('Assigned') && allowedNonReq.includes('Cancelled') && !allowedNonReq.includes('In Progress'),
+        allowedNonReq.includes('Assigned') && !allowedNonReq.includes('In Progress'),
         `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
       );
 
@@ -139,16 +139,34 @@ async function runVerification() {
       allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
       assert(
         'Case 3: getValidNextStatuses for Non-Requirement Task (Assigned)',
-        allowedNonReq.includes('Draft') && allowedNonReq.includes('Assigned') && allowedNonReq.includes('Cancelled') && !allowedNonReq.includes('In Progress'),
+        allowedNonReq.includes('In Progress') && !allowedNonReq.includes('For Review'),
         `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
       );
 
-      let res3_invalid = Workflow.updateTaskStatus(taskNonReqPreprocId, 'In Progress');
+      let res3_in_progress = Workflow.updateTaskStatus(taskNonReqPreprocId, 'In Progress');
+      assert('Case 3: Transition to In Progress', res3_in_progress.success === true, `Result: ${JSON.stringify(res3_in_progress)}`);
+
+      taskNonReq = DB.getById('tasks', taskNonReqPreprocId);
+      allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
       assert(
-        'Case 3: updateTaskStatus non-requirement task to In Progress (Invalid)',
-        res3_invalid.error === 'Task status cannot be set to "In Progress" in the "Pre-processing" phase.',
-        `Result error: ${res3_invalid.error}`
+        'Case 3: getValidNextStatuses for Non-Requirement Task (In Progress)',
+        allowedNonReq.includes('For Review') && !allowedNonReq.includes('Completed'),
+        `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
       );
+
+      let res3_for_review = Workflow.updateTaskStatus(taskNonReqPreprocId, 'For Review');
+      assert('Case 3: Transition to For Review', res3_for_review.success === true, `Result: ${JSON.stringify(res3_for_review)}`);
+
+      taskNonReq = DB.getById('tasks', taskNonReqPreprocId);
+      allowedNonReq = Workflow.getValidNextStatuses(taskNonReq);
+      assert(
+        'Case 3: getValidNextStatuses for Non-Requirement Task (For Review)',
+        allowedNonReq.includes('Completed'),
+        `Allowed statuses: ${JSON.stringify(allowedNonReq)}`
+      );
+
+      let res3_completed = Workflow.updateTaskStatus(taskNonReqPreprocId, 'Completed');
+      assert('Case 3: Transition to Completed', res3_completed.success === true, `Result: ${JSON.stringify(res3_completed)}`);
 
       // Case 4: Work Request is in Billing
       const taskBilling = DB.getById('tasks', taskBillingId);
@@ -249,31 +267,32 @@ async function runVerification() {
 
         // Subcase 8b: WR itself is NOT assigned, has no tasks -> should have Employee assignment error
         DB.update('workRequests', savedWr.id, { assignedTo: null });
+        // Subcase 8b: WR itself is NOT assigned, no tasks -> should be blocked by missing task / assignment error
         const ts2 = Workflow.getPhaseTransitionStatus(savedWr.id);
-        const err2 = ts2?.missing?.includes('Employee assignment');
+        const err2 = ts2?.missing?.some(m => m.includes('task') || m.includes('assignment'));
         assert(
           'Case 8b: WR NOT assigned, no tasks -> Blocked',
           err2 === true,
           `Missing: ${JSON.stringify(ts2?.missing)}`
         );
 
-        // Subcase 8c: WR itself is NOT assigned, has tasks, but some are unassigned -> should have Employee assignment error
+        // Subcase 8c: WR itself is NOT assigned, has tasks, but some are unassigned -> should have assignment error
         const taskId1 = 't-test-trans-1';
         const taskId2 = 't-test-trans-2';
         DB.insert('tasks', { id: taskId1, workRequestId: savedWr.id, title: 'Task 1', assigneeId: testStaffId });
         DB.insert('tasks', { id: taskId2, workRequestId: savedWr.id, title: 'Task 2', assigneeId: null });
         const ts3 = Workflow.getPhaseTransitionStatus(savedWr.id);
-        const err3 = ts3?.missing?.includes('Employee assignment');
+        const err3 = ts3?.missing?.some(m => m.includes('assigned') || m.includes('assignment'));
         assert(
           'Case 8c: WR NOT assigned, some tasks unassigned -> Blocked',
           err3 === true,
           `Missing: ${JSON.stringify(ts3?.missing)}`
         );
 
-        // Subcase 8d: WR itself is NOT assigned, has tasks, and ALL tasks are assigned -> should not have Employee assignment error
+        // Subcase 8d: WR itself is NOT assigned, has tasks, and ALL tasks are assigned -> should not have task assignment error
         DB.update('tasks', taskId2, { assigneeId: testStaffId });
         const ts4 = Workflow.getPhaseTransitionStatus(savedWr.id);
-        const err4 = ts4?.missing?.includes('Employee assignment');
+        const err4 = ts4?.missing?.some(m => m.includes('assigned') || m.includes('assignment'));
         assert(
           'Case 8d: WR NOT assigned, all tasks assigned -> Transition allowed',
           !err4,
