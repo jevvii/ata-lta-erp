@@ -520,11 +520,19 @@ const KanbanBoard = {
         if (!card) return;
         card.dataset.itemId = item.id;
 
+        let hasCardMenu = false;
         if (cardMenuItems && typeof cardMenuItems === 'function') {
           const items = cardMenuItems(item, column);
           if (items && items.length > 0) {
             this.attachCardMenu(card, items);
+            hasCardMenu = true;
           }
+        }
+        if (!hasCardMenu) {
+          const moreBtn = card.querySelector('.card-v2-menu');
+          const moreWrap = card.querySelector('.card-v2-action-menu');
+          if (moreBtn) moreBtn.style.display = 'none';
+          if (moreWrap) moreWrap.style.display = 'none';
         }
 
         if (dragConfig.enabled && typeof dragConfig.canDrag === 'function' && dragConfig.canDrag(item, column)) {

@@ -638,10 +638,22 @@ const Billing = {
       drag: {
         enabled: true,
         canDrag: inv => canEdit && !inv.pendingChangeId,
-        canDrop: ({ item, targetStatus }) => item.status === targetStatus,
+        canDrop: ({ item, targetStatus }) => {
+          if (item.status === targetStatus) return true;
+          const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
+          const currentIdx = flow.indexOf(item.status);
+          const targetIdx = flow.indexOf(targetStatus);
+          if (currentIdx === -1 || targetIdx === -1) return false;
+          return targetIdx > currentIdx;
+        },
         orderField: 'boardOrder',
-        onDrop({ item, newOrder }) {
-          DB.update('invoices', item.id, { boardOrder: newOrder });
+        onDrop({ item, targetStatus, newOrder, fromStatus }) {
+          const changes = { boardOrder: newOrder };
+          if (fromStatus !== targetStatus) {
+            changes.status = targetStatus;
+            changes.updatedAt = new Date().toISOString();
+          }
+          DB.update('invoices', item.id, changes);
           App.handleRoute();
         }
       }

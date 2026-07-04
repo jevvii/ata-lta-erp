@@ -630,10 +630,22 @@ const Transmittal = {
       drag: {
         enabled: true,
         canDrag: t => canEdit && !t.pendingChangeId,
-        canDrop: ({ item, targetStatus }) => item.status === targetStatus,
+        canDrop: ({ item, targetStatus }) => {
+          if (item.status === targetStatus) return true;
+          const flow = ['Draft', 'Sent', 'Acknowledged'];
+          const currentIdx = flow.indexOf(item.status);
+          const targetIdx = flow.indexOf(targetStatus);
+          if (currentIdx === -1 || targetIdx === -1) return false;
+          return targetIdx > currentIdx;
+        },
         orderField: 'boardOrder',
-        onDrop({ item, newOrder }) {
-          DB.update('transmittals', item.id, { boardOrder: newOrder });
+        onDrop({ item, targetStatus, newOrder, fromStatus }) {
+          const changes = { boardOrder: newOrder };
+          if (fromStatus !== targetStatus) {
+            changes.status = targetStatus;
+            changes.updatedAt = new Date().toISOString();
+          }
+          DB.update('transmittals', item.id, changes);
           App.handleRoute();
         }
       }

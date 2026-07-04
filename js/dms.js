@@ -416,15 +416,27 @@ const DMS = {
       drag: {
         enabled: true,
         canDrag: () => canEdit,
-        canDrop: ({ item, targetStatus }) => self.lifecycleNext(item.documentLifecycle || 'collected') === targetStatus,
+        canDrop: ({ item, targetStatus }) => {
+          const currentState = item.documentLifecycle || 'collected';
+          if (currentState === targetStatus) return true;
+          const flow = ['collected', 'with_documentations', 'scanned', 'in_envelope', 'stored'];
+          const currentIdx = flow.indexOf(currentState);
+          const targetIdx = flow.indexOf(targetStatus);
+          if (currentIdx === -1 || targetIdx === -1) return false;
+          return targetIdx > currentIdx;
+        },
         orderField: 'boardOrder',
-        onDrop({ item, targetStatus, newOrder }) {
-          const updates = { documentLifecycle: targetStatus, boardOrder: newOrder };
-          if (targetStatus === 'with_documentations') updates.receivedByDocumentationAt = new Date().toISOString();
-          if (targetStatus === 'scanned') updates.scannedAt = new Date().toISOString();
-          if (targetStatus === 'in_envelope') updates.storedInEnvelopeAt = new Date().toISOString();
-          if (targetStatus === 'stored') updates.storedAt = new Date().toISOString();
-          DB.update('documents', item.id, updates);
+        onDrop({ item, targetStatus, newOrder, fromStatus }) {
+          const currentState = item.documentLifecycle || 'collected';
+          const changes = { boardOrder: newOrder };
+          if (currentState !== targetStatus) {
+            changes.documentLifecycle = targetStatus;
+            if (targetStatus === 'with_documentations') changes.receivedByDocumentationAt = new Date().toISOString();
+            if (targetStatus === 'scanned') changes.scannedAt = new Date().toISOString();
+            if (targetStatus === 'in_envelope') changes.storedInEnvelopeAt = new Date().toISOString();
+            if (targetStatus === 'stored') changes.storedAt = new Date().toISOString();
+          }
+          DB.update('documents', item.id, changes);
           App.handleRoute();
         }
       }

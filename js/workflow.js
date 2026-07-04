@@ -5559,8 +5559,31 @@ const Workflow = {
         const self = this;
         let taskNumber = 1;
 
+        // Normalize per-column board orders so cards render consistently and
+        // gaps from deleted/moved cards do not break drop midpoint calculations.
+        const boardTasks = [];
+        statuses.forEach(st => {
+          const colTasks = filteredTasks.filter(t => t.status === st);
+          colTasks.sort((a, b) => {
+            const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+            const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+            if (oa !== null && ob !== null) return oa - ob;
+            if (oa !== null) return -1;
+            if (ob !== null) return 1;
+            return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+          });
+          colTasks.forEach((t, idx) => {
+            const newOrder = (idx + 1) * 1000;
+            if (t.boardOrder !== newOrder) {
+              t.boardOrder = newOrder;
+              DB.update('tasks', t.id, { boardOrder: newOrder });
+            }
+          });
+          boardTasks.push(...colTasks);
+        });
+
         const board = KanbanBoard.render({
-          items: filteredTasks,
+          items: boardTasks,
           className: 'board-v2',
           columns: statuses.map(st => ({
             key: st,
@@ -5608,9 +5631,20 @@ const Workflow = {
           },
           drag: {
             enabled: true,
-            canDrag: () => Auth.can('workflow:task_approve') || Auth.can('workflow:edit') || Auth.can('workflow:task_add'),
+            canDrag: t => {
+              if (t.status === 'Completed' || t.status === 'Cancelled') return false;
+              return Auth.can('workflow:task_approve') || Auth.can('workflow:edit') || Auth.can('workflow:task_add');
+            },
             canDrop: ({ item, targetStatus }) => {
+              if (item.status === targetStatus) return true;
               const allowed = self.getValidNextStatuses(item);
+              // Always allow cancelling when the business rules permit it.
+              if (targetStatus === 'Cancelled') return allowed.includes('Cancelled');
+              const flow = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed'];
+              const currentIdx = flow.indexOf(item.status);
+              const targetIdx = flow.indexOf(targetStatus);
+              // Reject backwards moves; only allow forward progression.
+              if (currentIdx === -1 || targetIdx === -1 || targetIdx <= currentIdx) return false;
               return allowed.includes(targetStatus);
             },
             orderField: 'boardOrder',

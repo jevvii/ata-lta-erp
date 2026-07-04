@@ -865,10 +865,22 @@ const Disbursement = {
       drag: {
         enabled: true,
         canDrag: d => canEdit && !d.pendingChangeId,
-        canDrop: ({ item, targetStatus }) => item.status === targetStatus,
+        canDrop: ({ item, targetStatus }) => {
+          if (item.status === targetStatus) return true;
+          const flow = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released'];
+          const currentIdx = flow.indexOf(item.status);
+          const targetIdx = flow.indexOf(targetStatus);
+          if (currentIdx === -1 || targetIdx === -1) return false;
+          return targetIdx > currentIdx;
+        },
         orderField: 'boardOrder',
-        onDrop({ item, newOrder }) {
-          DB.update('disbursements', item.id, { boardOrder: newOrder });
+        onDrop({ item, targetStatus, newOrder, fromStatus }) {
+          const changes = { boardOrder: newOrder };
+          if (fromStatus !== targetStatus) {
+            changes.status = targetStatus;
+            changes.updatedAt = new Date().toISOString();
+          }
+          DB.update('disbursements', item.id, changes);
           App.handleRoute();
         }
       }
