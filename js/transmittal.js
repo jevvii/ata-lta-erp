@@ -498,10 +498,20 @@ const Transmittal = {
 
   renderBoardView(container, items) {
     if (items.length === 0) {
-      container.appendChild(el('p', { text: 'No transmittals found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        title: 'No transmittals found',
+        body: 'Create a transmittal to start tracking document delivery.'
+      }));
       return;
     }
-    const board = el('div', { class: 'board-v2' });
+
+    const canCreate = Auth.can('transmittal:create');
+    const canEdit = Auth.can('transmittal:edit');
+    const canMark = Auth.can('transmittal:mark');
+    const self = this;
+
     const statuses = ['Draft', 'Sent', 'Acknowledged'];
     const statusColors = {
       'Draft': '#94a3b8',
@@ -509,29 +519,46 @@ const Transmittal = {
       'Acknowledged': '#10b981'
     };
 
+    statuses.forEach(st => {
+      const colItems = items.filter(t => t.status === st && !t.pendingChangeId);
+      colItems.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.createdAt || a.sentAt || 0) - new Date(b.createdAt || b.sentAt || 0);
+      });
+      colItems.forEach((t, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (t.boardOrder !== newOrder) {
+          t.boardOrder = newOrder;
+          DB.update('transmittals', t.id, { boardOrder: newOrder });
+        }
+      });
+    });
+
     let cardNumber = 1;
 
-    statuses.forEach(st => {
-      const colColor = statusColors[st] || '#cbd5e1';
-      const colItems = items.filter(t => t.status === st);
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
-
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(st));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colItems.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-      if (colItems.length === 0) {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No transmittals' }));
-      }
-
-      colItems.forEach(t => {
-        const clientName = this.getClientName(t.clientId);
+    KanbanBoard.render({
+      container,
+      items,
+      columns: statuses.map(st => {
+        const col = {
+          key: st,
+          label: st,
+          targetStatus: st,
+          color: statusColors[st] || '#cbd5e1',
+          emptyState: st === 'Draft' && canCreate ? false : { variant: 'compact', title: 'No transmittals', body: '' }
+        };
+        if (st === 'Draft' && canCreate) {
+          col.addButton = { label: 'Add Transmittal', onClick: () => self.showForm() };
+          col.addCard = { label: 'Add Transmittal', onClick: () => self.showForm() };
+        }
+        return col;
+      }),
+      renderCard(t) {
+        const clientName = self.getClientName(t.clientId);
         const itemCount = (t.items || []).length;
         const date = t.sentAt || t.createdAt;
 
@@ -544,29 +571,73 @@ const Transmittal = {
         const progressMap = { 'Draft': 0, 'Sent': 50, 'Acknowledged': 100 };
         const progress = progressMap[t.status] || 0;
 
-        const descParts = [`${itemCount} item${itemCount === 1 ? '' : 's'}`];
         const wr = DB.getById('workRequests', t.workRequestId);
-        if (wr) descParts.push(wr.title);
-        const description = descParts.join(' • ');
+        const detail = wr ? wr.title : '';
 
-        const card = buildCompactBoardCard({
+        return buildCompactBoardCard({
           key: 'TX-' + cardNumber++,
           progress,
-          statusColor: colColor,
-          title: clientName,
-          description,
+          statusColor: statusColors[t.status] || '#cbd5e1',
+          title: t.trackingNumber,
+          description: clientName,
+          detail: `${itemCount} item${itemCount === 1 ? '' : 's'}` + (detail ? ` • ${detail}` : ''),
           date: date ? formatDate(date) : '',
           priority: t.status,
           priorityClass: statusPriorityClass,
           onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
         });
-
-        cardContainer.appendChild(card);
-      });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+      },
+      cardMenuItems(t) {
+        const menu = [{
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+        }];
+        if (self.canEditTransmittal(t)) {
+          menu.push({
+            label: 'Edit',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+            onClick: () => self.showForm(t.id)
+          });
+        }
+        if (canMark && t.status === 'Draft' && !t.pendingChangeId) {
+          menu.push({
+            label: 'Mark as Sent',
+            className: 'primary',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+            onClick: () => Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
+              const markData = { status: 'Sent', sentAt: new Date().toISOString(), sentBy: Auth.user.id };
+              if (Auth.canBypassReview('transmittals')) {
+                DB.update('transmittals', t.id, markData);
+              } else {
+                const record = Object.assign({}, t, markData, { id: t.id });
+                PendingChanges.submit('transmittals', record, false);
+              }
+              App.handleRoute();
+            }, 'success')
+          });
+        }
+        if (canMark && t.status === 'Sent') {
+          menu.push({
+            label: 'Acknowledge Receipt',
+            className: 'primary',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+            onClick: () => self.showAcknowledgeDialog(t.id)
+          });
+        }
+        return menu;
+      },
+      drag: {
+        enabled: true,
+        canDrag: t => canEdit && !t.pendingChangeId,
+        canDrop: ({ item, targetStatus }) => item.status === targetStatus,
+        orderField: 'boardOrder',
+        onDrop({ item, newOrder }) {
+          DB.update('transmittals', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+        }
+      }
     });
-    container.appendChild(board);
   },
 
   renderCompactListView(container, items) {

@@ -518,7 +518,8 @@ const Billing = {
   },
 
   refreshBoard(container, invoices) {
-    const board = el('div', { class: 'board-v2' });
+    const canEdit = Auth.can('billing:edit');
+    const self = this;
     const statuses = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
     const statusColors = {
       'Draft': '#94a3b8',
@@ -530,44 +531,49 @@ const Billing = {
       'Overdue': '#ef4444'
     };
 
+    // Normalize boardOrder within each status column.
+    statuses.forEach(st => {
+      const colInvs = invoices.filter(inv => inv.status === st && !inv.pendingChangeId);
+      colInvs.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.createdAt || a.issueDate || 0) - new Date(b.createdAt || b.issueDate || 0);
+      });
+      colInvs.forEach((inv, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (inv.boardOrder !== newOrder) {
+          inv.boardOrder = newOrder;
+          DB.update('invoices', inv.id, { boardOrder: newOrder });
+        }
+      });
+    });
+
     let cardNumber = 1;
 
-    statuses.forEach(st => {
-      const colColor = statusColors[st] || '#cbd5e1';
-      const colInvs = invoices.filter(inv => inv.status === st);
-
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
-
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(st));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colInvs.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-
-      if (st === 'Draft') {
-        const addCard = el('div', {
-          class: 'board-card-v2 add-billing-card',
-          style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
-        });
-        addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Billing';
-        addCard.addEventListener('click', () => {
-          this.showForm();
-        });
-        cardContainer.appendChild(addCard);
-      }
-
-      if (colInvs.length === 0 && st !== 'Draft') {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No invoices' }));
-      }
-
-      colInvs.forEach(inv => {
+    KanbanBoard.render({
+      container,
+      items: invoices,
+      columns: statuses.map(st => {
+        const col = {
+          key: st,
+          label: st,
+          targetStatus: st,
+          color: statusColors[st] || '#cbd5e1'
+        };
+        if (st === 'Draft' && canEdit) {
+          col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
+          col.addCard = { label: 'Add Billing', onClick: () => self.showForm() };
+        } else if (st !== 'Draft') {
+          col.emptyState = { variant: 'compact', title: 'No invoices', body: '' };
+        }
+        return col;
+      }),
+      renderCard(inv) {
         const client = DB.getById('clients', inv.clientId);
-        const paid = this.getPaidAmount(inv);
+        const paid = self.getPaidAmount(inv);
         const balance = inv.total - paid;
         const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
 
@@ -587,33 +593,59 @@ const Billing = {
           if (wr) descParts.push(wr.title);
         }
         if (inv.fromTemplate) descParts.push('Recurring');
-        const description = descParts.join(' • ');
 
         const card = buildCompactBoardCard({
           key: 'INV-' + cardNumber++,
           progress,
-          statusColor: colColor,
+          statusColor: statusColors[inv.status] || '#cbd5e1',
           title: inv.invoiceNumber,
           description: client?.name || '—',
+          detail: descParts.slice(1).join(' • '),
           date: inv.issueDate ? formatDate(inv.issueDate) : '',
           priority: inv.status,
           priorityClass: statusPriorityClass,
           onClick: () => { location.hash = '#billing/detail/' + inv.id; }
         });
 
-        // Total / balance on the right side of the footer
         const footerRight = card.querySelector('.card-v2-footer-right');
         if (balance > 0 && balance < inv.total) {
           footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
         }
         footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
-
-        cardContainer.appendChild(card);
-      });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+        return card;
+      },
+      cardMenuItems(inv) {
+        const items = [{
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+        }];
+        if (canEdit && inv.status === 'Draft' && !inv.pendingChangeId) {
+          items.push({
+            label: 'Edit',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+            onClick: () => self.showForm(inv.id)
+          });
+          items.push({
+            label: 'Trash',
+            className: 'danger',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+            onClick: () => self.trashInvoice(inv.id)
+          });
+        }
+        return items;
+      },
+      drag: {
+        enabled: true,
+        canDrag: inv => canEdit && !inv.pendingChangeId,
+        canDrop: ({ item, targetStatus }) => item.status === targetStatus,
+        orderField: 'boardOrder',
+        onDrop({ item, newOrder }) {
+          DB.update('invoices', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+        }
+      }
     });
-    container.appendChild(board);
   },
 
   refreshListCompact(container, invoices) {

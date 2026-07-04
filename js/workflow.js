@@ -78,49 +78,6 @@ function disableIfPending(element, wr, title = 'Under approval') {
 }
 
 /**
- * Build a Notion-style empty-state v2 component.
- * @param {Object} opts
- * @param {string} [opts.variant='zero-state'] - 'zero-state' | 'filtered-empty' | 'compact' | 'card-empty'
- * @param {string} [opts.icon] - SVG string
- * @param {string} opts.title
- * @param {string} [opts.body]
- * @param {Array<{text:string, className:string, onClick:Function}>} [opts.actions]
- * @returns {HTMLElement}
- */
-function renderEmptyStateV2(opts = {}) {
-  const { variant = 'zero-state', icon, title, body, actions = [] } = opts;
-  const className = ['empty-state-v2', variant].filter(Boolean).join(' ');
-  const wrap = el('div', { class: className });
-  if (icon) {
-    wrap.appendChild(el('div', { class: 'empty-state-icon', html: icon }));
-  }
-  wrap.appendChild(el('div', { class: 'empty-state-title', text: title }));
-  if (body) {
-    wrap.appendChild(el('div', { class: 'empty-state-body', text: body }));
-  }
-  if (actions.length > 0) {
-    const actionsWrap = el('div', { class: 'empty-state-actions' });
-    actions.forEach(action => {
-      let btn;
-      if (action.tag === 'a' || action.href != null) {
-        btn = el('a', { href: action.href || 'javascript:void(0)', class: action.className || 'empty-state-clear', text: action.text });
-      } else {
-        btn = el('button', { type: 'button', class: action.className || 'btn btn-primary btn-sm', text: action.text });
-      }
-      if (action.onClick) {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          action.onClick(e);
-        });
-      }
-      actionsWrap.appendChild(btn);
-    });
-    wrap.appendChild(actionsWrap);
-  }
-  return wrap;
-}
-
-/**
  * Build a map of tasks keyed by workRequestId for batch canViewWr checks.
  * Avoids N+1 DB lookups when filtering many WRs.
  * Returns { [workRequestId]: Task[] }
@@ -2427,67 +2384,11 @@ const Workflow = {
     }
     // Exclude cancelled from board
     wrs = wrs.filter(wr => wr.status !== 'Cancelled');
-    const board = el('div', { class: 'board-v2' });
     const canEdit = Auth.can('workflow:edit');
     const canApprove = Auth.can('workflow:approve');
+    const self = this;
 
-    // Four-phase board: Draft, Pre-processing, Processing, Completed.
-    // Billing/Disbursement are no longer lifecycle phases; WRs in those legacy
-    // statuses are grouped under Processing until routed to Completed.
-    const boardPhases = [
-      { key: 'draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8', icon: 'circle' },
-      { key: 'pre-processing', label: 'Pre-processing', statuses: ['Pre-processing'], targetStatus: 'Pre-processing', color: '#3b82f6', icon: 'circle' },
-      { key: 'processing', label: 'Processing', statuses: ['Processing', 'Billing', 'Disbursement'], targetStatus: 'Processing', color: '#f59e0b', icon: 'circle' },
-      { key: 'completed', label: 'Completed', statuses: ['Completed'], targetStatus: 'Completed', color: '#10b981', icon: 'check' }
-    ];
-
-    function closeAllMenus(except) {
-      document.querySelectorAll('.action-menu-list').forEach(m => {
-        if (m !== except) {
-          m.classList.add('hidden');
-          m.classList.remove('open', 'open-up');
-        }
-      });
-      document.querySelectorAll('.menu-open').forEach(el => {
-        if (!except || !el.contains(except)) {
-          el.classList.remove('menu-open');
-        }
-      });
-    }
-
-    function toggleMenu(menu, button) {
-      const isCurrentlyHidden = menu.classList.contains('hidden');
-      closeAllMenus(menu);
-      if (isCurrentlyHidden) {
-        if (button) {
-          const btnRect = button.getBoundingClientRect();
-          if (btnRect.bottom > window.innerHeight - 180) {
-            menu.classList.add('open-up');
-          } else {
-            menu.classList.remove('open-up');
-          }
-        }
-        menu.classList.remove('hidden');
-        requestAnimationFrame(() => menu.classList.add('open'));
-        const actionMenuWrap = menu.closest('.card-v2-action-menu');
-        const card = menu.closest('.board-card-v2');
-        const col = menu.closest('.board-column-v2');
-        if (actionMenuWrap) actionMenuWrap.classList.add('menu-open');
-        if (card) card.classList.add('menu-open');
-        if (col) col.classList.add('menu-open');
-      } else {
-        menu.classList.remove('open', 'open-up');
-        menu.classList.add('hidden');
-        const actionMenuWrap = menu.closest('.card-v2-action-menu');
-        const card = menu.closest('.board-card-v2');
-        const col = menu.closest('.board-column-v2');
-        if (actionMenuWrap) actionMenuWrap.classList.remove('menu-open');
-        if (card) card.classList.remove('menu-open');
-        if (col) col.classList.remove('menu-open');
-      }
-    }
-
-    function openNewWrForm() {
+    const openNewWrForm = () => {
       this.editingId = null;
       const fullPageRoute = '#operations/form/new';
       openFormPanel({
@@ -2501,280 +2402,21 @@ const Workflow = {
           { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
         ]
       });
-    }
+    };
 
-    function statusIconSvg(phase) {
-      const color = escapeHtml(phase.color);
-      if (phase.key === 'draft') {
-        // Draft: empty circle outline.
-        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>`;
-      }
-      if (phase.key === 'pre-processing') {
-        // Pre-processing: small filled dot inside an outline circle.
-        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="${color}"/></svg>`;
-      }
-      if (phase.key === 'processing') {
-        // Processing: filled circle centered inside an outline circle.
-        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5" fill="${color}"/></svg>`;
-      }
-      // Completed: full circle with white check.
-      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="${color}"/><polyline points="8 12 11 15 16 9" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    }
+    const boardPhases = [
+      { key: 'draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+      { key: 'pre-processing', label: 'Pre-processing', statuses: ['Pre-processing'], targetStatus: 'Pre-processing', color: '#3b82f6' },
+      { key: 'processing', label: 'Processing', statuses: ['Processing', 'Billing', 'Disbursement'], targetStatus: 'Processing', color: '#f59e0b' },
+      { key: 'completed', label: 'Completed', statuses: ['Completed'], targetStatus: 'Completed', color: '#10b981' }
+    ];
 
-    let dragSrcWrId = null;
-    let autoScrollContainer = null;
-    let autoScrollDir = 0;
-    let autoScrollRaf = null;
-    let autoScrollDist = Infinity;
-    const SCROLL_MARGIN = 80;
-    const SCROLL_SPEED = 20;
-    const SCROLL_MAX_SPEED = 55;
-
-    function beginDragAutoScroll() {
-      if (autoScrollRaf) return;
-      const step = () => {
-        if (!autoScrollDir) { autoScrollRaf = null; return; }
-        const intensity = Math.min(1, Math.max(0, (SCROLL_MARGIN - autoScrollDist) / SCROLL_MARGIN));
-        const speed = Math.max(SCROLL_SPEED, Math.round(SCROLL_SPEED + (SCROLL_MAX_SPEED - SCROLL_SPEED) * intensity));
-        let scrolled = false;
-        const el = autoScrollContainer;
-        if (el) {
-          const style = getComputedStyle(el);
-          const overflowY = style.overflowY;
-          const scrollable = (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1;
-          if (scrollable) {
-            const prevScrollTop = el.scrollTop;
-            el.scrollTop += autoScrollDir * speed;
-            if (el.scrollTop !== prevScrollTop) {
-              scrolled = true;
-            }
-          }
-        }
-        if (!scrolled) {
-          window.scrollBy(0, autoScrollDir * speed);
-        }
-        autoScrollRaf = requestAnimationFrame(step);
-      };
-      autoScrollRaf = requestAnimationFrame(step);
-    }
-
-    function updateDragAutoScroll(clientY, container) {
-      autoScrollContainer = container || null;
-      let dir = 0;
-      let dist = Infinity;
-
-      if (clientY < SCROLL_MARGIN) {
-        dir = -1;
-        dist = clientY;
-      } else if (clientY > window.innerHeight - SCROLL_MARGIN) {
-        dir = 1;
-        dist = window.innerHeight - clientY;
-      } else if (container) {
-        const rect = container.getBoundingClientRect();
-        const topDist = clientY - rect.top;
-        const bottomDist = rect.bottom - clientY;
-        if (topDist < SCROLL_MARGIN && topDist >= 0) {
-          dir = -1;
-          dist = topDist;
-        } else if (bottomDist < SCROLL_MARGIN && bottomDist >= 0) {
-          dir = 1;
-          dist = bottomDist;
-        }
-      }
-
-      autoScrollDir = dir;
-      autoScrollDist = dist;
-      if (dir && !autoScrollRaf) beginDragAutoScroll();
-    }
-
-    function endDragAutoScroll() {
-      autoScrollDir = 0;
-      autoScrollDist = Infinity;
-      autoScrollContainer = null;
-      if (autoScrollRaf) { cancelAnimationFrame(autoScrollRaf); autoScrollRaf = null; }
-    }
-
-    function handleDragStart(e) {
-      dragSrcWrId = this.dataset.wrId;
-      this.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', dragSrcWrId);
-    }
-
-    function handleDragEnd(e) {
-      this.classList.remove('dragging');
-      clearDragIndicators();
-      dragSrcWrId = null;
-      endDragAutoScroll();
-    }
-
-    function clearDragIndicators() {
-      document.querySelectorAll('.board-column-v2.drag-over').forEach(c => c.classList.remove('drag-over'));
-      document.querySelectorAll('.board-card-v2.drag-placeholder').forEach(p => p.remove());
-    }
-
-    function getDragPlaceholder() {
-      let placeholder = document.querySelector('.board-card-v2.drag-placeholder');
-      if (!placeholder) {
-        placeholder = el('div', { class: 'board-card-v2 compact drag-placeholder' });
-      }
-      return placeholder;
-    }
-
-    function updatePlaceholder(container, y) {
-      const draggedId = dragSrcWrId;
-      const cards = Array.from(container.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)'));
-      const placeholder = getDragPlaceholder();
-
-      if (cards.length === 0) {
-        const addCard = container.querySelector('.board-card-v2.add-wr-card');
-        if (addCard) container.insertBefore(placeholder, addCard);
-        else container.appendChild(placeholder);
-        return;
-      }
-
-      let targetCard = null;
-      for (const card of cards) {
-        if (card.dataset.wrId === draggedId) continue;
-        const rect = card.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        if (y < mid) {
-          targetCard = card;
-          break;
-        }
-      }
-
-      if (targetCard) {
-        container.insertBefore(placeholder, targetCard);
-      } else {
-        const addCard = container.querySelector('.board-card-v2.add-wr-card');
-        if (addCard) container.insertBefore(placeholder, addCard);
-        else container.appendChild(placeholder);
-      }
-    }
-
-    function getTargetContainer(target) {
-      return target.closest('.board-cards-scroll') || target.closest('.board-column-v2')?.querySelector('.board-cards-scroll');
-    }
-
-    function computeDropBoardOrder(cardContainer, draggedId) {
-      const cards = Array.from(cardContainer.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)'));
-      if (cards.length === 0) {
-        return 1000;
-      }
-
-      const placeholder = cardContainer.querySelector('.board-card-v2.drag-placeholder');
-      let targetIndex = cards.length;
-
-      if (placeholder) {
-        let index = 0;
-        for (const card of cards) {
-          if (placeholder.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING) {
-            targetIndex = index;
-            break;
-          }
-          index++;
-        }
-      }
-
-      if (targetIndex === 0) {
-        const firstWr = DB.getById('workRequests', cards[0].dataset.wrId);
-        const firstOrder = typeof firstWr?.boardOrder === 'number' ? firstWr.boardOrder : 1000;
-        return firstOrder / 2;
-      }
-
-      if (targetIndex >= cards.length) {
-        const lastWr = DB.getById('workRequests', cards[cards.length - 1].dataset.wrId);
-        const lastOrder = typeof lastWr?.boardOrder === 'number' ? lastWr.boardOrder : (cards.length * 1000);
-        return lastOrder + 1000;
-      }
-
-      const beforeWr = DB.getById('workRequests', cards[targetIndex - 1].dataset.wrId);
-      const afterWr = DB.getById('workRequests', cards[targetIndex].dataset.wrId);
-
-      const beforeOrder = typeof beforeWr?.boardOrder === 'number' ? beforeWr.boardOrder : (targetIndex * 1000);
-      const afterOrder = typeof afterWr?.boardOrder === 'number' ? afterWr.boardOrder : ((targetIndex + 1) * 1000);
-
-      return (beforeOrder + afterOrder) / 2;
-    }
-
-    function handleDragOver(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      const cardContainer = getTargetContainer(e.currentTarget);
-      const col = cardContainer?.closest('.board-column-v2');
-      if (col && !col.classList.contains('drag-over')) {
-        clearDragIndicators();
-        col.classList.add('drag-over');
-      }
-      if (cardContainer) {
-        updatePlaceholder(cardContainer, e.clientY);
-        updateDragAutoScroll(e.clientY, cardContainer);
-      }
-    }
-
-    function handleDragLeave(e) {
-      const cardContainer = getTargetContainer(e.currentTarget);
-      const col = cardContainer?.closest('.board-column-v2');
-      if (col && !col.contains(e.relatedTarget)) {
-        col.classList.remove('drag-over');
-        document.querySelectorAll('.board-card-v2.drag-placeholder').forEach(p => p.remove());
-      }
-    }
-
-    function handleDrop(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      endDragAutoScroll();
-      const cardContainer = getTargetContainer(e.currentTarget);
-      const col = cardContainer?.closest('.board-column-v2');
-      if (!col) return;
-      col.classList.remove('drag-over');
-      const wrId = e.dataTransfer.getData('text/plain') || dragSrcWrId;
-      const targetStatus = col.dataset.targetStatus;
-      if (!wrId || !targetStatus) return;
-      const wr = DB.getById('workRequests', wrId);
-      if (!wr) return;
-
-      const isPhaseChange = wr.status !== targetStatus;
-      if (isPhaseChange && !canApprove) {
-        this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
-        return;
-      }
-
-      const applyMove = () => {
-        const newBoardOrder = computeDropBoardOrder(cardContainer, wrId);
-        const changes = { boardOrder: newBoardOrder };
-        if (isPhaseChange) {
-          changes.status = targetStatus;
-          changes.updatedAt = new Date().toISOString();
-        }
-        DB.update('workRequests', wrId, changes);
-        clearDragIndicators();
-        App.handleRoute();
-      };
-
-      if (!isPhaseChange) {
-        applyMove();
-        return;
-      }
-
-      // Validate whether the drop target is a valid routing destination.
-      const transitionStatus = this.getPhaseTransitionStatus(wrId);
-      if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
-        const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
-        const blockers = transitionStatus?.missing?.length
-          ? transitionStatus.missing.join('\n- ')
-          : `This Work Request cannot be routed to "${targetPhaseLabel}" yet.`;
-        this.showMessage('Routing Blocked', `Cannot move "${wr.title}" to ${targetPhaseLabel}:\n- ${blockers}`, 'warning');
-        return;
-      }
-
-      this.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
-    }
-
-    function ensureColumnBoardOrders(colWrs) {
-      colWrs.sort((a, b) => {
+    // Normalize per-column board orders so cards render consistently and gaps
+    // from deleted/moved cards do not break drop midpoint calculations.
+    const sortedWrs = [];
+    boardPhases.forEach(phase => {
+      const phaseWrs = wrs.filter(wr => phase.statuses.includes(wr.status));
+      phaseWrs.sort((a, b) => {
         const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
         const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
         if (oa !== null && ob !== null) return oa - ob;
@@ -2782,85 +2424,44 @@ const Workflow = {
         if (ob !== null) return 1;
         return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
       });
-      colWrs.forEach((wr, idx) => {
+      phaseWrs.forEach((wr, idx) => {
         const newOrder = (idx + 1) * 1000;
         if (wr.boardOrder !== newOrder) {
           wr.boardOrder = newOrder;
           DB.update('workRequests', wr.id, { boardOrder: newOrder });
         }
       });
-      return colWrs;
-    }
+      sortedWrs.push(...phaseWrs);
+    });
 
     let cardNumber = 1;
 
-    boardPhases.forEach(phase => {
-      const col = el('div', { class: 'board-column-v2', 'data-target-status': phase.targetStatus });
-      col.style.setProperty('--column-phase-color', phase.color);
-
-      const colWrs = ensureColumnBoardOrders(wrs.filter(wr => phase.statuses.includes(wr.status)));
-
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      const dotEl = el('span', { class: 'board-column-dot' });
-      dotEl.innerHTML = statusIconSvg(phase);
-      titleWrap.appendChild(dotEl);
-      titleWrap.appendChild(el('span', { class: 'board-column-label', text: phase.label }));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colWrs.length) }));
-      header.appendChild(titleWrap);
-
-      const actionsWrap = el('div', { class: 'board-column-actions' });
-
-      // Header plus button — quick add a work request.
-      if (phase.key === 'draft' && canEdit) {
-        const addBtn = el('button', {
-          class: 'board-column-add',
-          type: 'button',
-          'aria-label': 'Add Work Request',
-          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
-        });
-        addBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openNewWrForm.call(this);
-        });
-        actionsWrap.appendChild(addBtn);
-      }
-
-      header.appendChild(actionsWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-      cardContainer.addEventListener('dragover', handleDragOver.bind(this));
-      cardContainer.addEventListener('dragleave', handleDragLeave);
-      cardContainer.addEventListener('drop', handleDrop.bind(this));
-      col.addEventListener('dragover', handleDragOver.bind(this));
-      col.addEventListener('dragleave', handleDragLeave);
-      col.addEventListener('drop', handleDrop.bind(this));
-
-      if (phase.key === 'draft' && canEdit) {
-        const addCard = el('div', {
-          class: 'board-card-v2 add-wr-card',
-          style: 'background: transparent; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
-        });
-        addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request';
-        addCard.addEventListener('click', () => openNewWrForm.call(this));
-        cardContainer.appendChild(addCard);
-      }
-
-      if (colWrs.length === 0 && (phase.key !== 'draft' || !canEdit)) {
-        cardContainer.appendChild(renderEmptyStateV2({
-          variant: 'compact',
-          title: 'No work requests',
-          body: ''
-        }));
-      }
-
-      colWrs.forEach(wr => {
+    KanbanBoard.render({
+      container,
+      items: sortedWrs,
+      columns: boardPhases.map(phase => {
+        const isDraft = phase.key === 'draft';
+        const col = {
+          ...phase,
+          icon: 'phase',
+          emptyState: (isDraft && canEdit)
+            ? false
+            : { variant: 'compact', title: 'No work requests', body: '' }
+        };
+        if (isDraft && canEdit) {
+          col.addButton = { label: 'Add Work Request', onClick: openNewWrForm };
+          col.addCard = {
+            label: 'Add Work Request',
+            onClick: openNewWrForm
+          };
+        }
+        return col;
+      }),
+      renderCard(wr, phase) {
         const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
         const completedTasks = tasks.filter(t => t.status === 'Completed').length;
         const totalTasks = tasks.length;
         const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
         const allComments = tasks.reduce((acc, t) => acc + (t.comments?.length || 0), 0);
 
         const assigneeIds = [...new Set(tasks.map(t => t.assigneeId || t.assignedTo).filter(Boolean))];
@@ -2882,20 +2483,17 @@ const Workflow = {
           'Low': { label: 'Low', cls: 'card-v2-priority-low' }
         }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
 
-        const description = client?.name || '—';
-
         const allChecklistItems = tasks.flatMap(t => t.checklist || []);
         const documentItems = allChecklistItems.filter(c => c.category === 'document');
         const subtaskItems = allChecklistItems.filter(c => c.category === 'subtask');
         const completedDocs = documentItems.filter(c => c.completed).length;
         const completedSubtasks = subtaskItems.filter(c => c.completed).length;
 
-        const counts = [];
-        counts.push({
+        const counts = [{
           icon: BoardCardIcons.task,
           value: `${completedTasks}/${totalTasks}`,
           title: `${completedTasks} of ${totalTasks} tasks completed`
-        });
+        }];
         if (documentItems.length > 0) {
           counts.push({
             icon: BoardCardIcons.document,
@@ -2912,117 +2510,115 @@ const Workflow = {
         }
         if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
 
-        const transitionStatus = this.getPhaseTransitionStatus(wr.id);
-        const showQuickRoute = canApprove && transitionStatus && transitionStatus.canTransition && transitionStatus.nextPhase;
-
-        const card = buildCompactBoardCard({
+        return buildCompactBoardCard({
           key: 'WR-' + cardNumber++,
           progress,
           statusColor: phase.color,
           title: wr.title,
-          description,
+          description: client?.name || '—',
           detail: (wr.description || '').trim(),
           date: wr.dueDate ? formatDate(wr.dueDate) : '',
           priority: priorityConfig.label,
           priorityClass: priorityConfig.cls,
           avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
           counts,
-          moreOptions: (e) => {
-            const wrapper = e.currentTarget.parentElement;
-            let menu = wrapper.querySelector('.action-menu-list');
-            if (!menu) {
-              menu = el('div', { class: 'action-menu-list hidden' });
+          onClick: () => { location.hash = '#operations/detail/' + wr.id; }
+        });
+      },
+      cardMenuItems(wr) {
+        const transitionStatus = self.getPhaseTransitionStatus(wr.id);
+        const showQuickRoute = canApprove && transitionStatus && transitionStatus.canTransition && transitionStatus.nextPhase;
+        const items = [];
 
-              const viewItem = el('button', {
-                class: 'action-menu-item',
-                html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> View Details'
-              });
-              viewItem.addEventListener('click', (ev) => {
-                ev.stopPropagation();
-                menu.classList.remove('open'); menu.classList.add('hidden');
-                location.hash = '#operations/detail/' + wr.id;
-              });
-              menu.appendChild(viewItem);
-
-              if (showQuickRoute) {
-                const routeItem = el('button', {
-                  class: 'action-menu-item primary',
-                  html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg> Advance to ${escapeHtml(transitionStatus.nextPhase)}`
-                });
-                routeItem.addEventListener('click', (ev) => {
-                  ev.stopPropagation();
-                  menu.classList.remove('open'); menu.classList.add('hidden');
-                  this.transitionWorkRequest(wr.id);
-                });
-                menu.appendChild(routeItem);
-              }
-
-              if (canEdit && !wr.isPendingApproval) {
-                const editItem = el('button', {
-                  class: 'action-menu-item',
-                  html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit'
-                });
-                editItem.addEventListener('click', (ev) => {
-                  ev.stopPropagation();
-                  menu.classList.remove('open'); menu.classList.add('hidden');
-                  location.hash = '#operations/form/' + wr.id;
-                });
-                menu.appendChild(editItem);
-              }
-
-              if (wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-                const cancelItem = el('button', {
-                  class: 'action-menu-item danger',
-                  html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel'
-                });
-                cancelItem.addEventListener('click', (ev) => {
-                  ev.stopPropagation();
-                  menu.classList.remove('open'); menu.classList.add('hidden');
-                  this.cancelWorkRequest(wr.id);
-                });
-                menu.appendChild(cancelItem);
-              }
-
-              if (canEdit && wr.status === 'Draft' && !wr.isPendingApproval) {
-                const deleteItem = el('button', {
-                  class: 'action-menu-item danger',
-                  html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete'
-                });
-                deleteItem.addEventListener('click', (ev) => {
-                  ev.stopPropagation();
-                  menu.classList.remove('open'); menu.classList.add('hidden');
-                  this.showConfirm('Delete Work Request', `Are you sure you want to delete "${wr.title}" and all its tasks?`, () => {
-                    DB.getWhere('tasks', t => t.workRequestId === wr.id).forEach(t => DB.delete('tasks', t.id));
-                    DB.delete('workRequests', wr.id);
-                    App.handleRoute();
-                  }, 'danger');
-                });
-                menu.appendChild(deleteItem);
-              }
-
-              wrapper.appendChild(menu);
-            }
-            toggleMenu(menu, e.currentTarget);
-          },
+        items.push({
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
         });
 
-        card.dataset.wrId = wr.id;
-        if (canApprove) {
-          card.draggable = true;
-          card.addEventListener('dragstart', handleDragStart);
-          card.addEventListener('dragend', handleDragEnd);
-          card.style.cursor = 'grab';
+        if (showQuickRoute) {
+          items.push({
+            label: `Advance to ${transitionStatus.nextPhase}`,
+            className: 'primary',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+            onClick: () => self.transitionWorkRequest(wr.id)
+          });
         }
 
-        cardContainer.appendChild(card);
-      });
+        if (canEdit && !wr.isPendingApproval) {
+          items.push({
+            label: 'Edit',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+            onClick: () => { location.hash = '#operations/form/' + wr.id; }
+          });
+        }
 
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+        if (wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+          items.push({
+            label: 'Cancel',
+            className: 'danger',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+            onClick: () => self.cancelWorkRequest(wr.id)
+          });
+        }
+
+        if (canEdit && wr.status === 'Draft' && !wr.isPendingApproval) {
+          items.push({
+            label: 'Delete',
+            className: 'danger',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+            onClick: () => self.showConfirm('Delete Work Request', `Are you sure you want to delete "${wr.title}" and all its tasks?`, () => {
+              DB.getWhere('tasks', t => t.workRequestId === wr.id).forEach(t => DB.delete('tasks', t.id));
+              DB.delete('workRequests', wr.id);
+              App.handleRoute();
+            }, 'danger')
+          });
+        }
+
+        return items;
+      },
+      drag: {
+        enabled: true,
+        canDrag: () => canApprove,
+        canDrop: () => true,
+        orderField: 'boardOrder',
+        onDrop({ item, targetStatus, newOrder }) {
+          const wr = item;
+          const isPhaseChange = wr.status !== targetStatus;
+          if (isPhaseChange && !canApprove) {
+            self.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
+            return;
+          }
+
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder };
+            if (isPhaseChange) {
+              changes.status = targetStatus;
+              changes.updatedAt = new Date().toISOString();
+            }
+            DB.update('workRequests', wr.id, changes);
+            App.handleRoute();
+          };
+
+          if (!isPhaseChange) {
+            applyMove();
+            return;
+          }
+
+          const transitionStatus = self.getPhaseTransitionStatus(wr.id);
+          if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
+            const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
+            const blockers = transitionStatus?.missing?.length
+              ? transitionStatus.missing.join('\n- ')
+              : `This Work Request cannot be routed to "${targetPhaseLabel}" yet.`;
+            self.showMessage('Routing Blocked', `Cannot move "${wr.title}" to ${targetPhaseLabel}:\n- ${blockers}`, 'warning');
+            return;
+          }
+
+          self.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
+        }
+      }
     });
-
-    container.appendChild(board);
   },
 
   refreshListCompact(container, wrs) {

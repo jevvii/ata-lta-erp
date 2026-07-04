@@ -692,10 +692,20 @@ const Disbursement = {
 
   renderBoardView(container, items) {
     if (items.length === 0) {
-      container.appendChild(el('p', { text: 'No expenses found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        title: 'No expenses found',
+        body: 'Create an expense to start tracking disbursements.'
+      }));
       return;
     }
-    const board = el('div', { class: 'board-v2' });
+
+    const canEdit = Auth.can('disbursement:edit');
+    const canCreate = Auth.can('disbursement:create');
+    const canDelete = Auth.can('disbursement:delete');
+    const self = this;
+
     const statuses = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released', 'Rejected'];
     const statusColors = {
       'Draft': '#94a3b8',
@@ -706,35 +716,56 @@ const Disbursement = {
       'Rejected': '#ef4444'
     };
 
-    let cardNumber = 1;
-
+    // Normalize boardOrder within each column (skip pending-change proxies).
     statuses.forEach(st => {
-      const colColor = statusColors[st] || '#cbd5e1';
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
-
       let colItems = [];
       if (st === 'Draft') {
-        colItems = items.filter(d => d.status === 'Draft');
+        colItems = items.filter(d => d.status === 'Draft' && !d.pendingChangeId);
       } else if (st === 'Pending') {
-        colItems = items.filter(d => this.PENDING_APPROVAL_STATUSES.includes(d.status));
+        colItems = items.filter(d => this.PENDING_APPROVAL_STATUSES.includes(d.status) && !d.pendingChangeId);
       } else {
-        colItems = items.filter(d => d.status === st);
+        colItems = items.filter(d => d.status === st && !d.pendingChangeId);
       }
+      colItems.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.createdAt || a.submittedAt || 0) - new Date(b.createdAt || b.submittedAt || 0);
+      });
+      colItems.forEach((d, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (d.boardOrder !== newOrder) {
+          d.boardOrder = newOrder;
+          DB.update('disbursements', d.id, { boardOrder: newOrder });
+        }
+      });
+    });
 
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(st));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colItems.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
+    let cardNumber = 1;
 
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-
-      colItems.forEach(d => {
-        const emp = DB.getById('users', this.getEmployeeId(d));
-        const source = this.getFundSource(d);
+    KanbanBoard.render({
+      container,
+      items,
+      columns: statuses.map(st => {
+        const col = {
+          key: st,
+          label: st,
+          targetStatus: st,
+          color: statusColors[st] || '#cbd5e1',
+          statuses: st === 'Pending' ? this.PENDING_APPROVAL_STATUSES : [st],
+          emptyState: st === 'Draft' && canCreate ? false : { variant: 'compact', title: 'No expenses', body: '' }
+        };
+        if (st === 'Draft' && canCreate) {
+          col.addButton = { label: 'Add Expense', onClick: () => self.showForm() };
+          col.addCard = { label: 'Add Expense', onClick: () => self.showForm() };
+        }
+        return col;
+      }),
+      renderCard(d) {
+        const emp = DB.getById('users', self.getEmployeeId(d));
+        const source = self.getFundSource(d);
 
         const statusPriorityClass = {
           'Draft': 'card-v2-priority-normal',
@@ -755,7 +786,7 @@ const Disbursement = {
         };
         const progress = progressMap[d.status] || 0;
 
-        const descParts = [`${emp?.name || '—'} • ${source}`];
+        const descParts = [];
         if (d.linkedWorkRequestId) {
           const wr = DB.getById('workRequests', d.linkedWorkRequestId);
           if (wr) {
@@ -768,30 +799,80 @@ const Disbursement = {
           }
         }
         if (d.fromTemplate) descParts.push('Recurring');
-        const description = descParts.join(' • ');
 
         const card = buildCompactBoardCard({
           key: 'DIS-' + cardNumber++,
           progress,
-          statusColor: colColor,
+          statusColor: statusColors[d.status] || '#cbd5e1',
           title: d.category,
           description: `${emp?.name || '—'} • ${source}`,
+          detail: descParts.join(' • '),
           date: d.submittedAt ? formatDate(d.submittedAt) : '',
           priority: d.status,
           priorityClass: statusPriorityClass,
           onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
         });
 
-        // Amount on the right side of the footer
         const footerRight = card.querySelector('.card-v2-footer-right');
         footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);' }));
-
-        cardContainer.appendChild(card);
-      });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+        return card;
+      },
+      cardMenuItems(d) {
+        const menu = [{
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
+        }];
+        if (canEdit && d.status === 'Draft' && !d.pendingChangeId) {
+          menu.push({
+            label: 'Edit',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+            onClick: () => self.showForm(d.id)
+          });
+        }
+        if (canDelete && !d.pendingChangeId) {
+          menu.push({
+            label: 'Delete',
+            className: 'danger',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+            onClick: () => Workflow.showConfirm('Delete Expense', 'Are you sure you want to permanently delete this disbursement? This cannot be undone.', () => {
+              if (d.linkedWorkRequestId) {
+                const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+                if (wr) {
+                  const linkedIds = (wr.linkedDisbursementIds || []).filter(id => id !== d.id);
+                  DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
+                }
+              }
+              DB.remove('disbursements', d.id);
+              App.handleRoute();
+              Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
+            }, 'danger')
+          });
+        }
+        if (canCreate && d.status === 'Draft' && !d.pendingChangeId) {
+          menu.push({
+            label: 'Submit Expense',
+            className: 'primary',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+            onClick: () => Workflow.showConfirm('Submit Expense', 'Are you sure you want to submit this expense for approval?', () => {
+              DB.update('disbursements', d.id, { status: 'Submitted', submittedAt: new Date().toISOString() });
+              App.handleRoute();
+            }, 'success')
+          });
+        }
+        return menu;
+      },
+      drag: {
+        enabled: true,
+        canDrag: d => canEdit && !d.pendingChangeId,
+        canDrop: ({ item, targetStatus }) => item.status === targetStatus,
+        orderField: 'boardOrder',
+        onDrop({ item, newOrder }) {
+          DB.update('disbursements', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+        }
+      }
     });
-    container.appendChild(board);
   },
 
   renderCompactListView(container, items) {

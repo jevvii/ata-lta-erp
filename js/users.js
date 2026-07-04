@@ -653,76 +653,88 @@ const Users = {
   },
 
   renderBoardView(container, items) {
-    const board = el('div', { class: 'board-v2' });
-    
-    // Column 1: Expenses
-    const expCol = el('div', { class: 'board-column-v2' });
-    expCol.style.setProperty('--column-phase-color', '#f59e0b');
-    const expHeader = el('div', { class: 'board-column-header-v2' });
-    const expTitle = el('div', { class: 'board-column-title' });
-    expTitle.appendChild(el('span', { class: 'board-column-dot', style: 'background:#f59e0b;' }));
-    expTitle.appendChild(document.createTextNode('Expense Submissions'));
-    expHeader.appendChild(expTitle);
-    expCol.appendChild(expHeader);
-    const expCards = el('div', { class: 'board-cards-scroll' });
-    expCol.appendChild(expCards);
-    
-    // Column 2: Billing Submissions
-    const changeCol = el('div', { class: 'board-column-v2' });
-    changeCol.style.setProperty('--column-phase-color', '#3b82f6');
-    const changeHeader = el('div', { class: 'board-column-header-v2' });
-    const changeTitle = el('div', { class: 'board-column-title' });
-    changeTitle.appendChild(el('span', { class: 'board-column-dot', style: 'background:#3b82f6;' }));
-    changeTitle.appendChild(document.createTextNode('Billing Submissions'));
-    changeHeader.appendChild(changeTitle);
-    changeCol.appendChild(changeHeader);
-    const changeCards = el('div', { class: 'board-cards-scroll' });
-    changeCol.appendChild(changeCards);
-    
-    const expItems = items.filter(item => item.type === 'disbursement');
-    const billItems = items.filter(item => item.type !== 'disbursement');
+    if (items.length === 0) {
+      container.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        title: 'No pending submissions',
+        body: 'Submitted billing and expense requests will appear here for review.'
+      }));
+      return;
+    }
+
+    const self = this;
     let expNumber = 1;
     let billNumber = 1;
 
-    const renderCard = (item, targetContainer, prefix) => {
-      const submitter = DB.getById('users', item.submittedBy);
-      const avatars = submitter ? [{ name: submitter.name, avatarUrl: submitter.avatarUrl }] : [];
-      const priorityClass = item.type === 'disbursement' ? 'card-v2-priority-medium' : 'card-v2-priority-normal';
-      const key = prefix + '-' + (item.type === 'disbursement' ? expNumber++ : billNumber++);
-
-      const card = buildCompactBoardCard({
-        key,
-        statusColor: item.type === 'disbursement' ? '#f59e0b' : '#3b82f6',
-        title: item.title,
-        description: item.subtitle,
-        date: item.submittedAt ? formatDate(item.submittedAt) : '',
-        priority: item.type === 'disbursement' ? 'Expense' : 'Billing',
-        priorityClass,
-        avatars,
-        onClick: () => {
-          if (item.type === 'disbursement') {
-            location.hash = '#disbursement/detail/' + item.id;
-          } else {
-            this.pendingDetailId = item.id;
-            App.handleRoute();
-          }
+    KanbanBoard.render({
+      container,
+      items,
+      getColumnKey: item => item.type === 'disbursement' ? 'expense' : 'billing',
+      columns: [
+        {
+          key: 'expense',
+          label: 'Expense Submissions',
+          targetStatus: 'expense',
+          color: '#f59e0b',
+          emptyState: { variant: 'compact', title: 'No expense submissions', body: '' }
+        },
+        {
+          key: 'billing',
+          label: 'Billing Submissions',
+          targetStatus: 'billing',
+          color: '#3b82f6',
+          emptyState: { variant: 'compact', title: 'No billing submissions', body: '' }
         }
-      });
+      ],
+      renderCard(item) {
+        const submitter = DB.getById('users', item.submittedBy);
+        const avatars = submitter ? [{ name: submitter.name, avatarUrl: submitter.avatarUrl }] : [];
+        const isExpense = item.type === 'disbursement';
+        const key = (isExpense ? 'EXP-' : 'BIL-') + (isExpense ? expNumber++ : billNumber++);
+        const color = isExpense ? '#f59e0b' : '#3b82f6';
 
-      const footerRight = card.querySelector('.card-v2-footer-right');
-      if (item.amount !== null && item.amount !== undefined) {
-        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(item.amount), style: 'font-weight:700;color:var(--color-text);' }));
-      }
+        const card = buildCompactBoardCard({
+          key,
+          statusColor: color,
+          title: item.title,
+          description: item.subtitle,
+          date: item.submittedAt ? formatDate(item.submittedAt) : '',
+          priority: isExpense ? 'Expense' : 'Billing',
+          priorityClass: isExpense ? 'card-v2-priority-medium' : 'card-v2-priority-normal',
+          avatars,
+          onClick: () => {
+            if (isExpense) {
+              location.hash = '#disbursement/detail/' + item.id;
+            } else {
+              self.pendingDetailId = item.id;
+              App.handleRoute();
+            }
+          }
+        });
 
-      targetContainer.appendChild(card);
-    };
-
-    expItems.forEach(item => renderCard(item, expCards, 'EXP'));
-    billItems.forEach(item => renderCard(item, changeCards, 'BIL'));
-    
-    board.appendChild(expCol);
-    board.appendChild(changeCol);
-    container.appendChild(board);
+        const footerRight = card.querySelector('.card-v2-footer-right');
+        if (item.amount !== null && item.amount !== undefined) {
+          footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(item.amount), style: 'font-weight:700;color:var(--color-text);' }));
+        }
+        return card;
+      },
+      cardMenuItems(item) {
+        return [{
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => {
+            if (item.type === 'disbursement') {
+              location.hash = '#disbursement/detail/' + item.id;
+            } else {
+              self.pendingDetailId = item.id;
+              App.handleRoute();
+            }
+          }
+        }];
+      },
+      drag: { enabled: false }
+    });
   },
 
   renderTableView(container, items) {

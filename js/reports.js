@@ -345,35 +345,31 @@ const Reports = {
   },
 
   renderTaskBoard(tasks) {
-    if (tasks.length === 0) return el('p', { class: 'empty-state', text: 'No tasks found.' });
-    
+    if (tasks.length === 0) {
+      return renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        title: 'No tasks found',
+        body: 'Adjust your filters to include tasks in this report.'
+      });
+    }
+
     const statuses = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
     const statusColors = { 'Draft': '#94a3b8', 'Assigned': '#3b82f6', 'In Progress': '#f59e0b', 'For Review': '#a855f7', 'Completed': '#10b981', 'Cancelled': '#ef4444' };
     const wrs = DB.getAll('workRequests');
     const clients = DB.getAll('clients');
-
-    const board = el('div', { class: 'board-v2' });
     let taskNumber = 1;
 
-    statuses.forEach(status => {
-      const statusTasks = tasks.filter(t => t.status === status);
-      const colColor = statusColors[status] || '#cbd5e1';
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
-
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(status));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(statusTasks.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-      if (statusTasks.length === 0) {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No tasks' }));
-      }
-      statusTasks.forEach(t => {
+    return KanbanBoard.render({
+      items: tasks,
+      columns: statuses.map(status => ({
+        key: status,
+        label: status,
+        targetStatus: status,
+        color: statusColors[status] || '#cbd5e1',
+        emptyState: { variant: 'compact', title: 'No tasks', body: '' }
+      })),
+      renderCard(t) {
         const wr = wrs.find(w => w.id === t.workRequestId);
         const client = wr ? clients.find(c => c.id === wr.clientId) : null;
         const assignee = t.assigneeName
@@ -397,10 +393,10 @@ const Reports = {
         const counts = [];
         if (comp.total > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${comp.percent}%` });
 
-        const card = buildCompactBoardCard({
+        return buildCompactBoardCard({
           key: 'TSK-' + taskNumber++,
           progress: comp.percent,
-          statusColor: colColor,
+          statusColor: statusColors[t.status] || '#cbd5e1',
           title: t.title,
           description: client?.name || '',
           date: t.dueDate ? formatDate(t.dueDate) : '',
@@ -410,13 +406,9 @@ const Reports = {
           counts,
           onClick: () => { /* reports board is read-only summary */ }
         });
-
-        cardContainer.appendChild(card);
-      });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+      },
+      drag: { enabled: false }
     });
-    return board;
   },
 
   renderTaskList(tasks) {
