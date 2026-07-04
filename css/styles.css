@@ -8796,15 +8796,6 @@ tbody tr * {
   margin-bottom: 6px;
 }
 
-.side-pane-form-content .notion-section-heading,
-.side-pane-form-content .notion-line-items .form-section-title.notion-section-heading {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  margin: 0 0 12px;
-}
-
 .side-pane-form-content .form-group {
   margin-bottom: var(--spacing-md);
 }
@@ -9133,20 +9124,39 @@ tbody tr * {
   margin: 6px 0;
 }
 
+.side-pane-view-menu-header {
+  padding: 6px 10px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.side-pane-view-default-submenu {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
+}
+
+.side-pane-view-default-submenu.hidden {
+  display: none;
+}
+
+.side-pane-view-menu-check {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
 /* ============================================================
  * Notion-style Line Item / Task / Transmittal Item Lists
  * Shared pattern for billing, workflow, transmittal forms
  * ============================================================ */
 
 .notion-line-items {
-  margin-top: var(--spacing-lg, 24px);
-}
-
-.notion-line-items .form-section-title {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0 0 12px;
+  margin: 0 0 var(--spacing-lg, 24px);
 }
 
 .notion-line-item-list {
@@ -9346,9 +9356,9 @@ tbody tr * {
   margin: 12px 0;
 }
 
-.notion-form .form-header-bar,
-.notion-form > .page-title-bar-v2,
-.notion-form > .form-actions-top {
+.side-pane .notion-form .form-header-bar,
+.side-pane .notion-form > .page-title-bar-v2,
+.side-pane .notion-form > .form-actions-top {
   display: none !important;
 }
 
@@ -9446,7 +9456,7 @@ tbody tr * {
   font-weight: 700 !important;
   padding: 8px 0 !important;
   border: none !important;
-  border-bottom: 2px solid var(--color-border) !important;
+  border-bottom: none !important;
   border-radius: 0 !important;
   background: transparent !important;
   width: 100% !important;
@@ -9455,7 +9465,8 @@ tbody tr * {
 
 .notion-title-input:focus {
   outline: none !important;
-  border-bottom-color: var(--color-primary) !important;
+  border: none !important;
+  border-bottom: none !important;
   box-shadow: none !important;
   background: transparent !important;
 }
@@ -10073,22 +10084,60 @@ tbody tr * {
 }
 
 .side-pane-form-content {
-  padding: 16px 32px 140px;
+  padding: 8px 40px 140px;
 }
 
 .side-pane-form-footer {
-  padding: 16px 32px;
+  padding: 12px 40px;
 }
 
-.side-pane-form-content .form-group,
-.side-pane-form-content .notion-prop,
+/* === Notion-inspired form spacing: typography groups fields ===
+   We keep title/description blocks close to the top, then use a single
+   compact property grid. Vertical rhythm is driven by section headings,
+   not by heavy box padding. */
 .side-pane-form-content .notion-freeform {
-  margin-bottom: var(--spacing-lg);
+  margin: 0 0 24px;
+}
+
+.side-pane-form-content .notion-freeform--title {
+  margin: 0 0 28px;
 }
 
 .side-pane-form-content .notion-property-grid {
-  gap: var(--spacing-lg);
-  margin: var(--spacing-lg) 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px 24px;
+  margin: 0 0 28px;
+}
+
+.side-pane-form-content .notion-prop {
+  margin: 0;
+}
+
+.side-pane-form-content .form-group {
+  margin: 0 0 20px;
+}
+
+/* Section heading sits outside its content box so the label reads as
+   belonging to the group rather than floating inside it. */
+.notion-section-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--color-text);
+  margin: 40px 0 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notion-line-items {
+  margin-top: 0;
+}
+
+.notion-add-line-item {
+  padding: 8px 12px;
+  margin-top: 4px;
 }
 
 .notion-section-label {
@@ -10096,40 +10145,8 @@ tbody tr * {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: var(--color-text-muted);
-}
-
-/* Notion-style section headings inside forms */
-.notion-section-heading {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  color: var(--color-text);
-  margin: 0 0 12px;
-}
-
-.notion-line-items {
-  margin-top: var(--spacing-xl);
-}
-
-.notion-line-items .form-section-title {
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 0 0 14px;
-}
-
-.notion-line-items .form-section-title.notion-section-heading {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  margin: 0 0 12px;
-}
-
-.notion-add-line-item {
-  padding: 8px 12px;
 }
 
 /* Alias used by several JS modules for the warning badge variant */
@@ -10139,7 +10156,10 @@ tbody tr * {
 }
 
 /* --- Borderless, oversized creation title --- */
-.notion-title-input {
+.notion-title-input,
+.notion-title-input:focus,
+.notion-title-input:focus-visible,
+.notion-title-input:active {
   font-size: 1.75rem !important;
   font-weight: 700 !important;
   padding: 12px 0 !important;
@@ -10151,6 +10171,8 @@ tbody tr * {
   letter-spacing: -0.02em !important;
   line-height: 1.25 !important;
   width: 100% !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .notion-title-input::placeholder {
@@ -10158,17 +10180,23 @@ tbody tr * {
   opacity: 0.65;
 }
 
-.notion-title-input:focus {
-  outline: none !important;
-  border: none !important;
-  border-bottom: none !important;
-  box-shadow: none !important;
+/* Title inputs must stay borderless and background-free in all contexts. */
+.notion-freeform-input.notion-title-input,
+.notion-freeform-input.notion-title-input:focus,
+.notion-freeform-input.notion-title-input:focus-visible,
+.notion-freeform-input.notion-title-input:active {
   background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 /* Beat the generic side-pane-body input overrides for the title field */
 .side-pane-body .notion-form .notion-title-input,
-.side-pane-body .notion-form .notion-title-input:focus {
+.side-pane-body .notion-form .notion-title-input:focus,
+.side-pane-body .notion-form .notion-title-input:focus-visible,
+.side-pane-body .notion-form .notion-title-input:active {
   font-size: 1.75rem !important;
   font-weight: 700 !important;
   padding: 12px 0 !important;
@@ -10188,14 +10216,19 @@ tbody tr * {
   opacity: 0.65;
 }
 
-/* Hide the WR title field border in dark mode — the glowing cursor/focus
-   treatment below provides the only visual cue. */
+/* Dark mode title inputs: keep them completely plain — no glow, no border,
+   no background. The caret color is the only focus cue. */
 [data-theme="dark"] .side-pane-body .notion-form .notion-title-input,
-[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus {
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus,
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus-visible,
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:active {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   outline: none !important;
+  text-shadow: none !important;
+  animation: none !important;
+  caret-color: var(--color-primary, #d4b8ff);
 }
 
 /* ============================================================
@@ -10298,22 +10331,17 @@ tbody tr * {
 }
 
 [data-theme="dark"] .side-pane-body .notion-form .notion-title-input,
-[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus {
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus,
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus-visible,
+[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:active {
   background: transparent !important;
   border: none !important;
   color: #ffffff !important;
   caret-color: var(--color-primary, #d4b8ff);
-}
-
-[data-theme="dark"] .side-pane-body .notion-form .notion-title-input:focus {
-  caret-color: var(--color-primary, #d4b8ff);
-  text-shadow: 0 0 6px rgba(212, 184, 255, 0.35);
-  animation: wr-title-focus-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes wr-title-focus-pulse {
-  0%, 100% { text-shadow: 0 0 6px rgba(212, 184, 255, 0.35); }
-  50% { text-shadow: 0 0 16px rgba(212, 184, 255, 0.65); }
+  box-shadow: none !important;
+  outline: none !important;
+  text-shadow: none !important;
+  animation: none !important;
 }
 
 [data-theme="dark"] .side-pane-body .notion-form .notion-title-input::placeholder {

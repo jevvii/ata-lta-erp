@@ -1804,17 +1804,26 @@ const Workflow = {
       container.appendChild(titleBar);
       container.appendChild(this.renderTabNav());
     } else if (this.view === 'form' || this.view === 'templateForm') {
-      // Full-page form routes: render a minimal header with a back button and
+      // Full-page form routes: render a breadcrumb header with a back link and
       // leave the rest of the container for the form content below.
       container.classList.add('operations-tab-page');
-      const titleBar = el('div', { class: 'page-title-bar-v2' });
-      titleBar.appendChild(el('h1', { text: this.view === 'templateForm' ? 'Retainer Template' : 'Work Request' }));
-      const actions = el('div', { class: 'actions-bar' });
-      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to Operations' });
-      backBtn.addEventListener('click', () => { location.hash = '#operations'; });
-      actions.appendChild(backBtn);
-      titleBar.appendChild(actions);
-      container.appendChild(titleBar);
+      const isTemplate = this.view === 'templateForm';
+      const isNew = isTemplate
+        ? !this.templateEditingId
+        : !this.editingId;
+      const record = isTemplate
+        ? (this.templateEditingId ? DB.getById('retainerTemplates', this.templateEditingId) : null)
+        : (this.editingId ? DB.getById('workRequests', this.editingId) : null);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Operations',
+        baseHash: '#operations',
+        currentText: isTemplate
+          ? (isNew ? 'New Retainer Template' : (record?.name || 'Edit Template'))
+          : (isNew ? 'New Work Request' : (record?.title || 'Edit Work Request')),
+        actions: [
+          { text: '← Back to Operations', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } }
+        ]
+      }));
     }
 
     if (this.view === 'list') {
@@ -3565,7 +3574,8 @@ const Workflow = {
     const form = el('form', { id: 'wr-form', class: 'form-stacked notion-form' });
 
     // ── Title free-form ──
-    const titleSection = el('div', { class: 'notion-freeform' });
+    const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Work Request Title' }));
     const titleInput = el('input', {
       type: 'text', name: 'title', class: 'notion-freeform-input notion-title-input',
       placeholder: 'New Work Request', required: true,
@@ -3573,7 +3583,7 @@ const Workflow = {
     });
     titleSection.appendChild(titleInput);
     if (!wr) {
-      setTimeout(() => { titleInput.focus(); titleInput.select(); }, 60);
+      setTimeout(() => { titleInput.focus(); }, 60);
     }
     form.appendChild(titleSection);
 
@@ -3768,8 +3778,10 @@ const Workflow = {
     form.appendChild(retainerGroup);
 
     // Tasks section — Notion-style editable list
-    const tasksSection = el('div', { class: 'form-section notion-line-items' });
-    tasksSection.appendChild(el('h3', { class: 'form-section-title notion-section-heading', text: 'Tasks' }));
+    // The "Tasks" heading is placed outside the line-item container so it acts as
+    // a typographic group label rather than a box header.
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Tasks' }));
+    const tasksSection = el('div', { class: 'notion-line-items' });
     const tasksList = el('div', { class: 'notion-line-item-list', id: 'task-rows' });
     tasksSection.appendChild(tasksList);
 
@@ -8297,7 +8309,7 @@ const Workflow = {
       this.templateEditingId = null;
       const fullPageRoute = '#operations/templateForm/new';
       openFormPanel({
-        icon: '📋', title: 'Create Template',
+        icon: '📋', title: ' ',
         formContent: this.renderTemplateForm(), formId: 'template-form',
         viewContext: 'retainer-template-form',
         fullPageRoute,
@@ -8340,7 +8352,7 @@ const Workflow = {
         const tpl = DB.getById('retainerTemplates', t.id);
         const fullPageRoute = `#operations/templateForm/${this.templateEditingId || 'new'}`;
         openFormPanel({
-          icon: '📋', title: tpl ? tpl.name : 'Edit Template',
+          icon: '📋', title: ' ',
           formContent: this.renderTemplateForm(), formId: 'template-form',
           viewContext: 'retainer-template-form',
           fullPageRoute,
@@ -8371,31 +8383,9 @@ const Workflow = {
     const template = this.templateEditingId ? DB.getById('retainerTemplates', this.templateEditingId) : null;
     const container = el('div', { class: 'page' });
 
-    // Breadcrumb Title Bar
-    const titleBar = el('div', { class: 'page-title-bar-v2' });
-    const h1 = el('h1', { class: 'breadcrumb-h1' });
-    const opLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Operations' });
-    opLink.addEventListener('click', () => { this.view = 'list'; this.templateEditingId = null; App.handleRoute(); });
-    h1.appendChild(opLink);
-    h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-    
-    const tplLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Templates' });
-    tplLink.addEventListener('click', () => { this.view = 'templates'; this.templateEditingId = null; App.handleRoute(); });
-    h1.appendChild(tplLink);
-    h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-    
-    h1.appendChild(document.createTextNode(template ? template.name : 'Create Template'));
-    titleBar.appendChild(h1);
-
-    const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to Templates' });
-    backBtn.addEventListener('click', () => { this.view = 'templates'; this.templateEditingId = null; App.handleRoute(); });
-    titleBar.appendChild(backBtn);
-    container.appendChild(titleBar);
-
-    const form = el('form', { id: 'template-form', class: 'form-stacked' });
+    const form = el('form', { id: 'template-form', class: 'form-stacked notion-form' });
 
     const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h3', { text: template ? 'Edit Template Details' : 'Template Details' }));
 
     const topActions = el('div', { class: 'form-actions-top' });
     const saveBtn = el('button', { type: 'submit', form: 'template-form', class: 'btn btn-primary', text: 'Save Template' });
@@ -8417,10 +8407,18 @@ const Workflow = {
     headerBar.appendChild(topActions);
     form.appendChild(headerBar);
 
-    form.appendChild(el('div', { class: 'form-group' }, [
-      el('label', { text: 'Template Name *' }),
-      el('input', { type: 'text', name: 'name', required: true, value: template?.name || '' })
-    ]));
+    // ── Title free-form ──
+    const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Template Name' }));
+    const nameInput = el('input', {
+      type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input',
+      placeholder: 'New Work Request Template', required: true, value: template?.name || ''
+    });
+    titleSection.appendChild(nameInput);
+    if (!template) {
+      setTimeout(() => { nameInput.focus(); }, 60);
+    }
+    form.appendChild(titleSection);
 
     form.appendChild(el('div', { class: 'form-group' }, [
       el('label', { text: 'Description' }),
@@ -8455,12 +8453,13 @@ const Workflow = {
       el('input', { type: 'number', name: 'pfAmount', min: 0, step: 0.01, required: true, value: template?.pfAmount || '' })
     ]));
 
-    const tasksSection = el('div', { class: 'form-section' });
-    tasksSection.appendChild(el('h3', { text: 'Template Tasks' }));
+    // Template Tasks section — heading outside the line-item container for visual grouping.
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Template Tasks' }));
+    const tasksSection = el('div', { class: 'notion-line-items' });
     const tasksList = el('div', { id: 'template-task-rows' });
     tasksSection.appendChild(tasksList);
 
-    const addTaskBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: '+ Add Task' });
+    const addTaskBtn = el('button', { type: 'button', class: 'notion-add-line-item', text: '+ Add Task' });
     addTaskBtn.addEventListener('click', () => this.addTaskRow(tasksList));
     tasksSection.appendChild(addTaskBtn);
 

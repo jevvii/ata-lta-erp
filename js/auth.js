@@ -58,6 +58,10 @@ const Auth = {
     }
   },
 
+  // Session is stored in localStorage (not sessionStorage) so that forms opened via
+  // "New tab" view mode are still authenticated when the new tab loads.
+  _sessionKey: 'erp_session',
+
   login(email, password) {
     const users = DB.getAll('users');
     const user = users.find(u => u.email === email && u.password === password);
@@ -66,7 +70,7 @@ const Auth = {
     // Normalize entity values to uppercase for consistency
     this.user.entities = this.user.entities.map(e => e.toUpperCase());
     this.activeEntity = this.user.entities.includes('ATA') ? 'ATA' : 'LTA';
-    sessionStorage.setItem('erp_session', JSON.stringify({ userId: user.id, activeEntity: this.activeEntity }));
+    localStorage.setItem(this._sessionKey, JSON.stringify({ userId: user.id, activeEntity: this.activeEntity }));
     this.updateSessionClasses(true);
     return true;
   },
@@ -74,12 +78,12 @@ const Auth = {
   logout() {
     this.user = null;
     this.activeEntity = null;
-    sessionStorage.removeItem('erp_session');
+    localStorage.removeItem(this._sessionKey);
     this.updateSessionClasses(false);
   },
 
   restoreSession() {
-    const s = JSON.parse(sessionStorage.getItem('erp_session') || 'null');
+    const s = JSON.parse(localStorage.getItem(this._sessionKey) || 'null');
     if (!s) {
       this.updateSessionClasses(false);
       return false;
@@ -204,7 +208,7 @@ const Auth = {
     const upper = entity.toUpperCase();
     if (upper === 'ALL' || this.user?.entities.includes(upper)) {
       this.activeEntity = upper;
-      sessionStorage.setItem('erp_session', JSON.stringify({ userId: this.user.id, activeEntity: upper }));
+      localStorage.setItem(this._sessionKey, JSON.stringify({ userId: this.user.id, activeEntity: upper }));
     }
   },
 };

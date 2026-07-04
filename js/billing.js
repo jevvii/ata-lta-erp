@@ -36,7 +36,7 @@ const Billing = {
       h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
       h1.appendChild(document.createTextNode(inv?.invoiceNumber || 'Detail'));
       titleBar.appendChild(h1);
- 
+
       const actions = el('div', { class: 'title-bar-actions' });
       if (inv && inv.status !== 'Draft' && inv.status !== 'Pending') {
         const noLogoLabel = el('label', { style: 'margin-right:12px; font-size:0.8125rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:var(--color-text-muted);' });
@@ -60,6 +60,18 @@ const Billing = {
       actions.appendChild(backBtn);
       titleBar.appendChild(actions);
       container.appendChild(titleBar);
+    } else if (this.view === 'form') {
+      container.classList.add('billing-tab-page');
+      const isNew = !this.detailId;
+      const inv = isNew ? null : this.getInvoiceById(this.detailId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Billing',
+        baseHash: '#billing',
+        currentText: isNew ? 'New Invoice' : (inv?.invoiceNumber || 'Edit Invoice'),
+        actions: [
+          { text: '← Back to Invoices', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
+        ]
+      }));
     } else {
       container.classList.add('billing-tab-page');
       // Tab views: list, templates, aging, trash
@@ -816,8 +828,8 @@ const Billing = {
     form.appendChild(propsGrid);
 
     // Line Items — Notion-style editable list
-    const itemsSection = el('div', { class: 'form-section notion-line-items' });
-    itemsSection.appendChild(el('h3', { class: 'form-section-title', text: 'Line Items' }));
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Line Items' }));
+    const itemsSection = el('div', { class: 'notion-line-items' });
     const itemsList = el('div', { class: 'notion-line-item-list', id: 'line-item-rows' });
     itemsSection.appendChild(itemsList);
 
@@ -2545,16 +2557,26 @@ const Billing = {
     const entity = Auth.activeEntity;
     const container = el('div');
 
-    // Notion-style title section
+    // Notion-style icon header (title is now the inline borderless title field)
     const titleSec = el('div', { class: 'side-pane-form-title' });
     titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📋' }));
-    titleSec.appendChild(el('h2', { text: existing ? 'Edit Template' : 'New Billing Template' }));
     container.appendChild(titleSec);
 
     const formWrap = el('div', { class: 'side-pane-form-content' });
     const form = el('form', { class: 'form-stacked', id: 'billing-tpl-form' });
     
-    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Template Name *' }), el('input', { type: 'text', name: 'name', required: true, value: existing?.name || '' })]));
+    // ── Title free-form ──
+    const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Template Name' }));
+    const nameInput = el('input', {
+      type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input',
+      placeholder: 'New Billing Template', required: true, value: existing?.name || ''
+    });
+    titleSection.appendChild(nameInput);
+    if (!existing) {
+      setTimeout(() => { nameInput.focus(); }, 60);
+    }
+    form.appendChild(titleSection);
 
     const clientGroup = el('div', { class: 'form-group' });
     clientGroup.appendChild(el('label', { text: 'Client *' }));

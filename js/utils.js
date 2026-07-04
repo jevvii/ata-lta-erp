@@ -804,12 +804,19 @@ class SidePane {
 
   buildViewMenu() {
     const menu = el('div', { class: 'side-pane-view-menu', 'aria-hidden': 'true' });
-    [
+
+    // Header label — mirrors Notion's "Open as" / "View options" wording.
+    const header = el('div', { class: 'side-pane-view-menu-header', text: 'Open form as' });
+    menu.appendChild(header);
+
+    const viewItems = [
       { key: PaneMode.SIDE_PEEK, label: 'Side peek', icon: PaneIcons.sidePeek },
       { key: PaneMode.CENTER_PEEK, label: 'Center peek', icon: PaneIcons.centerPeek },
       { key: PaneMode.FULL_PAGE, label: 'Full page', icon: PaneIcons.fullPage },
       { key: PaneMode.NEW_TAB, label: 'New tab', icon: PaneIcons.newTab }
-    ].forEach(item => {
+    ];
+
+    viewItems.forEach(item => {
       const row = el('button', {
         class: 'side-pane-view-menu-item',
         type: 'button',
@@ -826,20 +833,77 @@ class SidePane {
 
     menu.appendChild(el('div', { class: 'side-pane-view-menu-divider' }));
 
+    // "Edit view default" opens an inline submenu of the same four options.
+    // This is the Notion-style behavior: pick which of the available view modes
+    // should be used automatically the next time this form context opens.
     const defaultRow = el('button', {
       class: 'side-pane-view-menu-item',
       type: 'button',
-      html: `<span class="side-pane-view-menu-icon">${PaneIcons.editDefault}</span><span class="side-pane-view-menu-label">Edit view default</span>`
+      html: `<span class="side-pane-view-menu-icon">${PaneIcons.editDefault}</span><span class="side-pane-view-menu-label">Set default view</span>`
     });
     defaultRow.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (this.viewContext) {
-        setPaneDefault(this.viewContext, this.mode);
-      }
-      this.hideViewMenu();
+      this.toggleViewDefaultSubmenu(menu, viewItems);
     });
     menu.appendChild(defaultRow);
+
+    // Container for the default-submenu (rendered on demand).
+    this._defaultSubmenu = el('div', { class: 'side-pane-view-default-submenu hidden' });
+    menu.appendChild(this._defaultSubmenu);
+
     return menu;
+  }
+
+  toggleViewDefaultSubmenu(menu, viewItems) {
+    const submenu = this._defaultSubmenu;
+    if (!submenu) return;
+    const isOpen = !submenu.classList.contains('hidden');
+    if (isOpen) {
+      submenu.classList.add('hidden');
+      submenu.innerHTML = '';
+      return;
+    }
+
+    submenu.innerHTML = '';
+    submenu.classList.remove('hidden');
+
+    const storedDefault = this.viewContext ? getPaneDefault(this.viewContext) : null;
+    const header = el('div', { class: 'side-pane-view-menu-header', text: 'Default view for this form' });
+    submenu.appendChild(header);
+
+    viewItems.forEach(item => {
+      const row = el('button', {
+        class: 'side-pane-view-menu-item',
+        type: 'button',
+        'data-mode': item.key,
+        html: `<span class="side-pane-view-menu-icon">${item.icon}</span><span class="side-pane-view-menu-label">${item.label}</span>${storedDefault === item.key ? ' <span class="side-pane-view-menu-check">✓</span>' : ''}`
+      });
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.viewContext) {
+          setPaneDefault(this.viewContext, item.key);
+          // Provide immediate visual feedback by re-rendering the submenu.
+          this.toggleViewDefaultSubmenu(menu, viewItems);
+          this.toggleViewDefaultSubmenu(menu, viewItems);
+        }
+      });
+      submenu.appendChild(row);
+    });
+
+    const clearRow = el('button', {
+      class: 'side-pane-view-menu-item',
+      type: 'button',
+      html: '<span class="side-pane-view-menu-icon"></span><span class="side-pane-view-menu-label">Reset to side peek</span>'
+    });
+    clearRow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.viewContext) {
+        try { localStorage.removeItem(`erp_pane_default_${this.viewContext}`); } catch (e) {}
+        this.toggleViewDefaultSubmenu(menu, viewItems);
+        this.toggleViewDefaultSubmenu(menu, viewItems);
+      }
+    });
+    submenu.appendChild(clearRow);
   }
 
   switchMode(newMode) {
@@ -1027,14 +1091,53 @@ function focusFormTitle(container) {
   if (titleInput && !titleInput.value.trim() && typeof titleInput.focus === 'function') {
     setTimeout(() => {
       titleInput.focus();
-      titleInput.select();
     }, 60);
   }
 }
 
 /**
+ * Builds a standard full-page form breadcrumb title bar.
+ *
+ * @param {Object} opts
+ * @param {string} opts.baseLabel - Clickable breadcrumb root text (e.g. 'Clients')
+ * @param {string} opts.baseHash - Hash route for the root (e.g. '#clients')
+ * @param {string} opts.currentText - Non-clickable current page text (e.g. 'Add Client')
+ * @param {Array<{text: string, class: string, type?: string, onClick?: Function, id?: string}>} [opts.actions] - Buttons on the right
+ * @returns {HTMLElement}
+ */
+function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [] }) {
+  const titleBar = el('div', { class: 'page-title-bar-v2' });
+  const h1 = el('h1', { class: 'breadcrumb-h1' });
+  const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: baseLabel });
+  baseLink.addEventListener('click', () => { location.hash = baseHash; });
+  h1.appendChild(baseLink);
+  h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
+  h1.appendChild(document.createTextNode(currentText));
+  titleBar.appendChild(h1);
+
+  if (actions.length > 0) {
+    const actionsBar = el('div', { class: 'actions-bar' });
+    actions.forEach(a => {
+      const btn = el('button', {
+        type: a.type || 'button',
+        class: a.class || 'btn btn-secondary',
+        text: a.text
+      });
+      if (a.form) btn.setAttribute('form', a.form);
+      if (a.id) btn.id = a.id;
+      if (a.testId) btn.setAttribute('data-testid', a.testId);
+      if (a.onClick) btn.addEventListener('click', a.onClick);
+      actionsBar.appendChild(btn);
+    });
+    titleBar.appendChild(actionsBar);
+  }
+
+  return titleBar;
+}
+
+/**
  * Opens a form inside the side panel with Notion-style layout:
- * Icon + Title at top, form content in body, action buttons in sticky footer.
+ * optional icon + title at top, form content in body, action buttons in sticky footer.
  *
  * View-mode routing notes:
  * - side-peek  (default): slides the panel in from the right; keeps the list visible.
@@ -1052,8 +1155,8 @@ function focusFormTitle(container) {
  *   #clients/form/new | #clients/form/:id
  *
  * @param {Object} opts
- * @param {string} opts.icon - Emoji icon for the title
- * @param {string} opts.title - Panel title text
+ * @param {string|null} [opts.icon] - Emoji icon for the title; pass null to suppress the header
+ * @param {string|null} [opts.title] - Panel title text; pass null to suppress the header
  * @param {HTMLElement} opts.formContent - The rendered form DOM (from renderForm())
  * @param {string} opts.formId - The form element's ID to find within the content
  * @param {Array<{text: string, class: string, type?: string, onClick?: Function}>} opts.actions - Footer buttons
@@ -1082,12 +1185,21 @@ function openFormPanel({ icon, title, formContent, formId, actions, mode, viewCo
 
   const wrapper = el('div');
 
-  const titleSec = el('div', { class: 'side-pane-form-title' });
-  titleSec.appendChild(el('div', { class: 'side-pane-icon', text: icon || '📝' }));
-  if (title && title.trim()) {
-    titleSec.appendChild(el('h2', { text: title }));
+  // Header icon/title is optional. Callers that want a clean Notion-style form
+  // surface can pass icon: null and title: null / ''.
+  const effectiveIcon = icon === undefined ? '📝' : icon;
+  const showHeader = !!(effectiveIcon || (title && title.trim()));
+
+  if (showHeader) {
+    const titleSec = el('div', { class: 'side-pane-form-title' });
+    if (effectiveIcon) {
+      titleSec.appendChild(el('div', { class: 'side-pane-icon', text: effectiveIcon }));
+    }
+    if (title && title.trim()) {
+      titleSec.appendChild(el('h2', { text: title }));
+    }
+    wrapper.appendChild(titleSec);
   }
-  wrapper.appendChild(titleSec);
 
   const contentArea = el('div', { class: 'side-pane-form-content' });
   formContent.classList.add('side-pane-form-wrapper');

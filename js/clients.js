@@ -76,14 +76,16 @@ const Clients = {
     if (this.editingId) {
       while (container.firstChild) container.removeChild(container.firstChild);
       container.classList.add('clients-tab-page');
-      const titleBar = el('div', { class: 'page-title-bar-v2' });
-      titleBar.appendChild(el('h1', { text: this.editingId === 'new' ? 'Add Client' : 'Edit Client' }));
-      const actions = el('div', { class: 'actions-bar' });
-      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to Clients' });
-      backBtn.addEventListener('click', () => { this.editingId = null; location.hash = '#clients'; });
-      actions.appendChild(backBtn);
-      titleBar.appendChild(actions);
-      container.appendChild(titleBar);
+      const isNew = this.editingId === 'new';
+      const client = isNew ? null : DB.getById('clients', this.editingId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Clients',
+        baseHash: '#clients',
+        currentText: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
+        actions: [
+          { text: '← Back to Clients', class: 'btn btn-secondary btn-sm', onClick: () => { this.editingId = null; location.hash = '#clients'; } }
+        ]
+      }));
       container.appendChild(this.renderForm(el('div'), this.editingId));
     }
 
@@ -273,9 +275,9 @@ const Clients = {
     const client = clientId && clientId !== 'new' ? DB.getById('clients', clientId) : null;
     this.clearNode(container);
 
-    // Form header bar
+    // Form header bar (actions only; title is handled by the inline title input
+    // and by the full-page breadcrumb header)
     const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: client ? 'Edit Client' : 'Add Client' }));
     const headerActions = el('div', { class: 'form-actions-top' });
     const saveBtnTop = el('button', { type: 'submit', form: 'client-form', class: 'btn btn-primary', text: client ? 'Save Changes' : 'Save Client' });
     headerActions.appendChild(saveBtnTop);
@@ -288,7 +290,7 @@ const Clients = {
     const form = el('form', { id: 'client-form', class: 'form-stacked notion-form' });
 
     // ── Identity free-form block ──
-    const identitySection = el('div', { class: 'notion-freeform' });
+    const identitySection = el('div', { class: 'notion-freeform notion-freeform--title' });
     identitySection.appendChild(el('label', { class: 'notion-section-label', text: 'Client Name' }));
     const nameInput = el('input', { type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input', placeholder: 'Taxpayer / company name', required: true, value: client ? (client.name || '') : '' });
     identitySection.appendChild(nameInput);
@@ -359,8 +361,8 @@ const Clients = {
     form.appendChild(addrSection);
 
     // Contact Details (multi-entry) — Notion-style
-    const cdSection = el('div', { class: 'form-section notion-line-items' });
-    cdSection.appendChild(el('h3', { class: 'form-section-title', text: 'Contact Details' }));
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Contact Details' }));
+    const cdSection = el('div', { class: 'notion-line-items' });
     const cdContainer = el('div', { id: 'contact-details-container' });
     const contactDetails = client && Array.isArray(client.contactDetails) ? client.contactDetails : [];
     contactDetails.forEach((cd, idx) => this.addContactDetailRow(cdContainer, cd, idx));
@@ -371,8 +373,8 @@ const Clients = {
     form.appendChild(cdSection);
 
     // Related Companies (multi-entry) — Notion-style
-    const rcSection = el('div', { class: 'form-section notion-line-items' });
-    rcSection.appendChild(el('h3', { class: 'form-section-title', text: 'Related Companies' }));
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Related Companies' }));
+    const rcSection = el('div', { class: 'notion-line-items' });
     const rcContainer = el('div', { id: 'related-companies-container' });
     const relatedCompanies = client && Array.isArray(client.relatedCompanies) ? client.relatedCompanies : [];
     relatedCompanies.forEach((rc, idx) => this.addRelatedCompanyRow(rcContainer, rc, idx));

@@ -99,6 +99,18 @@ const Disbursement = {
       actions.appendChild(backBtn);
       titleBar.appendChild(actions);
       container.appendChild(titleBar);
+    } else if (this.view === 'form') {
+      container.classList.add('disbursement-tab-page');
+      const isNew = !this.detailId;
+      const existing = isNew ? null : DB.getById('disbursements', this.detailId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Disbursement',
+        baseHash: '#disbursement',
+        currentText: isNew ? 'New Expense' : (existing?.description || 'Edit Expense'),
+        actions: [
+          { text: '← Back to List', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#disbursement'; } }
+        ]
+      }));
     } else if (this.view === 'list' || this.view === 'templates' || this.view === 'report') {
       container.classList.add('disbursement-tab-page');
       const titleBar = el('div', { class: 'page-title-bar-v2' });
@@ -2083,19 +2095,24 @@ const Disbursement = {
     const entity = Auth.activeEntity;
     const container = el('div');
 
-    // Notion-style title section
+    // Notion-style icon header (title is now the inline borderless title field)
     const titleSec = el('div', { class: 'side-pane-form-title' });
     titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📋' }));
-    titleSec.appendChild(el('h2', { text: 'New Disbursement Template' }));
     container.appendChild(titleSec);
 
     const formWrap = el('div', { class: 'side-pane-form-content' });
     const form = el('form', { class: 'form-stacked', id: 'disb-tpl-form' });
 
-    const nameGroup = el('div', { class: 'form-group' });
-    nameGroup.appendChild(el('label', { text: 'Template Name *' }));
-    nameGroup.appendChild(el('input', { type: 'text', name: 'name', required: true }));
-    form.appendChild(nameGroup);
+    // ── Title free-form ──
+    const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Template Name' }));
+    const nameInput = el('input', {
+      type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input',
+      placeholder: 'New Disbursement Template', required: true
+    });
+    titleSection.appendChild(nameInput);
+    setTimeout(() => { nameInput.focus(); }, 60);
+    form.appendChild(titleSection);
 
     const catGroup = el('div', { class: 'form-group' });
     catGroup.appendChild(el('label', { text: 'Category *' }));

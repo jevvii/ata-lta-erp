@@ -68,6 +68,22 @@ const Transmittal = {
       actions.appendChild(backBtn);
       titleBar.appendChild(actions);
       container.appendChild(titleBar);
+    } else if (this.view === 'form') {
+      container.classList.add('transmittal-tab-page');
+      if (!Auth.can('transmittal:create')) {
+        this.view = 'list';
+      } else {
+        const isNew = !this.detailId;
+        const existing = isNew ? null : DB.getById('transmittals', this.detailId);
+        container.appendChild(buildFormBreadcrumb({
+          baseLabel: 'Transmittal',
+          baseHash: '#transmittal',
+          currentText: isNew ? 'New Transmittal' : (existing?.trackingNumber || 'Edit Transmittal'),
+          actions: [
+            { text: '← Back to List', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#transmittal'; } }
+          ]
+        }));
+      }
     } else if (this.view === 'list') {
       container.classList.add('transmittal-tab-page');
       const titleBar = el('div', { class: 'page-title-bar-v2' });
@@ -77,14 +93,7 @@ const Transmittal = {
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
-    else if (this.view === 'form') {
-      if (!Auth.can('transmittal:create')) {
-        this.view = 'list';
-        container.appendChild(this.renderList());
-      } else {
-        container.appendChild(this.renderForm());
-      }
-    }
+    else if (this.view === 'form') container.appendChild(this.renderForm());
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
@@ -677,8 +686,8 @@ const Transmittal = {
     });
 
     // Itemized document list — Notion-style editable list
-    const itemsSection = el('div', { class: 'form-section notion-line-items' });
-    itemsSection.appendChild(el('h3', { class: 'form-section-title', text: 'Transmittal Items' }));
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Transmittal Items' }));
+    const itemsSection = el('div', { class: 'notion-line-items' });
     const itemsList = el('div', { class: 'notion-line-item-list', id: 'transmittal-items-list' });
     itemsSection.appendChild(itemsList);
 
