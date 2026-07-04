@@ -342,9 +342,13 @@ const Workflow = {
     const disbursements = DB.getWhere('disbursements', d => d.linkedWorkRequestId === wrId || (wr.linkedDisbursementIds || []).includes(d.id));
     const transmittals = DB.getWhere('transmittals', t => t.workRequestId === wrId || (wr.linkedTransmittalIds || []).includes(t.id));
 
-    const stages = ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed', 'Cancelled'];
+    // Four lifecycle stages: Draft -> Pre-processing -> Processing -> Completed.
+    // Billing and Disbursement are no longer lifecycle phases; they can be generated
+    // multiple times from within Processing / Testing. WRs already in Billing/Disbursement
+    // are treated as ready to complete if all financial requirements are satisfied.
+    const stages = ['Draft', 'Pre-processing', 'Processing', 'Completed', 'Cancelled'];
     const currentIdx = stages.indexOf(wr.status);
-    const nextPhase = stages[currentIdx + 1];
+    let nextPhase = stages[currentIdx + 1];
 
     if (wr.status === 'Cancelled' || wr.status === 'Completed') return { canTransition: false, reason: 'Request is already in a terminal state.' };
 
@@ -390,13 +394,13 @@ const Workflow = {
                 canTransition = false;
                 missing.push('All processing tasks must be marked as Completed');
             }
-            
+
             // Task-level Linkage Gate:
             tasks.forEach(t => {
                 const title = t.title.toLowerCase();
                 const hasInv = DB.getWhere('invoices', inv => inv.linkedTaskId === t.id).length > 0;
                 const hasDisb = DB.getWhere('disbursements', d => d.linkedTaskId === t.id).length > 0;
-                
+
                 if ((title.includes('invoice') || title.includes('bill')) && !hasInv) {
                     canTransition = false;
                     missing.push(`Task "${t.title}" requires a linked Service Invoice`);
@@ -410,25 +414,20 @@ const Workflow = {
         break;
 
       case 'Billing':
-        // Rule 4: At least one invoice must be linked, and at least one whole-project invoice must be Sent, Partially Paid, or Paid.
-        // If there are other invoices, they do not block routing (simple linkage is allowed).
+      case 'Disbursement':
+        // Legacy statuses: treat as completing the work request.
+        // Requirements mirror the old final-stage checks.
+        nextPhase = 'Completed';
         if (invoices.length === 0) {
           canTransition = false;
           missing.push('No linked invoices found — create and link an invoice in the Billing module');
         } else {
-          // Check if there is at least one "sent" billing for the whole project (no linkedTaskId)
-          const wholeProjectSent = invoices.some(inv => !inv.linkedTaskId && ['Sent', 'Partially Paid', 'Paid'].includes(inv.status));
-          if (!wholeProjectSent) {
-            // Fallback: check if we have any invoice at all that is Sent, Partially Paid, or Paid
-            const anySent = invoices.some(inv => ['Sent', 'Partially Paid', 'Paid'].includes(inv.status));
-            if (!anySent) {
-              canTransition = false;
-              missing.push('At least one linked invoice must be Sent, Partially Paid, or Paid');
-            }
+          const anySent = invoices.some(inv => ['Sent', 'Partially Paid', 'Paid'].includes(inv.status));
+          if (!anySent) {
+            canTransition = false;
+            missing.push('At least one linked invoice must be Sent, Partially Paid, or Paid');
           }
         }
-        // Rule 4b: Disbursement-related tasks must have linked disbursement records
-        // Accept either task-level link or WR-level link (linkedWorkRequestId / linkedDisbursementIds)
         const wrLevelDisbursements = DB.getWhere('disbursements', d => d.linkedWorkRequestId === wrId || (wr.linkedDisbursementIds || []).includes(d.id));
         tasks.forEach(t => {
           const title = t.title.toLowerCase();
@@ -437,14 +436,10 @@ const Workflow = {
             const hasWrDisb = wrLevelDisbursements.length > 0;
             if (!hasTaskDisb && !hasWrDisb) {
               canTransition = false;
-              missing.push(`Task "${t.title}" requires a linked Disbursement record before routing`);
+              missing.push(`Task "${t.title}" requires a linked Disbursement record before completion`);
             }
           }
         });
-        break;
-
-      case 'Disbursement':
-        // Rule 5: Actual completion requires 100% compliance/payment of all finances attached
         if (invoices.length > 0 && !invoices.every(inv => inv.status === 'Paid')) {
           canTransition = false;
           const unpaid = invoices.filter(inv => inv.status !== 'Paid');
@@ -1805,8 +1800,8 @@ const Workflow = {
         'Draft': 'badge-info',
         'Pre-processing': 'badge-info',
         'Processing': 'badge-warn',
-        'Billing': 'badge-info',
-        'Disbursement': 'badge-info',
+        'Billing': 'badge-warn',
+        'Disbursement': 'badge-warn',
         'Completed': 'badge-success',
         'Cancelled': 'badge-danger'
       }[wr.status] || 'badge-info';
@@ -2616,6 +2611,14 @@ const Workflow = {
       }
 
       this.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, () => {
+        // Move the dragged card DOM to the placeholder position for instant visual feedback
+        const placeholder = document.querySelector('.board-card-v2.drag-placeholder');
+        const draggedCard = document.querySelector(`.board-card-v2.compact.dragging`);
+        if (placeholder && draggedCard) {
+          placeholder.parentElement.insertBefore(draggedCard, placeholder.nextSibling);
+          draggedCard.classList.remove('dragging');
+          placeholder.remove();
+        }
         DB.update('workRequests', wrId, { status: targetStatus, updatedAt: new Date().toISOString() });
         App.handleRoute();
       }, 'success');
@@ -3957,8 +3960,8 @@ const Workflow = {
       'Draft': 'badge-draft',
       'Pre-processing': 'badge-preprocessing',
       'Processing': 'badge-processing',
-      'Billing': 'badge-billing',
-      'Disbursement': 'badge-disbursement',
+      'Billing': 'badge-processing',
+      'Disbursement': 'badge-processing',
       'Completed': 'badge-success',
       'Cancelled': 'badge-danger'
     };
@@ -4036,8 +4039,9 @@ const Workflow = {
   },
 
   renderProgressBar(status) {
-    const stages = ['Work Request', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Documentation'];
-    const map = { 'Draft': 0, 'Pre-processing': 1, 'Processing': 2, 'Billing': 3, 'Disbursement': 4, 'Completed': 5, 'Cancelled': 5 };
+    // Four-stage lifecycle inside work request detail.
+    const stages = ['Work Request', 'Pre-processing', 'Processing', 'Documentation'];
+    const map = { 'Draft': 0, 'Pre-processing': 1, 'Processing': 2, 'Billing': 2, 'Disbursement': 2, 'Completed': 3, 'Cancelled': 3 };
     const current = map[status] ?? 0;
     const wrap = el('div', { class: 'workflow-progress' });
     stages.forEach((s, i) => {
@@ -4976,8 +4980,8 @@ const Workflow = {
       'Draft': '#6b6b6b',
       'Pre-processing': '#2f6feb',
       'Processing': '#eab308',
-      'Billing': '#2f6feb',
-      'Disbursement': '#2f6feb',
+      'Billing': '#f59e0b',
+      'Disbursement': '#f59e0b',
       'Completed': '#17a34a',
       'Cancelled': '#dc2626'
     };
@@ -8567,8 +8571,9 @@ const Workflow = {
   },
 
   renderModernProgressBar(status) {
-    const stages = ['Work Request', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Documentation'];
-    const map = { 'Draft': 0, 'Pre-processing': 1, 'Processing': 2, 'Billing': 3, 'Disbursement': 4, 'Completed': 5, 'Cancelled': 5 };
+    // Four-stage lifecycle inside work request detail (Billing/Disbursement are no longer phases).
+    const stages = ['Work Request', 'Pre-processing', 'Processing', 'Documentation'];
+    const map = { 'Draft': 0, 'Pre-processing': 1, 'Processing': 2, 'Billing': 2, 'Disbursement': 2, 'Completed': 3, 'Cancelled': 3 };
     const currentIdx = map[status] ?? 0;
 
     const tracker = el('div', { class: 'stage-tracker', 'aria-label': 'Work request stage' });
@@ -8582,8 +8587,8 @@ const Workflow = {
       }
 
       const stageEl = el('div', { class: stageClass });
-      
-      const dotEl = i < currentIdx 
+
+      const dotEl = i < currentIdx
         ? el('div', { class: 'stage-dot', html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>` })
         : el('div', { class: 'stage-dot', text: String(i + 1) });
 

@@ -202,18 +202,21 @@ function buildCompactBoardCard(opts) {
   });
   moreBtn.addEventListener('click', e => {
     e.stopPropagation();
+    if (typeof opts.moreOptions === 'function') opts.moreOptions(e);
+    // Edge-aware adjustment runs after the menu is rendered open.
     const menu = moreWrap.querySelector('.action-menu-list');
     if (menu) {
-      const rect = menu.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      menu.classList.remove('edge-left', 'edge-right');
-      if (rect.right > viewportWidth - 8) {
-        menu.classList.add('edge-left');
-      } else if (rect.left < 8) {
-        menu.classList.add('edge-right');
-      }
+      requestAnimationFrame(() => {
+        const rect = menu.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        menu.classList.remove('edge-left', 'edge-right');
+        if (rect.right > viewportWidth - 8) {
+          menu.classList.add('edge-left');
+        } else if (rect.left < 8) {
+          menu.classList.add('edge-right');
+        }
+      });
     }
-    if (typeof opts.moreOptions === 'function') opts.moreOptions(e);
   });
   const moreWrap = el('div', { class: 'action-menu card-v2-action-menu' });
   moreWrap.appendChild(moreBtn);

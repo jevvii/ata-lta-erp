@@ -3062,8 +3062,10 @@ tbody tr:hover {
 
 .board-card-v2.compact .action-menu-list {
   min-width: 150px;
-  right: -6px;
+  right: auto;
+  left: calc(100% - 18px);
   top: calc(100% + 4px);
+  transform-origin: top left;
 }
 
 .board-card-v2.compact .action-menu-list.edge-left {
@@ -3150,6 +3152,8 @@ tbody tr:hover {
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08);
   padding: var(--spacing-xs, 6px) 0;
   min-width: 170px;
+  /* Keep menus beneath sticky module nav/toolbars (z-index 24-25) and board headers (20) */
+  z-index: 19;
 }
 
 .board-card-v2.compact .action-menu-list .action-menu-item,
@@ -11323,6 +11327,11 @@ tbody tr * {
 [data-theme="dark"] .board-column-v2.drag-over {
   background: color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 88%);
   border-color: var(--column-phase-color, var(--color-primary));
+}
+
+[data-theme="dark"] .board-card-v2.drag-placeholder {
+  background: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-surface), 0 0 0 2px var(--color-primary);
 }
 
 [data-theme="dark"] .task-table-v2 th {
