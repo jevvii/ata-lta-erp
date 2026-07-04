@@ -428,16 +428,24 @@ const DMS = {
         orderField: 'boardOrder',
         onDrop({ item, targetStatus, newOrder, fromStatus }) {
           const currentState = item.documentLifecycle || 'collected';
-          const changes = { boardOrder: newOrder };
-          if (currentState !== targetStatus) {
-            changes.documentLifecycle = targetStatus;
+          if (currentState === targetStatus) {
+            DB.update('documents', item.id, { boardOrder: newOrder });
+            App.handleRoute();
+            return;
+          }
+
+          const stageLabel = self.lifecycleLabel(targetStatus) || targetStatus;
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder, documentLifecycle: targetStatus };
             if (targetStatus === 'with_documentations') changes.receivedByDocumentationAt = new Date().toISOString();
             if (targetStatus === 'scanned') changes.scannedAt = new Date().toISOString();
             if (targetStatus === 'in_envelope') changes.storedInEnvelopeAt = new Date().toISOString();
             if (targetStatus === 'stored') changes.storedAt = new Date().toISOString();
-          }
-          DB.update('documents', item.id, changes);
-          App.handleRoute();
+            DB.update('documents', item.id, changes);
+            App.handleRoute();
+          };
+
+          Workflow.showConfirm('Confirm Lifecycle Change', `Move "${item.fileName}" to "${stageLabel}"?`, applyMove, 'success');
         }
       }
     });

@@ -648,13 +648,52 @@ const Billing = {
         },
         orderField: 'boardOrder',
         onDrop({ item, targetStatus, newOrder, fromStatus }) {
-          const changes = { boardOrder: newOrder };
-          if (fromStatus !== targetStatus) {
-            changes.status = targetStatus;
-            changes.updatedAt = new Date().toISOString();
+          if (fromStatus === targetStatus) {
+            DB.update('invoices', item.id, { boardOrder: newOrder });
+            App.handleRoute();
+            return;
           }
-          DB.update('invoices', item.id, changes);
-          App.handleRoute();
+
+          // Permission gate: only billing:approve can move to Approved
+          if (targetStatus === 'Approved' && !Auth.can('billing:approve')) {
+            Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve invoices.', 'danger');
+            return;
+          }
+
+          // Block if pending admin approval
+          if (item.pendingChangeId) {
+            Workflow.showMessage('Pending Approval', `Invoice "${item.invoiceNumber}" is pending administrative approval and cannot be moved.`, 'warning');
+            return;
+          }
+
+          // Block Draft → beyond Pending if no line items
+          if (fromStatus === 'Draft' && targetStatus !== 'Pending') {
+            const hasItems = item.items && item.items.length > 0;
+            if (!hasItems && (!item.total || item.total <= 0)) {
+              Workflow.showMessage('Incomplete Invoice', 'Cannot advance — invoice has no line items or amount.', 'warning');
+              return;
+            }
+          }
+
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+            DB.update('invoices', item.id, changes);
+            App.handleRoute();
+          };
+
+          // Confirm critical transitions
+          if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
+            const labels = {
+              'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
+              'Sent': { msg: `Mark invoice "${item.invoiceNumber}" as Sent to client?`, type: 'success' },
+              'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
+            };
+            const cfg = labels[targetStatus];
+            Workflow.showConfirm('Confirm Status Change', cfg.msg, applyMove, cfg.type);
+            return;
+          }
+
+          applyMove();
         }
       }
     });

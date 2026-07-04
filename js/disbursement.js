@@ -875,13 +875,54 @@ const Disbursement = {
         },
         orderField: 'boardOrder',
         onDrop({ item, targetStatus, newOrder, fromStatus }) {
-          const changes = { boardOrder: newOrder };
-          if (fromStatus !== targetStatus) {
-            changes.status = targetStatus;
-            changes.updatedAt = new Date().toISOString();
+          if (fromStatus === targetStatus) {
+            DB.update('disbursements', item.id, { boardOrder: newOrder });
+            App.handleRoute();
+            return;
           }
-          DB.update('disbursements', item.id, changes);
-          App.handleRoute();
+
+          // Permission gate: Approved requires disbursement:approve
+          if (targetStatus === 'Approved' && !Auth.can('disbursement:approve')) {
+            Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve disbursements.', 'danger');
+            return;
+          }
+
+          // Permission gate: Released requires mark_released or approve
+          if (targetStatus === 'Released' && !Auth.can('disbursement:mark_released') && !Auth.can('disbursement:approve')) {
+            Workflow.showMessage('Permission Denied', 'You do not have permission to release disbursements.', 'danger');
+            return;
+          }
+
+          // Block if pending admin approval
+          if (item.pendingChangeId) {
+            Workflow.showMessage('Pending Approval', 'This disbursement is pending administrative approval and cannot be moved.', 'warning');
+            return;
+          }
+
+          // Block Draft → beyond Pending if no amount
+          if (fromStatus === 'Draft' && targetStatus !== 'Pending' && (!item.amount || item.amount <= 0)) {
+            Workflow.showMessage('Incomplete Disbursement', 'Cannot advance — disbursement has no amount specified.', 'warning');
+            return;
+          }
+
+          const label = item.category + ' — ' + formatPHP(item.amount);
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+            DB.update('disbursements', item.id, changes);
+            App.handleRoute();
+          };
+
+          // Confirm critical transitions
+          if (['Approved', 'Released'].includes(targetStatus)) {
+            const msgs = {
+              'Approved': `Approve disbursement "${label}"?`,
+              'Released': `Mark disbursement "${label}" as Released? This confirms funds have been disbursed.`
+            };
+            Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
+            return;
+          }
+
+          applyMove();
         }
       }
     });

@@ -640,13 +640,39 @@ const Transmittal = {
         },
         orderField: 'boardOrder',
         onDrop({ item, targetStatus, newOrder, fromStatus }) {
-          const changes = { boardOrder: newOrder };
-          if (fromStatus !== targetStatus) {
-            changes.status = targetStatus;
-            changes.updatedAt = new Date().toISOString();
+          if (fromStatus === targetStatus) {
+            DB.update('transmittals', item.id, { boardOrder: newOrder });
+            App.handleRoute();
+            return;
           }
-          DB.update('transmittals', item.id, changes);
-          App.handleRoute();
+
+          // Block if pending admin approval
+          if (item.pendingChangeId) {
+            Workflow.showMessage('Pending Approval', 'This transmittal is pending administrative approval and cannot be moved.', 'warning');
+            return;
+          }
+
+          // Block Sent if no items attached
+          if (targetStatus === 'Sent' && (!item.items || item.items.length === 0)) {
+            Workflow.showMessage('Incomplete Transmittal', 'Cannot send — transmittal has no items attached.', 'warning');
+            return;
+          }
+
+          const label = item.trackingNumber || item.id;
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+            if (targetStatus === 'Sent') changes.sentAt = new Date().toISOString();
+            if (targetStatus === 'Acknowledged') changes.acknowledgedAt = new Date().toISOString();
+            DB.update('transmittals', item.id, changes);
+            App.handleRoute();
+          };
+
+          // Confirm both Sent and Acknowledged
+          const msgs = {
+            'Sent': `Mark transmittal "${label}" as Sent? This indicates the documents have been dispatched.`,
+            'Acknowledged': `Mark transmittal "${label}" as Acknowledged by the recipient?`
+          };
+          Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
         }
       }
     });
