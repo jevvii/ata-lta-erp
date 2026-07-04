@@ -502,7 +502,7 @@ const Clients = {
 
     const entityRadio = form.querySelector('[name="entity"]:checked, select[name="entity"]');
     if (!entityRadio || !entityRadio.value) {
-      showFieldError(form.querySelector('[name="entity"]'), 'Entity is required.');
+      showFieldError(entityRadio || form.querySelector('[name="entity"]'), 'Entity is required.');
       return;
     }
     // Collect contact details

@@ -22,6 +22,7 @@ window.LoadingManager = {
   },
 
   start: function() {
+    this.clear();
     this.timeoutId = setTimeout(() => {
       document.documentElement.classList.add('loading-active');
       const ls = document.getElementById('loading-screen');
