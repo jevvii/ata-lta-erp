@@ -706,6 +706,8 @@ const Disbursement = {
       'Rejected': '#ef4444'
     };
 
+    let cardNumber = 1;
+
     statuses.forEach(st => {
       const colColor = statusColors[st] || '#cbd5e1';
       const col = el('div', { class: 'board-column-v2' });
@@ -759,7 +761,7 @@ const Disbursement = {
         const description = descParts.join(' • ');
 
         const card = buildCompactBoardCard({
-          key: formatItemKey(d.id),
+          key: 'DIS-' + cardNumber++,
           statusColor: colColor,
           title: d.category,
           description,
@@ -773,13 +775,6 @@ const Disbursement = {
         const footerRight = card.querySelector('.card-v2-footer-right');
         footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);' }));
 
-        if (this.canEditDisbursement(d)) {
-          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;padding-top:6px;' });
-          const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
-          editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(d.id); });
-          cardActions.appendChild(editBtn);
-          card.appendChild(cardActions);
-        }
         cardContainer.appendChild(card);
       });
       col.appendChild(cardContainer);

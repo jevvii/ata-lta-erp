@@ -2442,11 +2442,13 @@ const Workflow = {
       'Cancelled': '#ef4444'
     };
 
+    let cardNumber = 1;
+
     statuses.forEach(st => {
       const colColor = statusColors[st] || '#cbd5e1';
       const col = el('div', { class: 'board-column-v2' });
       col.style.setProperty('--column-phase-color', colColor);
-      
+
       const colWrs = wrs.filter(wr => wr.status === st);
 
       const header = el('div', { class: 'board-column-header-v2' });
@@ -2496,7 +2498,7 @@ const Workflow = {
         const completedTasks = tasks.filter(t => t.status === 'Completed').length;
         const totalTasks = tasks.length;
         const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-        
+
         const allComments = tasks.reduce((acc, t) => acc + (t.comments?.length || 0), 0);
         const allDocs = tasks.reduce((acc, t) => acc + (t.taskDocuments?.length || 0), 0);
 
@@ -2529,7 +2531,7 @@ const Workflow = {
         if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
 
         const card = buildCompactBoardCard({
-          key: formatItemKey(wr.id),
+          key: 'WR-' + cardNumber++,
           statusColor: colColor,
           title: wr.title,
           description,
@@ -5500,6 +5502,8 @@ const Workflow = {
           'Cancelled': '#dc2626'
         };
 
+        let taskNumber = 1;
+
         statuses.forEach(st => {
           const colColor = statusColors[st] || '#cbd5e1';
           const colTasks = filteredTasks.filter(t => t.status === st);
@@ -5525,58 +5529,37 @@ const Workflow = {
           }
 
           colTasks.forEach(t => {
-            const card = el('div', { class: 'board-card board-card-v2', style: 'cursor: pointer;' });
-            card.style.borderLeftColor = colColor;
-            
+            const comp = getTaskChecklistCompletion(t);
+            const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
+            const priorityConfig = {
+              'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
+              'Priority': { label: 'High', cls: 'card-v2-priority-high' },
+              'High': { label: 'High', cls: 'card-v2-priority-high' },
+              'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
+              'Low': { label: 'Low', cls: 'card-v2-priority-low' }
+            }[t.priority] || { label: t.priority || 'Normal', cls: 'card-v2-priority-normal' };
+
+            const counts = [];
+            if (comp.total > 0) counts.push({ icon: BoardCardIcons.attachment, value: `${comp.done}/${comp.total}` });
+
+            const avatars = assigneeName ? [{ name: assigneeName }] : [];
+
+            const card = buildCompactBoardCard({
+              key: 'TSK-' + taskNumber++,
+              statusColor: colColor,
+              title: t.title,
+              date: t.dueDate ? formatDate(t.dueDate) : '',
+              priority: priorityConfig.label,
+              priorityClass: priorityConfig.cls,
+              avatars,
+              counts,
+              onClick: () => { this.showTaskSidePane(t.id, card); }
+            });
+
             if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
               card.classList.add('side-pane-active');
               window.SidePaneInstance.activeElement = card;
             }
-
-            card.addEventListener('click', () => {
-              this.showTaskSidePane(t.id, card);
-            });
-
-            const topRow = el('div', { class: 'card-v2-top' });
-            const pClass = { 'Urgent': 'badge-danger', 'Priority': 'badge-warn', 'Low Priority': 'badge-info' }[t.priority] || 'badge-muted';
-            topRow.appendChild(el('span', { class: `badge ${pClass}`, text: t.priority || 'Normal' }));
-            if (t.dueDate) {
-              topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(t.dueDate) }));
-            }
-            card.appendChild(topRow);
-
-            const titleRow = el('div', { class: 'card-v2-title-row' });
-            titleRow.appendChild(el('div', { class: 'card-v2-title', text: t.title }));
-            card.appendChild(titleRow);
-
-            const comp = getTaskChecklistCompletion(t);
-            const metaRow = el('div', { class: 'card-v2-meta', style: 'margin-top: 8px;' });
-            if (comp.total > 0) {
-              const metaLeft = el('div', { class: 'card-v2-meta-left' });
-              const progBar = el('div', { class: 'card-v2-progress' });
-              progBar.appendChild(el('div', { class: 'card-v2-progress-fill', style: `width: ${comp.percent}%; background-color: ${colColor};` }));
-              metaLeft.appendChild(progBar);
-              metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${comp.done}/${comp.total}` }));
-              metaRow.appendChild(metaLeft);
-            }
-
-            const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
-            if (assigneeName) {
-              const avatars = el('div', { class: 'card-v2-avatars' });
-              const av = el('div', { class: 'avatar-xs', title: assigneeName });
-              av.textContent = assigneeName.slice(0, 1).toUpperCase();
-              av.style.background = 'color-mix(in oklab, var(--accent), transparent 85%)';
-              av.style.color = 'var(--accent)';
-              av.style.fontWeight = '700';
-              av.style.display = 'flex';
-              av.style.alignItems = 'center';
-              av.style.justifyContent = 'center';
-              av.style.borderRadius = '50%';
-              av.style.fontSize = '10px';
-              avatars.appendChild(av);
-              metaRow.appendChild(avatars);
-            }
-            card.appendChild(metaRow);
 
             cardContainer.appendChild(card);
           });

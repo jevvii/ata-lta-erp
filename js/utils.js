@@ -66,17 +66,6 @@ function generateSequentialId(prefix, table) {
   return prefix + '-' + String(max + 1).padStart(4, '0');
 }
 
-/**
- * Turn a stored ID such as `wr-0001` or `dis-0102` into a display key
- * with an uppercase module prefix: `WR-0001`, `DIS-0102`.
- */
-function formatItemKey(id) {
-  if (!id) return '';
-  const [prefix, ...rest] = String(id).split('-');
-  if (!prefix) return String(id);
-  return prefix.toUpperCase() + (rest.length ? '-' + rest.join('-') : '');
-}
-
 function showFieldError(field, message) {
   // If the field is inside a datepicker/timepicker wrapper, target the form-group parent instead
   let container = field.parentElement;
@@ -167,9 +156,8 @@ const BoardCardIcons = {
  */
 function buildCompactBoardCard(opts) {
   const card = el('div', { class: 'board-card-v2 compact' });
-  if (opts.statusColor) card.style.borderLeftColor = opts.statusColor;
 
-  // Header: key + status dot + more menu
+  // Header: link icon + key + status dot + more menu
   const header = el('div', { class: 'card-v2-header' });
   const keyGroup = el('div', { class: 'card-v2-key-group' });
   keyGroup.appendChild(el('span', { class: 'card-v2-key-icon', html: BoardCardIcons.link }));
@@ -198,20 +186,10 @@ function buildCompactBoardCard(opts) {
   if (opts.description) body.appendChild(el('div', { class: 'card-v2-desc', text: opts.description }));
   card.appendChild(body);
 
-  // Footer
+  // Footer: avatars | date | priority  ...  counts
   const footer = el('div', { class: 'card-v2-footer' });
   const footerLeft = el('div', { class: 'card-v2-footer-left' });
-  if (opts.date) {
-    footerLeft.appendChild(el('div', { class: 'card-v2-footer-item', html: BoardCardIcons.calendar + ' ' + escapeHtml(opts.date) }));
-  }
-  if (opts.priority) {
-    const priorityEl = el('div', { class: 'card-v2-priority ' + (opts.priorityClass || '') });
-    priorityEl.innerHTML = BoardCardIcons.signal + ' ' + escapeHtml(opts.priority);
-    footerLeft.appendChild(priorityEl);
-  }
-  footer.appendChild(footerLeft);
 
-  const footerRight = el('div', { class: 'card-v2-footer-right' });
   if (opts.avatars && opts.avatars.length) {
     const avWrap = el('div', { class: 'card-v2-avatars' });
     opts.avatars.slice(0, 3).forEach(u => {
@@ -230,8 +208,20 @@ function buildCompactBoardCard(opts) {
       }
       avWrap.appendChild(av);
     });
-    footerRight.appendChild(avWrap);
+    footerLeft.appendChild(avWrap);
   }
+
+  if (opts.date) {
+    footerLeft.appendChild(el('div', { class: 'card-v2-footer-item', html: BoardCardIcons.calendar + ' ' + escapeHtml(opts.date) }));
+  }
+  if (opts.priority) {
+    const priorityEl = el('div', { class: 'card-v2-priority ' + (opts.priorityClass || '') });
+    priorityEl.innerHTML = BoardCardIcons.signal + ' ' + escapeHtml(opts.priority);
+    footerLeft.appendChild(priorityEl);
+  }
+  footer.appendChild(footerLeft);
+
+  const footerRight = el('div', { class: 'card-v2-footer-right' });
   if (opts.counts && opts.counts.length) {
     opts.counts.forEach(c => {
       if (!c.value) return;

@@ -2687,7 +2687,6 @@ tbody tr:hover {
   padding: var(--spacing-md);
   margin-bottom: var(--spacing-sm);
   border: 1px solid var(--color-border, #cbd5e1);
-  border-left: 3px solid transparent;
   cursor: pointer;
   transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
   position: relative;
@@ -2798,12 +2797,24 @@ tbody tr:hover {
   align-items: center;
 }
 
-/* ── Compact Board Card (Jira-style reference) ── */
+/* ── Compact Board Card — 1:1 reference parity ── */
 .board-card-v2.compact {
-  padding: 14px;
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e8ecf1);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.board-card-v2.compact:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+  border-color: var(--color-border, #d1d5db);
+  transform: translateY(-1px);
 }
 
 .card-v2-header {
@@ -2831,6 +2842,11 @@ tbody tr:hover {
   justify-content: center;
 }
 
+.card-v2-key-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 .card-v2-key {
   font-size: 0.75rem;
   font-weight: 600;
@@ -2846,6 +2862,8 @@ tbody tr:hover {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  border: 1.5px solid var(--color-surface);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 .card-v2-menu {
@@ -2857,7 +2875,7 @@ tbody tr:hover {
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 6px;
   flex-shrink: 0;
   padding: 0;
   margin: -4px -6px -4px 0;
@@ -2871,7 +2889,7 @@ tbody tr:hover {
 .board-card-v2.compact .card-v2-body {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -2907,7 +2925,7 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   margin-top: 2px;
   min-width: 0;
 }
@@ -2916,14 +2934,15 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .board-card-v2.compact .card-v2-footer-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -2962,17 +2981,19 @@ tbody tr:hover {
 .board-card-v2.compact .card-v2-avatars {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .board-card-v2.compact .card-v2-avatars .avatar-xs {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 2px solid var(--color-surface);
   background-size: cover;
   background-position: center;
   background-color: var(--color-bg-muted);
-  margin-left: -7px;
+  margin-left: -8px;
 }
 
 .board-card-v2.compact .card-v2-avatars .avatar-xs:first-child {

@@ -530,6 +530,8 @@ const Billing = {
       'Overdue': '#ef4444'
     };
 
+    let cardNumber = 1;
+
     statuses.forEach(st => {
       const colColor = statusColors[st] || '#cbd5e1';
       const colInvs = invoices.filter(inv => inv.status === st);
@@ -589,7 +591,7 @@ const Billing = {
         const description = descParts.join(' • ');
 
         const card = buildCompactBoardCard({
-          key: formatItemKey(inv.id),
+          key: 'INV-' + cardNumber++,
           statusColor: colColor,
           title: client?.name || '—',
           description,
@@ -605,24 +607,6 @@ const Billing = {
           footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
         }
         footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
-
-        // Draft actions
-        if (inv.status === 'Draft' && Auth.can('billing:edit')) {
-          const cardActions = el('div', { style: 'display:flex; gap:6px; padding-top:6px; border-top:1px solid var(--color-border);' });
-          const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.showForm(inv.id);
-          });
-          cardActions.appendChild(editBtn);
-          const trashBtn = el('button', { class: 'btn btn-danger btn-xs', text: 'Trash' });
-          trashBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.trashInvoice(inv.id);
-          });
-          cardActions.appendChild(trashBtn);
-          card.appendChild(cardActions);
-        }
 
         cardContainer.appendChild(card);
       });

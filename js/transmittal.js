@@ -509,6 +509,8 @@ const Transmittal = {
       'Acknowledged': '#10b981'
     };
 
+    let cardNumber = 1;
+
     statuses.forEach(st => {
       const colColor = statusColors[st] || '#cbd5e1';
       const colItems = items.filter(t => t.status === st);
@@ -545,7 +547,7 @@ const Transmittal = {
         const description = descParts.join(' • ');
 
         const card = buildCompactBoardCard({
-          key: t.trackingNumber,
+          key: 'TX-' + cardNumber++,
           statusColor: colColor,
           title: clientName,
           description,
@@ -555,13 +557,6 @@ const Transmittal = {
           onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
         });
 
-        if (this.canEditTransmittal(t)) {
-          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;padding-top:6px;' });
-          const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
-          editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
-          cardActions.appendChild(editBtn);
-          card.appendChild(cardActions);
-        }
         cardContainer.appendChild(card);
       });
       col.appendChild(cardContainer);

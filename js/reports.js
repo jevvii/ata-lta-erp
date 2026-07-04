@@ -353,6 +353,8 @@ const Reports = {
     const clients = DB.getAll('clients');
 
     const board = el('div', { class: 'board-v2' });
+    let taskNumber = 1;
+
     statuses.forEach(status => {
       const statusTasks = tasks.filter(t => t.status === status);
       const colColor = statusColors[status] || '#cbd5e1';
@@ -378,35 +380,31 @@ const Reports = {
           ? { name: t.assigneeName }
           : DB.getById('users', t.assigneeId || t.assignedTo);
 
-        const card = el('div', { class: 'board-card-v2' });
-        card.appendChild(el('div', { class: 'board-card-title-v2', text: t.title }));
-        if (client) card.appendChild(el('div', { class: 'board-card-client-v2', text: client.name }));
-        
-        const meta = el('div', { class: 'board-card-meta-v2', style: 'display: flex; flex-direction: column; gap: 8px;' });
-        if (assignee) {
-          const avatarUrl = assignee.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(assignee.name)}&background=2563eb&color=fff`;
-          const avatarDiv = el('div', { 
-            class: 'assignee-badge-v2', 
-            style: 'display: flex; align-items: center; gap: 8px;' 
-          }, [
-            el('div', {
-              style: `width: 28px; height: 28px; border-radius: 50%; background-image: url('${avatarUrl}'); background-size: cover; background-position: center; border: 1.5px solid var(--color-surface); box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-shrink: 0;`
-            }),
-            el('span', { text: assignee.name, style: 'font-size: 0.75rem; font-weight: 500; color: var(--color-text);' })
-          ]);
-          meta.appendChild(avatarDiv);
-        }
-        if (t.dueDate) {
-          meta.appendChild(el('div', { 
-            class: 'due-date-v2', 
-            style: 'font-size: 0.7rem; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px;' 
-          }, [
-            el('span', { text: '📅' }),
-            el('span', { text: formatDate(t.dueDate) })
-          ]));
-        }
-        card.appendChild(meta);
-        
+        const priorityConfig = {
+          'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
+          'Priority': { label: 'High', cls: 'card-v2-priority-high' },
+          'High': { label: 'High', cls: 'card-v2-priority-high' },
+          'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
+          'Low': { label: 'Low', cls: 'card-v2-priority-low' }
+        }[t.priority] || { label: t.priority || 'Normal', cls: 'card-v2-priority-normal' };
+
+        const avatars = assignee ? [{
+          name: assignee.name,
+          avatarUrl: assignee.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(assignee.name)}&background=2563eb&color=fff`
+        }] : [];
+
+        const card = buildCompactBoardCard({
+          key: 'TSK-' + taskNumber++,
+          statusColor: colColor,
+          title: t.title,
+          description: client?.name || '',
+          date: t.dueDate ? formatDate(t.dueDate) : '',
+          priority: priorityConfig.label,
+          priorityClass: priorityConfig.cls,
+          avatars,
+          onClick: () => { /* reports board is read-only summary */ }
+        });
+
         cardContainer.appendChild(card);
       });
       col.appendChild(cardContainer);

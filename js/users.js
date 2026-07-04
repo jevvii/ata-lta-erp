@@ -679,66 +679,46 @@ const Users = {
     const changeCards = el('div', { class: 'board-cards-scroll' });
     changeCol.appendChild(changeCards);
     
-    items.forEach(item => {
+    const expItems = items.filter(item => item.type === 'disbursement');
+    const billItems = items.filter(item => item.type !== 'disbursement');
+    let expNumber = 1;
+    let billNumber = 1;
+
+    const renderCard = (item, targetContainer, prefix) => {
       const submitter = DB.getById('users', item.submittedBy);
-      const card = el('div', {
-        class: 'board-card-v2 hover-card',
-        style: 'border-radius: 8px; padding: 16px; margin-bottom: 12px; cursor: pointer; display: flex; flex-direction: column; transition: all 0.2s ease;'
-      });
-      card.addEventListener('click', () => {
-        if (item.type === 'disbursement') {
-          location.hash = '#disbursement/detail/' + item.id;
-        } else {
-          this.pendingDetailId = item.id;
-          App.handleRoute();
+      const avatars = submitter ? [{ name: submitter.name, avatarUrl: submitter.avatarUrl }] : [];
+      const priorityClass = item.type === 'disbursement' ? 'card-v2-priority-medium' : 'card-v2-priority-normal';
+      const key = prefix + '-' + (item.type === 'disbursement' ? expNumber++ : billNumber++);
+
+      const card = buildCompactBoardCard({
+        key,
+        statusColor: item.type === 'disbursement' ? '#f59e0b' : '#3b82f6',
+        title: item.title,
+        description: item.subtitle,
+        date: item.submittedAt ? formatDate(item.submittedAt) : '',
+        priority: item.type === 'disbursement' ? 'Expense' : 'Billing',
+        priorityClass,
+        avatars,
+        onClick: () => {
+          if (item.type === 'disbursement') {
+            location.hash = '#disbursement/detail/' + item.id;
+          } else {
+            this.pendingDetailId = item.id;
+            App.handleRoute();
+          }
         }
       });
-      
-      const topRow = el('div', { class: 'card-v2-top', style: 'margin-bottom: 8px;' });
-      topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(item.submittedAt) }));
-      card.appendChild(topRow);
-      
-      card.appendChild(el('h4', {
-        text: item.title,
-        style: 'font-size: 0.875rem; font-weight: 600; color: var(--color-text); margin: 0 0 4px; line-height: 1.3;'
-      }));
 
-      card.appendChild(el('p', {
-        text: item.subtitle,
-        style: 'font-size: 0.75rem; color: var(--color-text-muted); margin: 0 0 10px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 32px;'
-      }));
-
-      card.appendChild(el('div', { style: 'height: 1px; background: var(--color-border); margin-bottom: 10px;' }));
-
-      const bottomRow = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-top: auto;' });
-      const infoLeft = el('div', { style: 'display: flex; flex-direction: column;' });
+      const footerRight = card.querySelector('.card-v2-footer-right');
       if (item.amount !== null && item.amount !== undefined) {
-        infoLeft.appendChild(el('span', {
-          text: formatPHP(item.amount),
-          style: 'font-size: 0.875rem; font-weight: 700; color: var(--color-text);'
-        }));
+        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(item.amount), style: 'font-weight:700;color:var(--color-text);' }));
       }
-      infoLeft.appendChild(el('span', {
-        text: `By: ${submitter ? submitter.name : 'System'}`,
-        style: 'font-size: 10px; color: var(--color-text-muted);'
-      }));
-      bottomRow.appendChild(infoLeft);
-      
-      const reviewBtn = el('button', {
-        class: 'btn btn-secondary btn-sm',
-        text: 'Review',
-        style: 'font-size: 11px; padding: 4px 8px;'
-      });
-      bottomRow.appendChild(reviewBtn);
-      
-      card.appendChild(bottomRow);
-      
-      if (item.type === 'disbursement') {
-        expCards.appendChild(card);
-      } else {
-        changeCards.appendChild(card);
-      }
-    });
+
+      targetContainer.appendChild(card);
+    };
+
+    expItems.forEach(item => renderCard(item, expCards, 'EXP'));
+    billItems.forEach(item => renderCard(item, changeCards, 'BIL'));
     
     board.appendChild(expCol);
     board.appendChild(changeCol);
