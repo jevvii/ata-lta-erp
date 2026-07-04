@@ -590,14 +590,18 @@ const Billing = {
         if (inv.fromTemplate) descParts.push('Recurring');
         const description = descParts.join(' • ');
 
+        const counts = [];
+        if (progress > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${progress}%` });
+
         const card = buildCompactBoardCard({
           key: 'INV-' + cardNumber++,
           statusColor: colColor,
-          title: client?.name || '—',
-          description,
+          title: inv.invoiceNumber,
+          description: client?.name || '—',
           date: inv.issueDate ? formatDate(inv.issueDate) : '',
           priority: inv.status,
           priorityClass: statusPriorityClass,
+          counts,
           onClick: () => { location.hash = '#billing/detail/' + inv.id; }
         });
 

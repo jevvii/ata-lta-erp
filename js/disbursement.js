@@ -764,7 +764,7 @@ const Disbursement = {
           key: 'DIS-' + cardNumber++,
           statusColor: colColor,
           title: d.category,
-          description,
+          description: `${emp?.name || '—'} • ${source}`,
           date: d.submittedAt ? formatDate(d.submittedAt) : '',
           priority: d.status,
           priorityClass: statusPriorityClass,

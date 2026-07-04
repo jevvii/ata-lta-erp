@@ -134,6 +134,7 @@ const BoardCardIcons = {
   signal: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="14"/><line x1="10" y1="20" x2="10" y2="10"/><line x1="14" y1="20" x2="14" y2="6"/><line x1="18" y1="20" x2="18" y2="2"/></svg>',
   comment: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 014 11.5a8.5 8.5 0 018.5-8.5 8.38 8.38 0 013.8.9L21 11.5z"/></svg>',
   attachment: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
+  checklist: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>',
   more: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>'
 };
 
@@ -157,13 +158,16 @@ const BoardCardIcons = {
 function buildCompactBoardCard(opts) {
   const card = el('div', { class: 'board-card-v2 compact' });
 
-  // Header: link icon + key + status dot + more menu
+  // 1. Header Row
   const header = el('div', { class: 'card-v2-header' });
   const keyGroup = el('div', { class: 'card-v2-key-group' });
   keyGroup.appendChild(el('span', { class: 'card-v2-key-icon', html: BoardCardIcons.link }));
   keyGroup.appendChild(el('span', { class: 'card-v2-key', text: opts.key || '' }));
   if (opts.statusColor) {
-    keyGroup.appendChild(el('span', { class: 'card-v2-status-dot', style: 'background:' + opts.statusColor + ';' }));
+    keyGroup.appendChild(el('span', {
+      class: 'card-v2-status-dot',
+      style: 'border-color:' + opts.statusColor + ';'
+    }));
   }
   header.appendChild(keyGroup);
 
@@ -180,16 +184,37 @@ function buildCompactBoardCard(opts) {
   header.appendChild(moreBtn);
   card.appendChild(header);
 
-  // Body
+  // 2. Title
   const body = el('div', { class: 'card-v2-body' });
   if (opts.title) body.appendChild(el('div', { class: 'card-v2-title', text: opts.title }));
+
+  // 3. Description
   if (opts.description) body.appendChild(el('div', { class: 'card-v2-desc', text: opts.description }));
   card.appendChild(body);
 
-  // Footer: avatars | date | priority  ...  counts
+  // 4. Metadata Row (date left, priority right)
+  const metaRow = el('div', { class: 'card-v2-meta-row' });
+  const metaLeft = el('div', { class: 'card-v2-meta-left' });
+  if (opts.date) {
+    metaLeft.appendChild(el('span', { class: 'card-v2-meta-icon', html: BoardCardIcons.calendar }));
+    metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: escapeHtml(opts.date) }));
+  } else {
+    metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: '' }));
+  }
+  metaRow.appendChild(metaLeft);
+
+  const metaRight = el('div', { class: 'card-v2-meta-right' });
+  if (opts.priority) {
+    const priorityEl = el('div', { class: 'card-v2-priority ' + (opts.priorityClass || '') });
+    priorityEl.innerHTML = BoardCardIcons.signal + '<span>' + escapeHtml(opts.priority) + '</span>';
+    metaRight.appendChild(priorityEl);
+  }
+  metaRow.appendChild(metaRight);
+  card.appendChild(metaRow);
+
+  // 5. Footer Row (avatars left, counts right)
   const footer = el('div', { class: 'card-v2-footer' });
   const footerLeft = el('div', { class: 'card-v2-footer-left' });
-
   if (opts.avatars && opts.avatars.length) {
     const avWrap = el('div', { class: 'card-v2-avatars' });
     opts.avatars.slice(0, 3).forEach(u => {
@@ -209,15 +234,6 @@ function buildCompactBoardCard(opts) {
       avWrap.appendChild(av);
     });
     footerLeft.appendChild(avWrap);
-  }
-
-  if (opts.date) {
-    footerLeft.appendChild(el('div', { class: 'card-v2-footer-item', html: BoardCardIcons.calendar + ' ' + escapeHtml(opts.date) }));
-  }
-  if (opts.priority) {
-    const priorityEl = el('div', { class: 'card-v2-priority ' + (opts.priorityClass || '') });
-    priorityEl.innerHTML = BoardCardIcons.signal + ' ' + escapeHtml(opts.priority);
-    footerLeft.appendChild(priorityEl);
   }
   footer.appendChild(footerLeft);
 

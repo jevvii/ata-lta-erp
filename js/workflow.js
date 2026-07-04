@@ -2522,13 +2522,12 @@ const Workflow = {
           'Low': { label: 'Low', cls: 'card-v2-priority-low' }
         }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
 
-        const descParts = [client?.name || '—'];
-        if (totalTasks > 0) descParts.push(`${progress}% complete`);
-        const description = descParts.join(' • ');
+        const description = client?.name || '—';
 
         const counts = [];
         if (allDocs > 0) counts.push({ icon: BoardCardIcons.attachment, value: allDocs });
         if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
+        if (totalTasks > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${progress}%` });
 
         const card = buildCompactBoardCard({
           key: 'WR-' + cardNumber++,
@@ -2542,36 +2541,6 @@ const Workflow = {
           counts,
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
         });
-
-        const badges = [];
-        if (transition && transition.canTransition) {
-          const readyBadge = el('span', {
-            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Ready to route',
-            class: 'badge badge-success btn-xs',
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;'
-          });
-          readyBadge.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.transitionWorkRequest(wr.id);
-          });
-          badges.push(readyBadge);
-        } else if (transition && transition.missing && transition.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-          const blockerBadge = el('span', {
-            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + transition.missing.length + ' pending',
-            class: 'badge badge-warn btn-xs',
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:help;'
-          });
-          blockerBadge.title = transition.missing.join('\n');
-          badges.push(blockerBadge);
-        }
-        if (wr.isPendingApproval) {
-          badges.push(el('span', { text: 'Awaiting Approval', class: 'badge badge-warning btn-xs', style: 'font-size:10px;border-radius:10px;' }));
-        }
-        if (badges.length) {
-          const badgeRow = el('div', { class: 'card-v2-badges' });
-          badges.forEach(b => badgeRow.appendChild(b));
-          card.insertBefore(badgeRow, card.querySelector('.card-v2-footer'));
-        }
 
         cardContainer.appendChild(card);
       });
