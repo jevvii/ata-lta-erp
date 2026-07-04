@@ -500,18 +500,12 @@ const Clients = {
       return;
     }
 
-    const entityRadio = form.querySelector('input[name="entity"]:checked');
-    if (!entityRadio) {
-      showFieldError(form.querySelector('input[name="entity"]'), 'Entity is required.');
-      return;
-    }
-
     // Collect contact details
     const contactDetails = [];
     let hasContactError = false;
     const cdContainer = document.getElementById('contact-details-container');
     if (cdContainer) {
-      cdContainer.querySelectorAll('.multi-entry-row').forEach(row => {
+      cdContainer.querySelectorAll('.notion-sub-row').forEach(row => {
         const valueInput = row.querySelector('input[name^="cd-value-"]');
         const labelInput = row.querySelector('input[name^="cd-label-"]');
         if (!valueInput || !labelInput) return;
@@ -551,7 +545,7 @@ const Clients = {
     const relatedCompanies = [];
     const rcContainer = document.getElementById('related-companies-container');
     if (rcContainer) {
-      rcContainer.querySelectorAll('.multi-entry-row').forEach(row => {
+      rcContainer.querySelectorAll('.notion-sub-row').forEach(row => {
         const clientId = row.querySelector('select[name^="rc-client-"]')?.value;
         const relationType = row.querySelector('select[name^="rc-relation-"]')?.value;
         if (clientId && relationType) {
@@ -579,7 +573,7 @@ const Clients = {
       address: data.address ? data.address.trim() : '',
       tradeName: data.tradeName ? data.tradeName.trim() : '',
       contactUserId,
-      entity: entityRadio.value,
+      entity: data.entity || (Auth.activeEntity !== 'ALL' ? Auth.activeEntity : 'ATA'),
       retainer: !!form.querySelector('input[name="retainer"]:checked'),
       contactDetails,
       relatedCompanies

@@ -67,6 +67,9 @@ function generateSequentialId(prefix, table) {
 }
 
 function showFieldError(field, message) {
+  if (!field) return;
+  if (typeof field === 'string') field = document.getElementById(field);
+  if (!field || !field.parentElement) return;
   // If the field is inside a datepicker/timepicker wrapper, target the form-group parent instead
   let container = field.parentElement;
   if (container && (container.classList.contains('mdp-wrapper') || container.classList.contains('mtp-wrapper'))) {
@@ -74,6 +77,7 @@ function showFieldError(field, message) {
     container.classList.add('input-error');
     container = container.parentElement;
   }
+  if (!container) return;
   let errorEl = container.querySelector('.field-error');
   if (!errorEl) {
     errorEl = document.createElement('span');
@@ -1473,4 +1477,33 @@ function closeFormPanelAndRoute(hash, messageConfig) {
     }
   }
 }
+
+/**
+ * Utility to compose CSS class strings from strings, numbers, arrays, or objects.
+ * Supports string primitives ('foo'), conditional objects ({ foo: true, bar: false }),
+ * and nested arrays without relying on Array.prototype.flat.
+ */
+function classNames(...args) {
+  const classes = [];
+  for (const arg of args) {
+    if (!arg) continue;
+    const type = typeof arg;
+    if (type === 'string' || type === 'number') {
+      classes.push(arg);
+    } else if (Array.isArray(arg)) {
+      if (arg.length > 0) {
+        const inner = classNames(...arg);
+        if (inner) classes.push(inner);
+      }
+    } else if (type === 'object') {
+      for (const key in arg) {
+        if (Object.prototype.hasOwnProperty.call(arg, key) && arg[key]) {
+          classes.push(key);
+        }
+      }
+    }
+  }
+  return classes.join(' ');
+}
+
 

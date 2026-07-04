@@ -995,6 +995,20 @@ const Disbursement = {
 
     const container = el('div');
 
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const headerActions = el('div', { class: 'form-actions-top' });
+    const submitBtnTop = el('button', { type: 'submit', form: 'disbursement-form', class: 'btn btn-primary', text: existing ? 'Update Expense' : 'Submit Expense' });
+    const cancelBtnTop = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+    cancelBtnTop.addEventListener('click', () => {
+      if (App.sidePane) App.sidePane.close();
+      this.view = 'list';
+      App.handleRoute();
+    });
+    headerActions.appendChild(submitBtnTop);
+    headerActions.appendChild(cancelBtnTop);
+    headerBar.appendChild(headerActions);
+    container.appendChild(headerBar);
+
     const form = el('form', { class: 'form-stacked notion-form', id: 'disbursement-form' });
 
     // ── Top property grid ──

@@ -106,6 +106,14 @@ const Workflow = {
   expandedTaskIds: new Set(),
   lastRenderedWrId: null,
 
+  isCompleted(itemOrTask) {
+    return !!(itemOrTask && (itemOrTask.status === 'Completed' || itemOrTask.completed));
+  },
+
+  getCompletedClass(itemOrTask) {
+    return this.isCompleted(itemOrTask) ? 'is-completed' : '';
+  },
+
   standardTaskTemplates: [
     { title: 'Gathering requirements and preparing documents for preprocessing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }] },
     { title: 'Gather requirements and prepare documents needed for processing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }], coAssignees: ['Employee 1', 'Employee 2', 'Employee 3'] },
@@ -609,7 +617,7 @@ const Workflow = {
         const taskCard = el('div', { class: 'checklist-view-item-wrap' });
         
         // Primary Task Row
-        const taskRow = el('div', { class: 'checklist-view-row task-level' + (t.status === 'Completed' ? ' completed' : '') });
+        const taskRow = el('div', { class: classNames('checklist-view-row', 'task-level', this.getCompletedClass(t)) });
         
         if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
           taskRow.classList.add('side-pane-active');
@@ -679,7 +687,7 @@ const Workflow = {
           
           normalizedCL.forEach(item => {
             const blocked = isChecklistBlocked(item, normalizedCL);
-            const subRow = el('div', { class: 'checklist-view-row sub-level' + (item.completed ? ' completed' : '') + (blocked ? ' blocked' : '') });
+            const subRow = el('div', { class: classNames('checklist-view-row', 'sub-level', this.getCompletedClass(item), blocked && 'blocked') });
             
             // Indent spacer
             subRow.appendChild(el('div', { class: 'inline-cl-spacer' }));
@@ -2989,7 +2997,7 @@ const Workflow = {
           normalizedChecklist.forEach((item, idx) => {
             const blocked = isChecklistBlocked(item, normalizedChecklist);
             const prereq = item.dependsOn === '*' ? null : normalizedChecklist.find(c => c.id === item.dependsOn);
-            const row = el('div', { class: 'checklist-item' + (blocked ? ' locked' : '') + (item.completed ? ' completed' : '') });
+            const row = el('div', { class: classNames('checklist-item', blocked && 'locked', this.getCompletedClass(item)) });
             
             const cb = el('input', { type: 'checkbox' });
             cb.checked = !!item.completed;
@@ -3008,7 +3016,7 @@ const Workflow = {
 
             const textValue = blocked ? ('🔒 Waiting for: ' + (item.dependsOn === '*' ? 'All Task (*)' : (prereq ? prereq.text : 'Unknown'))) : item.text;
             const textWrap = el('div', { class: 'checklist-text' });
-            textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '', title: textValue }));
+            textWrap.appendChild(el('span', { text: textValue, class: classNames(this.getCompletedClass(item)), title: textValue }));
             const categoryBadge = el('span', {
               text: item.category === 'document' ? 'Document' : 'Sub-task',
               class: 'checklist-category-badge',
@@ -5622,6 +5630,11 @@ const Workflow = {
               onClick: () => { self.showTaskSidePane(t.id, card); }
             });
 
+            const completedClass = self.getCompletedClass(t);
+            if (completedClass) {
+              card.classList.add(completedClass);
+            }
+
             if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
               card.classList.add('side-pane-active');
               window.SidePaneInstance.activeElement = card;
@@ -5684,7 +5697,7 @@ const Workflow = {
         const list = el('div', { class: 'list-view task-list-no-card operations-list-view', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-2);' });
         
         filteredTasks.forEach(t => {
-          const row = el('div', { class: 'list-item task-list-row-flat', style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
+          const row = el('div', { class: classNames('list-item', 'task-list-row-flat', this.getCompletedClass(t)), style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
           
           if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
             row.classList.add('side-pane-active');
@@ -5787,7 +5800,7 @@ const Workflow = {
 
         const expanded = this.expandedTaskIds.has(t.id);
         const selected = container.selectedTaskIds.has(t.id);
-        const rowEl = el('div', { class: 'task-row' + (expanded ? ' expanded' : '') + (selected ? ' selected' : '') });
+        const rowEl = el('div', { class: classNames('task-row', expanded && 'expanded', selected && 'selected', this.getCompletedClass(t)) });
         rowEl.dataset.id = t.id;
 
         // 1. Checkbox cell
@@ -6237,7 +6250,7 @@ const Workflow = {
               
               // Wrapping text in checklist-text span/div structure
               const textWrap = el('div', { class: 'checklist-text' });
-              textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '', title: textValue }));
+              textWrap.appendChild(el('span', { text: textValue, class: classNames(this.getCompletedClass(item)), title: textValue }));
               const categoryBadge = el('span', {
                 text: item.category === 'document' ? 'Document' : 'Sub-task',
                 class: 'checklist-category-badge',
@@ -8552,12 +8565,7 @@ const Workflow = {
       if (wr.status === 'Draft') {
         capStatus = 'Assigned';
       } else if (wr.status === 'Pre-processing') {
-        const title = (task.title || '').toLowerCase();
-        if (title.includes('requirement') || title.includes('gather')) {
-          capStatus = 'Completed';
-        } else {
-          capStatus = 'Assigned';
-        }
+        capStatus = 'Completed';
       } else if (wr.status === 'Processing') {
         capStatus = 'Completed';
       } else if (wr.status === 'Billing' || wr.status === 'Disbursement') {

@@ -734,6 +734,20 @@ const Transmittal = {
 
     const container = el('div');
 
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const headerActions = el('div', { class: 'form-actions-top' });
+    const submitBtnTop = el('button', { type: 'submit', form: 'transmittal-form', class: 'btn btn-primary', text: existing ? 'Update Transmittal' : 'Create Transmittal' });
+    const cancelBtnTop = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+    cancelBtnTop.addEventListener('click', () => {
+      if (App.sidePane) App.sidePane.close();
+      this.view = 'list';
+      App.handleRoute();
+    });
+    headerActions.appendChild(submitBtnTop);
+    headerActions.appendChild(cancelBtnTop);
+    headerBar.appendChild(headerActions);
+    container.appendChild(headerBar);
+
     const form = el('form', { id: 'transmittal-form', class: 'form-stacked notion-form' });
 
     // ── Top property grid ──

@@ -7187,6 +7187,7 @@ tbody tr:hover {
   border-bottom: none;
 }
 
+.checklist-view-row.task-level.is-completed .checklist-view-title,
 .checklist-view-row.task-level.completed .checklist-view-title {
   text-decoration: line-through;
   color: var(--color-text-muted);
@@ -7205,10 +7206,12 @@ tbody tr:hover {
   border-bottom: none;
 }
 
+.checklist-view-row.sub-level.is-completed,
 .checklist-view-row.sub-level.completed {
   background-color: color-mix(in oklab, var(--color-success) 4%, transparent);
 }
 
+.checklist-view-row.sub-level.is-completed .checklist-view-title,
 .checklist-view-row.sub-level.completed .checklist-view-title {
   text-decoration: line-through;
   color: var(--color-text-muted);
@@ -8238,16 +8241,20 @@ tbody tr:hover {
   transition: background-color 0.2s ease, border-left-color 0.2s ease;
 }
 
+.detail-panel .checklist-item.is-completed,
+.side-pane-toggle-content .checklist-item.is-completed,
 .detail-panel .checklist-item.completed,
 .side-pane-toggle-content .checklist-item.completed {
-  background-color: color-mix(in srgb, var(--color-success) 6%, transparent);
+  background-color: color-mix(in oklab, var(--color-success) 6%, transparent);
   border-left-color: var(--color-success);
 }
 
+.detail-panel .checklist-item.is-completed .checklist-text span,
+.side-pane-toggle-content .checklist-item.is-completed .checklist-text span,
 .detail-panel .checklist-item.completed .checklist-text span,
 .side-pane-toggle-content .checklist-item.completed .checklist-text span {
   text-decoration: line-through;
-  color: var(--muted);
+  color: var(--color-text-muted);
   opacity: 0.65;
 }
 
@@ -8701,6 +8708,7 @@ tbody tr:hover {
 .project-detail-v2 .checklist-view-cb {
   accent-color: var(--accent);
 }
+.project-detail-v2 .checklist-view-row.sub-level.is-completed,
 .project-detail-v2 .checklist-view-row.sub-level.completed {
   background-color: color-mix(in oklab, var(--accent) 4%, transparent);
 }
@@ -8778,6 +8786,7 @@ tbody tr:hover {
   color: var(--fg);
   font-weight: 600;
 }
+.project-detail-v2 .task-v2-title.is-completed,
 .project-detail-v2 .task-v2-title.completed { color: var(--muted); }
 .project-detail-v2 .task-group-footer {
   color: var(--fg);
@@ -9580,9 +9589,7 @@ tbody tr * {
 /* ─── Side Pane Form Panel Layout ─── */
 /* When a form is rendered inside the side panel, restructure the layout */
 
-/* Hide the form's built-in header bar when inside the panel */
-.side-pane-body .side-pane-form-wrapper > .form-header-bar,
-.side-pane-body .side-pane-form-wrapper > form > .form-header-bar,
+/* Hide the page title bar when inside the panel */
 .side-pane-body .side-pane-form-wrapper .page-title-bar-v2 {
   display: none !important;
 }
@@ -11252,6 +11259,76 @@ tbody tr * {
   color: var(--color-text-muted);
 }
 
+/* ==========================================================================
+   Completed Item Indication Styles (Table, Board, List, Checklist)
+   ========================================================================== */
+
+/* Shared Completed Utility Rules */
+.is-completed .title-main,
+.is-completed .card-v2-title,
+.is-completed .list-item-title,
+.is-completed .checklist-view-title,
+.is-completed .checklist-text span {
+  text-decoration: line-through;
+  text-decoration-color: var(--color-text-muted, #9494a0);
+  text-decoration-color: color-mix(in oklab, var(--color-text, #2d2d3f) 20%, transparent);
+  color: var(--color-text-muted, #9494a0);
+}
+.is-completed .badge,
+.is-completed .avatar-xs,
+.is-completed .card-v2-progress,
+.is-completed .caret {
+  filter: grayscale(60%) opacity(70%);
+}
+
+/* View-Specific Backgrounds & Borders (with legacy browser fallbacks) */
+
+/* 1. Table View */
+.task-list .task-row.is-completed {
+  background-color: var(--color-surface, #ffffff);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 2.5%, var(--color-surface, #ffffff));
+}
+.task-list .task-row.is-completed .cell {
+  color: var(--color-text-muted, #9494a0);
+}
+
+/* 2. Board View */
+.board-v2 .board-card-v2.is-completed {
+  background-color: var(--color-surface, #ffffff);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 2.5%, var(--color-surface, #ffffff));
+  border-left-color: var(--color-success, #10b981);
+}
+
+/* 3. List View */
+.operations-list-view .list-item.is-completed {
+  background-color: var(--color-surface, #ffffff);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 2.5%, var(--color-surface, #ffffff));
+  border-left: 3px solid var(--color-success, #10b981);
+}
+
+/* 4. Checklist View */
+.checklist-view-container .checklist-view-row.task-level.is-completed {
+  background-color: var(--color-surface, #ffffff);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 3%, var(--color-surface, #ffffff));
+  border-left: 3px solid var(--color-success, #10b981);
+}
+.checklist-view-container .checklist-view-row.sub-level.is-completed {
+  background-color: var(--color-surface, #ffffff);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 5%, transparent);
+}
+.project-detail-v2 .checklist-view-container .checklist-view-row.sub-level.is-completed {
+  background-color: var(--color-surface, #ffffff);
+  background-color: color-mix(in oklab, var(--color-primary, #2563eb) 5%, transparent);
+}
+
+/* 5. Detail Panel / Side Pane Checklists */
+.detail-panel .checklist-item.is-completed,
+.side-pane-toggle-content .checklist-item.is-completed {
+  background-color: var(--color-surface, #ffffff);
+  background-color: color-mix(in oklab, var(--color-success, #10b981) 6%, transparent);
+  border-left-color: var(--color-success, #10b981);
+}
+
 [data-theme="dark"] .side-pane-view-menu {
   background: var(--color-surface);
   border-color: var(--color-border);
@@ -11357,6 +11434,50 @@ tbody tr * {
   --color-info-border: #1e40af;
   color-scheme: dark;
 }
+
+/* Notion popover submit button */
+[data-theme="dark"] .notion-popover-submit { color: #191919; }
+
+/* WR task detail panes */
+[data-theme="dark"] .task-details-left,
+[data-theme="dark"] .task-details-right { border-color: var(--color-border); }
+[data-theme="dark"] .checklist-item-row { border-bottom-color: var(--color-border); }
+[data-theme="dark"] .checklist-item-row.blocked { background: var(--color-bg-muted); }
+[data-theme="dark"] .checklist-item-text.completed { color: var(--color-success); }
+[data-theme="dark"] .checklist-time-pill { background: rgba(59, 130, 246, 0.18); color: #93c5fd; }
+[data-theme="dark"] .time-log-group-title,
+[data-theme="dark"] .dependency-mini-map,
+[data-theme="dark"] .checklist-progress-text { color: var(--color-text-muted); }
+[data-theme="dark"] .time-log-entry { color: var(--color-text); border-bottom-color: var(--color-border); }
+
+/* Empty states */
+[data-theme="dark"] .empty-state,
+[data-theme="dark"] .task-empty-state { background: var(--color-bg-muted); border-color: var(--color-border); }
+[data-theme="dark"] .task-empty-state svg,
+[data-theme="dark"] .task-empty-state p { color: var(--color-text-muted); }
+
+[data-theme="dark"] .empty-state-v2 {
+  background: var(--color-bg-muted);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}
+[data-theme="dark"] .empty-state-v2.compact,
+[data-theme="dark"] .empty-state-v2.card-empty,
+[data-theme="dark"] .board-cards-scroll > .empty-state-v2 {
+  background: transparent;
+}
+[data-theme="dark"] .empty-state-v2 .empty-state-icon {
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+[data-theme="dark"] .empty-state-v2 .empty-state-title { color: var(--color-text); }
+[data-theme="dark"] .empty-state-v2 .empty-state-body { color: var(--color-text-muted); }
+[data-theme="dark"] .empty-state-v2 .empty-state-clear { color: var(--color-primary); }
+[data-theme="dark"] .empty-state-v2 .empty-state-clear:hover { color: var(--color-primary-dark); }
+
+/* Scrollbars */
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--color-border); }
+[data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
 
 [data-theme="dark"] body,
 [data-theme="dark"] #app-shell,
@@ -11940,4 +12061,3 @@ tbody tr * {
 /* Scrollbars */
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--color-border); }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
-
