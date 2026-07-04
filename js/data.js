@@ -22,14 +22,15 @@ function makeId(prefix, num) {
 
 function defaultRequirementChecklist(taskId) {
   const items = [
-    'SEC Certificate',
-    'Articles of Incorporation',
-    "Mayor's Permit",
-    'BIR Form 1901/1903'
+    { text: 'SEC Certificate', category: 'document' },
+    { text: 'Articles of Incorporation', category: 'document' },
+    { text: "Mayor's Permit", category: 'document' },
+    { text: 'BIR Form 1901/1903', category: 'document' }
   ];
-  return items.map((text, i) => ({
+  return items.map((item, i) => ({
     id: taskId + '-cl-' + String(i + 1).padStart(3, '0'),
-    text,
+    text: item.text,
+    category: item.category,
     completed: false,
     assigneeId: null,
     assigneeName: null,
@@ -1782,11 +1783,12 @@ const DB = {
       }
       t.checklist = t.checklist.map(item => {
         if (typeof item === 'string') {
-          return { id: generateId('chk'), text: item, completed: false, assigneeId: null, assigneeName: null };
+          return { id: generateId('chk'), text: item, category: 'subtask', completed: false, assigneeId: null, assigneeName: null };
         }
         return {
           id: item.id || generateId('chk'),
           text: item.text || '',
+          category: item.category || 'subtask',
           completed: !!item.completed,
           assigneeId: item.assigneeId || null,
           assigneeName: item.assigneeName || null

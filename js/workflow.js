@@ -150,8 +150,8 @@ const Workflow = {
   lastRenderedWrId: null,
 
   standardTaskTemplates: [
-    { title: 'Gathering requirements and preparing documents for preprocessing', defaultChecklist: ['SEC Certificate', 'Articles of Incorporation', "Mayor's Permit", 'BIR Form 1901/1903'] },
-    { title: 'Gather requirements and prepare documents needed for processing', defaultChecklist: ['SEC Certificate', "Mayor's Permit", 'BIR Form 1901/1903', 'Articles of Incorporation'], coAssignees: ['Employee 1', 'Employee 2', 'Employee 3'] },
+    { title: 'Gathering requirements and preparing documents for preprocessing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }] },
+    { title: 'Gather requirements and prepare documents needed for processing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }], coAssignees: ['Employee 1', 'Employee 2', 'Employee 3'] },
     { title: 'Creation of ORUS account', defaultChecklist: [] },
     { title: 'Registration of Books of Accounts', defaultChecklist: [] },
     { title: 'Application and Received of Authority to Print', defaultChecklist: [] },
@@ -354,15 +354,15 @@ const Workflow = {
     switch (wr.status) {
       case 'Draft':
         if (!wr.clientId) { canTransition = false; missing.push('Client assignment'); }
-        const wrAssigned = !!wr.assignedTo;
-        const allTasksAssigned = tasks.length > 0 && tasks.every(t => t.assigneeId || t.assignedTo || t.assigneeName);
-        if (!wrAssigned && !allTasksAssigned) {
+        if (tasks.length === 0) {
           canTransition = false;
-          missing.push('Employee assignment');
-        }
-        // Rule 1: Requires signed proposal/retainer placeholder
-        if (!tasks.some(t => t.taskDocuments?.length > 0)) { 
-            // In real world, we'd check for a specific 'Proposal' doc type
+          missing.push('At least one task is required');
+        } else {
+          const unassignedTasks = tasks.filter(t => !(t.assigneeId || t.assignedTo || t.assigneeName));
+          if (unassignedTasks.length > 0) {
+            canTransition = false;
+            missing.push('All tasks must be assigned before routing');
+          }
         }
         break;
 
@@ -605,12 +605,13 @@ const Workflow = {
   ensureTaskChecklistNormalized(task, persist = false) {
     if (!task) return;
     const checklist = task.checklist || [];
-    const hasUnnormalized = checklist.some(item => 
-      typeof item === 'string' || 
-      !item.id || 
-      !('completed' in item) || 
-      !('dependsOn' in item) || 
-      !('timeLogs' in item)
+    const hasUnnormalized = checklist.some(item =>
+      typeof item === 'string' ||
+      !item.id ||
+      !('completed' in item) ||
+      !('dependsOn' in item) ||
+      !('timeLogs' in item) ||
+      !('category' in item)
     );
     if (hasUnnormalized) {
       const normalized = checklist.map(item => {
@@ -620,6 +621,7 @@ const Workflow = {
         return {
           id: id,
           text: text,
+          category: typeof item === 'object' && item ? (item.category || 'subtask') : 'subtask',
           completed: typeof item === 'object' && item ? !!item.completed : false,
           assigneeId: typeof item === 'object' && item ? item.assigneeId || null : null,
           assigneeName: typeof item === 'object' && item ? item.assigneeName || null : null,
@@ -2464,7 +2466,7 @@ const Workflow = {
       if (st === 'Draft' && Auth.can('workflow:edit')) {
         const addCard = el('div', {
           class: 'board-card-v2 add-wr-card',
-          style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
+          style: 'background: transparent; border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
         });
         addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request';
         addCard.addEventListener('click', () => {
@@ -2500,7 +2502,6 @@ const Workflow = {
         const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
         const allComments = tasks.reduce((acc, t) => acc + (t.comments?.length || 0), 0);
-        const allDocs = tasks.reduce((acc, t) => acc + (t.taskDocuments?.length || 0), 0);
 
         const assigneeIds = [...new Set(tasks.map(t => t.assigneeId || t.assignedTo).filter(Boolean))];
         let assignees = assigneeIds.map(id => DB.getById('users', id)).filter(Boolean);
@@ -2516,19 +2517,58 @@ const Workflow = {
         const transition = this.getPhaseTransitionStatus(wr.id);
         const priorityConfig = {
           'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
-          'Priority': { label: 'High', cls: 'card-v2-priority-high' },
-          'High': { label: 'High', cls: 'card-v2-priority-high' },
+          'Priority': { label: 'Priority', cls: 'card-v2-priority-urgent' },
+          'High': { label: 'High', cls: 'card-v2-priority-urgent' },
           'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
           'Low': { label: 'Low', cls: 'card-v2-priority-low' }
         }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
 
         const description = client?.name || '—';
 
+        const allChecklistItems = tasks.flatMap(t => t.checklist || []);
+        const documentItems = allChecklistItems.filter(c => c.category === 'document');
+        const subtaskItems = allChecklistItems.filter(c => c.category === 'subtask');
+        const completedDocs = documentItems.filter(c => c.completed).length;
+        const completedSubtasks = subtaskItems.filter(c => c.completed).length;
+
+        const leftCounts = [];
+        leftCounts.push({
+          icon: BoardCardIcons.task,
+          value: `${completedTasks}/${totalTasks}`,
+          title: `${completedTasks} of ${totalTasks} tasks completed`
+        });
+        if (documentItems.length > 0) {
+          leftCounts.push({
+            icon: BoardCardIcons.document,
+            value: `${completedDocs}/${documentItems.length}`,
+            title: `${completedDocs} of ${documentItems.length} required documents complete`
+          });
+        }
+        if (subtaskItems.length > 0) {
+          leftCounts.push({
+            icon: BoardCardIcons.checklist,
+            value: `${completedSubtasks}/${subtaskItems.length}`,
+            title: `${completedSubtasks} of ${subtaskItems.length} sub-tasks complete`
+          });
+        }
+
         const counts = [];
-        if (allDocs > 0) counts.push({ icon: BoardCardIcons.attachment, value: allDocs });
         if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
 
         const badges = [];
+
+        // Admin-only assigned-employee badge for draft work requests
+        if (st === 'Draft' && Auth.user?.role === 'Admin') {
+          const assignee = wr.assignedTo ? DB.getById('users', wr.assignedTo) : null;
+          const assigneeBadge = el('span', {
+            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + escapeHtml(assignee ? assignee.name : 'Unassigned'),
+            class: 'badge ' + (assignee ? 'badge-info' : 'badge-warn'),
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
+            title: assignee ? 'Assigned employee: ' + assignee.name : 'No employee assigned'
+          });
+          badges.push(assigneeBadge);
+        }
+
         if (transition && transition.canTransition) {
           const readyBadge = el('span', {
             html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>',
@@ -2553,6 +2593,32 @@ const Workflow = {
           badges.push(el('span', { text: 'Awaiting Approval', class: 'badge badge-warning', style: 'font-size:10px;border-radius:10px;' }));
         }
 
+        // Financial / document linkage presence badges (right footer)
+        if (wr.linkedInvoiceId) {
+          badges.push(el('span', {
+            html: BoardCardIcons.billing,
+            class: 'badge badge-info',
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
+            title: 'Billing linked'
+          }));
+        }
+        if ((wr.linkedDisbursementIds || []).length > 0) {
+          badges.push(el('span', {
+            html: BoardCardIcons.disbursement,
+            class: 'badge badge-info',
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
+            title: `${wr.linkedDisbursementIds.length} disbursement(s) linked`
+          }));
+        }
+        if ((wr.linkedTransmittalIds || []).length > 0) {
+          badges.push(el('span', {
+            html: BoardCardIcons.transmittal,
+            class: 'badge badge-info',
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
+            title: `${wr.linkedTransmittalIds.length} transmittal(s) linked`
+          }));
+        }
+
         const card = buildCompactBoardCard({
           key: 'WR-' + cardNumber++,
           progress,
@@ -2563,6 +2629,7 @@ const Workflow = {
           priority: priorityConfig.label,
           priorityClass: priorityConfig.cls,
           avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
+          leftCounts,
           counts,
           badges,
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
@@ -2966,6 +3033,12 @@ const Workflow = {
             const textValue = blocked ? ('🔒 Waiting for: ' + (item.dependsOn === '*' ? 'All Task (*)' : (prereq ? prereq.text : 'Unknown'))) : item.text;
             const textWrap = el('div', { class: 'checklist-text' });
             textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '', title: textValue }));
+            const categoryBadge = el('span', {
+              text: item.category === 'document' ? 'Document' : 'Sub-task',
+              class: 'checklist-category-badge',
+              style: 'font-size:0.65rem; padding:1px 5px; border-radius:8px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600; margin-left:6px;'
+            });
+            textWrap.appendChild(categoryBadge);
             row.appendChild(cb);
             row.appendChild(textWrap);
 
@@ -3091,7 +3164,12 @@ const Workflow = {
       if (allowAddRequirements) {
         const addChecklistRow = el('div', { class: 'add-checklist', style: 'margin-top: 12px; display: flex; gap: 8px; align-items: center;' });
         const newItemInput = el('input', { type: 'text', placeholder: 'Add sub-task...', class: 'form-control', style: 'flex: 1;' });
-        
+
+        // Category selector for new checklist items
+        const categorySel = el('select', { class: 'form-select', style: 'width: 110px; flex-shrink: 0;' });
+        categorySel.appendChild(el('option', { value: 'subtask', text: 'Sub-task' }));
+        categorySel.appendChild(el('option', { value: 'document', text: 'Document' }));
+
         // Custom single-select styled as dependency selector
         const predWrapper = el('div', { class: 'multi-select-dropdown', style: 'width: 160px;' });
         const predBtn = el('button', { type: 'button', class: 'multi-select-btn', text: '— Dependency —', style: 'width: 100%; height: 32px;' });
@@ -3169,9 +3247,8 @@ const Workflow = {
 
         if (wr && wr.isPendingApproval) {
           disableForApproval(newItemInput);
-
+          disableForApproval(categorySel);
           disableForApproval(predBtn);
-
           disableForApproval(addItemBtn);
         } else {
           predBtn.addEventListener('click', (e) => {
@@ -3187,7 +3264,7 @@ const Workflow = {
             const val = newItemInput.value.trim();
             if (!val) return;
             const prereqId = selectedPrereqId || null;
-            normalizedChecklist.push({ id: generateId('chk'), text: val, completed: false, assigneeId: null, assigneeName: null, dependsOn: prereqId, timeLogs: [] });
+            normalizedChecklist.push({ id: generateId('chk'), text: val, category: categorySel.value || 'subtask', completed: false, assigneeId: null, assigneeName: null, dependsOn: prereqId, timeLogs: [] });
             DB.update('tasks', task.id, { checklist: normalizedChecklist, updatedAt: new Date().toISOString() });
             this.showTaskSidePane(taskId, triggerElement);
             App.handleRoute();
@@ -3195,6 +3272,7 @@ const Workflow = {
         }
 
         addChecklistRow.appendChild(newItemInput);
+        addChecklistRow.appendChild(categorySel);
         addChecklistRow.appendChild(predWrapper);
         addChecklistRow.appendChild(addItemBtn);
         cont.appendChild(addChecklistRow);
@@ -3816,13 +3894,14 @@ const Workflow = {
     // Priority
     const priorityGroup = el('div', { class: 'notion-prop' });
     priorityGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Priority' }));
-    const prioritySel = el('select', { name: 'priority', class: 'notion-prop-select' });
+    const prioritySel = el('select', { name: 'priority', class: 'notion-prop-select', required: true });
+    prioritySel.appendChild(el('option', { value: 'Normal', text: 'Normal' }));
     ['Urgent', 'Priority', 'Low Priority'].forEach(p => {
       const opt = el('option', { value: p, text: p });
       if (wr && wr.priority === p) opt.selected = true;
       prioritySel.appendChild(opt);
     });
-    if (wr && wr.priority && !['Urgent','Priority','Low Priority'].includes(wr.priority)) {
+    if (wr && wr.priority && !['Normal','Urgent','Priority','Low Priority'].includes(wr.priority)) {
       const fallbackOpt = el('option', { value: wr.priority, text: wr.priority });
       fallbackOpt.selected = true;
       prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
@@ -3833,14 +3912,14 @@ const Workflow = {
     // Due Date
     const dueGroup = el('div', { class: 'notion-prop' });
     dueGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Due Date' }));
-    dueGroup.appendChild(el('input', { type: 'date', name: 'dueDate', class: 'notion-prop-input', value: wr ? (wr.dueDate || '') : '' }));
+    dueGroup.appendChild(el('input', { type: 'date', name: 'dueDate', class: 'notion-prop-input', required: true, value: wr ? (wr.dueDate || '') : '' }));
     propsGrid.appendChild(dueGroup);
 
     // Assignee
     const assigneeGroup = el('div', { class: 'notion-prop' });
     assigneeGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Assignee' }));
-    const assigneeSel = el('select', { name: 'assignedTo', class: 'notion-prop-select' });
-    assigneeSel.appendChild(el('option', { value: '', text: '— Unassigned —' }));
+    const assigneeSel = el('select', { name: 'assignedTo', class: 'notion-prop-select', required: true });
+    assigneeSel.appendChild(el('option', { value: '', text: '— Select —' }));
     DB.getWhere('users', u => u.entities.includes(entity) || u.entities.includes(entity.toLowerCase())).forEach(u => {
       const opt = el('option', { value: u.id, text: u.name });
       if (wr && wr.assignedTo === u.id) opt.selected = true;
@@ -5528,8 +5607,8 @@ const Workflow = {
             const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
             const priorityConfig = {
               'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
-              'Priority': { label: 'High', cls: 'card-v2-priority-high' },
-              'High': { label: 'High', cls: 'card-v2-priority-high' },
+              'Priority': { label: 'Priority', cls: 'card-v2-priority-urgent' },
+              'High': { label: 'High', cls: 'card-v2-priority-urgent' },
               'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
               'Low': { label: 'Low', cls: 'card-v2-priority-low' }
             }[t.priority] || { label: t.priority || 'Normal', cls: 'card-v2-priority-normal' };
@@ -6126,7 +6205,13 @@ const Workflow = {
               // Wrapping text in checklist-text span/div structure
               const textWrap = el('div', { class: 'checklist-text' });
               textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '', title: textValue }));
-              
+              const categoryBadge = el('span', {
+                text: item.category === 'document' ? 'Document' : 'Sub-task',
+                class: 'checklist-category-badge',
+                style: 'font-size:0.65rem; padding:1px 5px; border-radius:8px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600; margin-left:6px;'
+              });
+              textWrap.appendChild(categoryBadge);
+
               cb.addEventListener('change', (e) => {
                 e.stopPropagation();
                 this.toggleChecklistItem(t, item.id, cb.checked);
@@ -6250,7 +6335,12 @@ const Workflow = {
         if (allowAddRequirements) {
           const addChecklistRow = el('div', { class: 'add-checklist', style: 'display: flex; gap: 8px; align-items: center;' });
           const newItemInput = el('input', { type: 'text', placeholder: 'Add checklist item...', id: 'newCheckInput', style: 'flex: 1;' });
-          
+
+          // Category selector for new checklist items
+          const categorySel = el('select', { class: 'form-select', style: 'width: 110px; flex-shrink: 0;' });
+          categorySel.appendChild(el('option', { value: 'subtask', text: 'Sub-task' }));
+          categorySel.appendChild(el('option', { value: 'document', text: 'Document' }));
+
           // Custom single-select styled as dependency selector
           const predWrapper = el('div', { class: 'multi-select-dropdown', style: 'width: 160px;' });
           const predBtn = el('button', { type: 'button', class: 'multi-select-btn', text: '— Dependency —', style: 'width: 100%; height: 32px;' });
@@ -6336,16 +6426,15 @@ const Workflow = {
           const addItemBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Add' });
           if (wr.isPendingApproval) {
             disableForApproval(newItemInput);
-
+            disableForApproval(categorySel);
             disableForApproval(predBtn);
-
             disableForApproval(addItemBtn);
           } else {
             addItemBtn.addEventListener('click', () => {
               const val = newItemInput.value.trim();
               if (!val) return;
               const prereqId = selectedPrereqId || null;
-              normalizedChecklist.push({ id: generateId('chk'), text: val, completed: false, assigneeId: null, assigneeName: null, dependsOn: prereqId, timeLogs: [] });
+              normalizedChecklist.push({ id: generateId('chk'), text: val, category: categorySel.value || 'subtask', completed: false, assigneeId: null, assigneeName: null, dependsOn: prereqId, timeLogs: [] });
               DB.update('tasks', t.id, { checklist: normalizedChecklist, updatedAt: new Date().toISOString() });
               newItemInput.value = '';
               selectedPrereqId = null;
@@ -6355,6 +6444,7 @@ const Workflow = {
             });
           }
           addChecklistRow.appendChild(newItemInput);
+          addChecklistRow.appendChild(categorySel);
           addChecklistRow.appendChild(predWrapper);
           addChecklistRow.appendChild(addItemBtn);
           checklistSection.appendChild(addChecklistRow);
@@ -7697,8 +7787,12 @@ const Workflow = {
 
     const checklistBuilder = el('div', { style: 'display:flex; gap:8px; align-items:center;' });
     const checklistInput = el('input', { type: 'text', placeholder: 'Add a checklist item...', style: 'flex:1;' });
+    const checklistCategorySel = el('select', { style: 'width:110px; flex-shrink:0;' });
+    checklistCategorySel.appendChild(el('option', { value: 'subtask', text: 'Sub-task' }));
+    checklistCategorySel.appendChild(el('option', { value: 'document', text: 'Document' }));
     const addChecklistBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Add' });
     checklistBuilder.appendChild(checklistInput);
+    checklistBuilder.appendChild(checklistCategorySel);
     checklistBuilder.appendChild(addChecklistBtn);
     checklistContainer.appendChild(checklistBuilder);
     checklistGroup.appendChild(checklistContainer);
@@ -7713,6 +7807,11 @@ const Workflow = {
       checklistItems.forEach((item, idx) => {
         const row = el('div', { style: 'display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;' });
         row.appendChild(el('span', { text: item.text, style: 'flex:1; font-size:0.85rem;' }));
+        const categoryBadge = el('span', {
+          text: item.category === 'document' ? 'Document' : 'Sub-task',
+          style: 'font-size:0.7rem; padding:2px 6px; border-radius:10px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600;'
+        });
+        row.appendChild(categoryBadge);
 
         const prereqSelect = el('select', { style: 'font-size:0.8rem; max-width:140px;' });
         prereqSelect.appendChild(el('option', { value: '', text: '— None —' }));
@@ -7757,7 +7856,7 @@ const Workflow = {
     const addChecklistItem = () => {
       const val = checklistInput.value.trim();
       if (!val) return;
-      checklistItems.push({ id: generateId('chk'), text: val, assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] });
+      checklistItems.push({ id: generateId('chk'), text: val, category: checklistCategorySel.value || 'subtask', assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] });
       checklistFromTemplate = false;
       checklistInput.value = '';
       renderChecklist();
@@ -7775,7 +7874,10 @@ const Workflow = {
       if (!isNaN(idx) && this.standardTaskTemplates[idx]) {
         const tmpl = this.standardTaskTemplates[idx];
         titleInput.value = tmpl.title;
-        checklistItems = tmpl.defaultChecklist.map(text => ({ id: generateId('chk'), text, assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] }));
+        checklistItems = tmpl.defaultChecklist.map(item => {
+          const isObj = typeof item === 'object' && item && item.text;
+          return { id: generateId('chk'), text: isObj ? item.text : item, category: isObj ? (item.category || 'subtask') : 'subtask', assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] };
+        });
         coAssignees = (tmpl.coAssignees || []).slice();
         checklistFromTemplate = true;
       } else {
@@ -8002,6 +8104,7 @@ const Workflow = {
         checklist: checklistItems.map(item => ({
           id: item.id || generateId('chk'),
           text: item.text,
+          category: item.category || 'subtask',
           completed: false,
           assigneeId: item.assigneeId || null,
           assigneeName: item.assigneeName || null,

@@ -3007,9 +3007,9 @@ tbody tr:hover {
 }
 
 .board-card-v2.compact .card-v2-priority-high,
-.board-card-v2.compact .card-v2-priority-urgent { color: var(--color-danger); }
-.board-card-v2.compact .card-v2-priority-medium,
-.board-card-v2.compact .card-v2-priority-priority { color: var(--color-warning); }
+.board-card-v2.compact .card-v2-priority-urgent,
+.board-card-v2.compact .card-v2-priority-priority { color: var(--color-danger); }
+.board-card-v2.compact .card-v2-priority-medium { color: var(--color-warning); }
 .board-card-v2.compact .card-v2-priority-low { color: var(--color-success); }
 .board-card-v2.compact .card-v2-priority-normal { color: var(--color-text-muted); }
 
@@ -3030,15 +3030,43 @@ tbody tr:hover {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
+}
+
+.board-card-v2.compact .card-v2-footer-left-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.board-card-v2.compact .card-v2-footer-left-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.board-card-v2.compact .card-v2-footer-left-count svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .board-card-v2.compact .card-v2-footer-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .board-card-v2.compact .card-v2-footer-item,
