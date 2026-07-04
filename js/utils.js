@@ -233,17 +233,9 @@ function buildCompactBoardCard(opts) {
   metaRow.appendChild(metaRight);
   card.appendChild(metaRow);
 
-  // 5. Footer Row (avatars left, badges + counts right)
+  // 5. Footer Row (avatars left, counts right)
   const footer = el('div', { class: 'card-v2-footer' });
   const footerLeft = el('div', { class: 'card-v2-footer-left' });
-  if (opts.leftCounts && opts.leftCounts.length) {
-    const leftCountsWrap = el('div', { class: 'card-v2-footer-left-counts' });
-    opts.leftCounts.forEach(c => {
-      if (!c.value && c.value !== 0) return;
-      leftCountsWrap.appendChild(el('div', { class: 'card-v2-footer-left-count', html: c.icon + ' ' + String(c.value), title: c.title || '' }));
-    });
-    footerLeft.appendChild(leftCountsWrap);
-  }
   if (opts.avatars && opts.avatars.length) {
     const avWrap = el('div', { class: 'card-v2-avatars' });
     opts.avatars.slice(0, 3).forEach(u => {

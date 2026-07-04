@@ -3035,30 +3035,6 @@ tbody tr:hover {
   overflow: hidden;
 }
 
-.board-card-v2.compact .card-v2-footer-left-counts {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-
-.board-card-v2.compact .card-v2-footer-left-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.board-card-v2.compact .card-v2-footer-left-count svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
 .board-card-v2.compact .card-v2-footer-right {
   display: flex;
   align-items: center;

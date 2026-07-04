@@ -2531,93 +2531,27 @@ const Workflow = {
         const completedDocs = documentItems.filter(c => c.completed).length;
         const completedSubtasks = subtaskItems.filter(c => c.completed).length;
 
-        const leftCounts = [];
-        leftCounts.push({
+        const counts = [];
+        counts.push({
           icon: BoardCardIcons.task,
           value: `${completedTasks}/${totalTasks}`,
           title: `${completedTasks} of ${totalTasks} tasks completed`
         });
         if (documentItems.length > 0) {
-          leftCounts.push({
+          counts.push({
             icon: BoardCardIcons.document,
             value: `${completedDocs}/${documentItems.length}`,
             title: `${completedDocs} of ${documentItems.length} required documents complete`
           });
         }
         if (subtaskItems.length > 0) {
-          leftCounts.push({
+          counts.push({
             icon: BoardCardIcons.checklist,
             value: `${completedSubtasks}/${subtaskItems.length}`,
             title: `${completedSubtasks} of ${subtaskItems.length} sub-tasks complete`
           });
         }
-
-        const counts = [];
         if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
-
-        const badges = [];
-
-        // Admin-only assigned-employee badge for draft work requests
-        if (st === 'Draft' && Auth.user?.role === 'Admin') {
-          const assignee = wr.assignedTo ? DB.getById('users', wr.assignedTo) : null;
-          const assigneeBadge = el('span', {
-            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ' + escapeHtml(assignee ? assignee.name : 'Unassigned'),
-            class: 'badge ' + (assignee ? 'badge-info' : 'badge-warn'),
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
-            title: assignee ? 'Assigned employee: ' + assignee.name : 'No employee assigned'
-          });
-          badges.push(assigneeBadge);
-        }
-
-        if (transition && transition.canTransition) {
-          const readyBadge = el('span', {
-            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>',
-            class: 'badge badge-success',
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;'
-          });
-          readyBadge.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.transitionWorkRequest(wr.id);
-          });
-          badges.push(readyBadge);
-        } else if (transition && transition.missing && transition.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-          const blockerBadge = el('span', {
-            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + transition.missing.length + ' pending',
-            class: 'badge badge-warn',
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:help;'
-          });
-          blockerBadge.title = transition.missing.join('\n');
-          badges.push(blockerBadge);
-        }
-        if (wr.isPendingApproval) {
-          badges.push(el('span', { text: 'Awaiting Approval', class: 'badge badge-warning', style: 'font-size:10px;border-radius:10px;' }));
-        }
-
-        // Financial / document linkage presence badges (right footer)
-        if (wr.linkedInvoiceId) {
-          badges.push(el('span', {
-            html: BoardCardIcons.billing,
-            class: 'badge badge-info',
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
-            title: 'Billing linked'
-          }));
-        }
-        if ((wr.linkedDisbursementIds || []).length > 0) {
-          badges.push(el('span', {
-            html: BoardCardIcons.disbursement,
-            class: 'badge badge-info',
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
-            title: `${wr.linkedDisbursementIds.length} disbursement(s) linked`
-          }));
-        }
-        if ((wr.linkedTransmittalIds || []).length > 0) {
-          badges.push(el('span', {
-            html: BoardCardIcons.transmittal,
-            class: 'badge badge-info',
-            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;',
-            title: `${wr.linkedTransmittalIds.length} transmittal(s) linked`
-          }));
-        }
 
         const card = buildCompactBoardCard({
           key: 'WR-' + cardNumber++,
@@ -2629,9 +2563,7 @@ const Workflow = {
           priority: priorityConfig.label,
           priorityClass: priorityConfig.cls,
           avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
-          leftCounts,
           counts,
-          badges,
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
         });
 
