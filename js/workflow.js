@@ -5630,8 +5630,9 @@ const Workflow = {
               onClick: () => { self.showTaskSidePane(t.id, card); }
             });
 
-            if (self.isCompleted(t)) {
-              card.classList.add('is-completed', 'completed');
+            const completedClass = self.getCompletedClass(t);
+            if (completedClass) {
+              card.classList.add(completedClass);
             }
 
             if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
@@ -6249,7 +6250,7 @@ const Workflow = {
               
               // Wrapping text in checklist-text span/div structure
               const textWrap = el('div', { class: 'checklist-text' });
-              textWrap.appendChild(el('span', { text: textValue, class: item.completed ? 'completed' : '', title: textValue }));
+              textWrap.appendChild(el('span', { text: textValue, class: classNames(this.getCompletedClass(item)), title: textValue }));
               const categoryBadge = el('span', {
                 text: item.category === 'document' ? 'Document' : 'Sub-task',
                 class: 'checklist-category-badge',

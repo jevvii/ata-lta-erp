@@ -12061,5 +12061,3 @@ tbody tr * {
 /* Scrollbars */
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--color-border); }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
-
->>>>>>> origin/main
