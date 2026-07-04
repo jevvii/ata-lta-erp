@@ -66,6 +66,49 @@ function disableIfPending(element, wr, title = 'Under approval') {
 }
 
 /**
+ * Build a Notion-style empty-state v2 component.
+ * @param {Object} opts
+ * @param {string} [opts.variant='zero-state'] - 'zero-state' | 'filtered-empty' | 'compact' | 'card-empty'
+ * @param {string} [opts.icon] - SVG string
+ * @param {string} opts.title
+ * @param {string} [opts.body]
+ * @param {Array<{text:string, className:string, onClick:Function}>} [opts.actions]
+ * @returns {HTMLElement}
+ */
+function renderEmptyStateV2(opts = {}) {
+  const { variant = 'zero-state', icon, title, body, actions = [] } = opts;
+  const className = ['empty-state-v2', variant].filter(Boolean).join(' ');
+  const wrap = el('div', { class: className });
+  if (icon) {
+    wrap.appendChild(el('div', { class: 'empty-state-icon', html: icon }));
+  }
+  wrap.appendChild(el('div', { class: 'empty-state-title', text: title }));
+  if (body) {
+    wrap.appendChild(el('div', { class: 'empty-state-body', text: body }));
+  }
+  if (actions.length > 0) {
+    const actionsWrap = el('div', { class: 'empty-state-actions' });
+    actions.forEach(action => {
+      let btn;
+      if (action.tag === 'a' || action.href != null) {
+        btn = el('a', { href: action.href || 'javascript:void(0)', class: action.className || 'empty-state-clear', text: action.text });
+      } else {
+        btn = el('button', { type: 'button', class: action.className || 'btn btn-primary btn-sm', text: action.text });
+      }
+      if (action.onClick) {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          action.onClick(e);
+        });
+      }
+      actionsWrap.appendChild(btn);
+    });
+    wrap.appendChild(actionsWrap);
+  }
+  return wrap;
+}
+
+/**
  * Build a map of tasks keyed by workRequestId for batch canViewWr checks.
  * Avoids N+1 DB lookups when filtering many WRs.
  * Returns { [workRequestId]: Task[] }
@@ -589,9 +632,14 @@ const Workflow = {
     });
 
     const clContainer = el('div', { class: 'checklist-view-container', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-3);' });
-    
+
     if (filteredTasks.length === 0) {
-      clContainer.appendChild(el('div', { class: 'empty-state', text: 'No tasks found.' }));
+      clContainer.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+        title: 'No tasks found',
+        body: 'Adjust your filters or add a task to see it here.'
+      }));
     } else {
       filteredTasks.forEach(t => {
         const taskCard = el('div', { class: 'checklist-view-item-wrap' });
@@ -1769,7 +1817,11 @@ const Workflow = {
       actions.appendChild(badges);
 
       if (wr.isPendingApproval && (Auth.user.id === wr.submittedBy || Auth.isManagerial())) {
-        const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel Request', style: 'margin-right: 8px;' });
+        const cancelBtn = el('button', {
+          class: 'btn btn-danger btn-sm',
+          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancel Request',
+          style: 'margin-right: 8px;'
+        });
         cancelBtn.addEventListener('click', () => {
           Workflow.showConfirm('Confirm Cancellation', 'Are you sure you want to cancel and withdraw this request?', () => {
             PendingChanges.delete(wr.pendingChangeId);
@@ -2142,7 +2194,65 @@ const Workflow = {
     const canEdit = Auth.can('workflow:edit');
     const canApprove = Auth.can('workflow:approve');
     if (wrs.length === 0) {
-      container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
+      const entity = Auth.activeEntity;
+      const allWrs = DB.getWhere('workRequests', r => {
+        const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
+        return matchesEntity && r.status !== 'Cancelled';
+      });
+      const savedFilters = App.restoreFilters('operations');
+      const hasActiveFilters = savedFilters && Object.values(savedFilters).some(v => v && String(v).trim() !== '');
+      const hasWorkRequests = allWrs.length > 0;
+
+      if (hasWorkRequests && hasActiveFilters) {
+        container.appendChild(renderEmptyStateV2({
+          variant: 'filtered-empty',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
+          title: 'No work requests match your filters',
+          body: 'Try adjusting or clearing the active filters to see more results.',
+          actions: [
+            {
+              text: 'Clear filters',
+              className: 'btn btn-primary btn-sm',
+              onClick: () => {
+                App.clearSavedFilters('operations');
+                App.handleRoute();
+              }
+            }
+          ]
+        }));
+      } else {
+        const actions = [];
+        if (canEdit) {
+          actions.push({
+            text: '+ Add Work Request',
+            className: 'btn btn-primary btn-sm',
+            onClick: () => {
+              this.editingId = null;
+              const fullPageRoute = '#operations/form/new';
+              openFormPanel({
+                icon: '📝', title: ' ',
+                formContent: this.renderForm(), formId: 'wr-form',
+                viewContext: 'work-request-form',
+                fullPageRoute,
+                newTabRoute: fullPageRoute,
+                actions: [
+                  { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
+                  { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
+                ]
+              });
+            }
+          });
+        }
+        container.appendChild(renderEmptyStateV2({
+          variant: 'zero-state',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+          title: hasWorkRequests ? 'No work requests in this view' : 'No work requests yet',
+          body: hasWorkRequests
+            ? 'Work requests are hidden by the current filters or status settings.'
+            : 'Create your first work request to start tracking client work.',
+          actions
+        }));
+      }
       return;
     }
     const table = el('table', { class: 'data-table' });
@@ -2198,7 +2308,11 @@ const Workflow = {
         tdAct.appendChild(editBtn);
 
         if (Auth.user.id === wr.submittedBy || Auth.isManagerial()) {
-          const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel', style: 'margin-left: 4px;' });
+          const cancelBtn = el('button', {
+            class: 'btn btn-danger btn-sm',
+            html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancel',
+            style: 'margin-left: 4px;'
+          });
           cancelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             Workflow.showConfirm('Confirm Cancellation', 'Are you sure you want to cancel and withdraw this request?', () => {
@@ -2243,7 +2357,66 @@ const Workflow = {
 
   refreshBoard(container, wrs) {
     if (wrs.length === 0) {
-      container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
+      const entity = Auth.activeEntity;
+      const allWrs = DB.getWhere('workRequests', r => {
+        const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
+        return matchesEntity && r.status !== 'Cancelled';
+      });
+      const savedFilters = App.restoreFilters('operations');
+      const hasActiveFilters = savedFilters && Object.values(savedFilters).some(v => v && String(v).trim() !== '');
+      const hasWorkRequests = allWrs.length > 0;
+
+      if (hasWorkRequests && hasActiveFilters) {
+        container.appendChild(renderEmptyStateV2({
+          variant: 'filtered-empty',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
+          title: 'No work requests match your filters',
+          body: 'Try adjusting or clearing the active filters to see more results.',
+          actions: [
+            {
+              text: 'Clear filters',
+              className: 'btn btn-primary btn-sm',
+              onClick: () => {
+                App.clearSavedFilters('operations');
+                App.handleRoute();
+              }
+            }
+          ]
+        }));
+      } else {
+        const canEdit = Auth.can('workflow:edit');
+        const actions = [];
+        if (canEdit) {
+          actions.push({
+            text: '+ Add Work Request',
+            className: 'btn btn-primary btn-sm',
+            onClick: () => {
+              this.editingId = null;
+              const fullPageRoute = '#operations/form/new';
+              openFormPanel({
+                icon: '📝', title: ' ',
+                formContent: this.renderForm(), formId: 'wr-form',
+                viewContext: 'work-request-form',
+                fullPageRoute,
+                newTabRoute: fullPageRoute,
+                actions: [
+                  { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
+                  { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
+                ]
+              });
+            }
+          });
+        }
+        container.appendChild(renderEmptyStateV2({
+          variant: 'zero-state',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+          title: hasWorkRequests ? 'No work requests in this view' : 'No work requests yet',
+          body: hasWorkRequests
+            ? 'Work requests are hidden by the current filters or status settings.'
+            : 'Create your first work request to start tracking client work.',
+          actions
+        }));
+      }
       return;
     }
     // Exclude cancelled from board
@@ -2302,7 +2475,11 @@ const Workflow = {
       }
 
       if (colWrs.length === 0 && (st !== 'Draft' || !Auth.can('workflow:edit'))) {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No work requests' }));
+        cardContainer.appendChild(renderEmptyStateV2({
+          variant: 'compact',
+          title: 'No work requests',
+          body: ''
+        }));
       }
 
       colWrs.forEach(wr => {
@@ -2430,7 +2607,65 @@ const Workflow = {
     const canEdit = Auth.can('workflow:edit');
     const canApprove = Auth.can('workflow:approve');
     if (wrs.length === 0) {
-      container.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state' }));
+      const entity = Auth.activeEntity;
+      const allWrs = DB.getWhere('workRequests', r => {
+        const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
+        return matchesEntity && r.status !== 'Cancelled';
+      });
+      const savedFilters = App.restoreFilters('operations');
+      const hasActiveFilters = savedFilters && Object.values(savedFilters).some(v => v && String(v).trim() !== '');
+      const hasWorkRequests = allWrs.length > 0;
+
+      if (hasWorkRequests && hasActiveFilters) {
+        container.appendChild(renderEmptyStateV2({
+          variant: 'filtered-empty',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
+          title: 'No work requests match your filters',
+          body: 'Try adjusting or clearing the active filters to see more results.',
+          actions: [
+            {
+              text: 'Clear filters',
+              className: 'btn btn-primary btn-sm',
+              onClick: () => {
+                App.clearSavedFilters('operations');
+                App.handleRoute();
+              }
+            }
+          ]
+        }));
+      } else {
+        const actions = [];
+        if (canEdit) {
+          actions.push({
+            text: '+ Add Work Request',
+            className: 'btn btn-primary btn-sm',
+            onClick: () => {
+              this.editingId = null;
+              const fullPageRoute = '#operations/form/new';
+              openFormPanel({
+                icon: '📝', title: ' ',
+                formContent: this.renderForm(), formId: 'wr-form',
+                viewContext: 'work-request-form',
+                fullPageRoute,
+                newTabRoute: fullPageRoute,
+                actions: [
+                  { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
+                  { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
+                ]
+              });
+            }
+          });
+        }
+        container.appendChild(renderEmptyStateV2({
+          variant: 'zero-state',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+          title: hasWorkRequests ? 'No work requests in this view' : 'No work requests yet',
+          body: hasWorkRequests
+            ? 'Work requests are hidden by the current filters or status settings.'
+            : 'Create your first work request to start tracking client work.',
+          actions
+        }));
+      }
       return;
     }
     const list = el('div', { class: 'list-view operations-list-view' });
@@ -2491,8 +2726,8 @@ const Workflow = {
         }
       } else if (Auth.user.id === wr.submittedBy || Auth.isManagerial()) {
         const cancelBtn = el('button', {
-          class: 'btn btn-danger btn-xs',
-          text: 'Cancel',
+          class: 'btn btn-danger btn-sm',
+          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancel',
           style: 'align-self: center; margin-left: 8px;'
         });
         cancelBtn.addEventListener('click', (e) => {
@@ -4903,27 +5138,29 @@ const Workflow = {
 
     // Empty-state guidance when WR has no tasks
     if (tasks.length === 0 && pendingTaskChanges.length === 0) {
-      const emptyState = el('div', { class: 'task-empty-state' });
-      emptyState.appendChild(el('div', {
-        html: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M17.636 18.364l-.707-.707M6.343 5.343l-.707-.707M3 12h1M5.343 18.364l.707-.707M12 21v-1M12 7a5 5 0 110 10 5 5 0 010-10z"/></svg>'
-      }));
-      emptyState.appendChild(el('p', { text: 'No tasks have been added to this work request yet.' }));
+      const actions = [];
       if (canAddTaskInToolbar && !isArchived) {
-        const addFirstBtn = el('button', { type: 'button', class: 'btn btn-primary', text: '+ Add First Task' });
-        if (wr.isPendingApproval) {
-          disableForApproval(addFirstBtn, 'Tasks cannot be added while the Work Request is awaiting approval.');
-          
-          const wrap = el('div', { style: 'display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 12px;' });
-          wrap.appendChild(addFirstBtn);
-          wrap.appendChild(el('span', {
-            text: '(Under approval)',
-            style: 'font-size: 0.8125rem; color: var(--muted);'
-          }));
-          emptyState.appendChild(wrap);
-        } else {
-          addFirstBtn.addEventListener('click', () => { this.showAddTaskModal(wr.id, () => App.handleRoute()); });
-          emptyState.appendChild(addFirstBtn);
-        }
+        actions.push({
+          text: wr.isPendingApproval ? '+ Add First Task' : '+ Add First Task',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => {
+            if (wr.isPendingApproval) return;
+            this.showAddTaskModal(wr.id, () => App.handleRoute());
+          }
+        });
+      }
+      const emptyState = renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M17.636 18.364l-.707-.707M6.343 5.343l-.707-.707M3 12h1M5.343 18.364l.707-.707M12 21v-1M12 7a5 5 0 110 10 5 5 0 010-10z"/></svg>',
+        title: 'No tasks yet',
+        body: wr.isPendingApproval
+          ? 'Tasks cannot be added while the Work Request is awaiting approval.'
+          : 'Add the first task to begin tracking work for this request.',
+        actions
+      });
+      if (wr.isPendingApproval && canAddTaskInToolbar && !isArchived) {
+        const addBtn = emptyState.querySelector('.empty-state-actions button');
+        if (addBtn) disableForApproval(addBtn, 'Tasks cannot be added while the Work Request is awaiting approval.');
       }
       container.appendChild(emptyState);
     }
@@ -5222,6 +5459,62 @@ const Workflow = {
         return activeFilters.every(f => checks[f]());
       });
 
+      const hasActiveFilters = query || container.employeeFilter || activeFilters.length > 0;
+      const clearTaskFilters = () => {
+        container.activeFilters.clear();
+        container.searchQuery = '';
+        container.employeeFilter = null;
+        if (empFilter) {
+          const input = empFilter.querySelector('.searchable-dropdown-input');
+          if (input) input.value = '';
+          empFilter.value = '';
+          empFilter.searchText = '';
+        }
+        const searchInput = document.getElementById('taskSearch');
+        if (searchInput) searchInput.value = '';
+        updateToolbar();
+        renderGroups();
+      };
+
+      if (filteredTasks.length === 0) {
+        if (hasActiveFilters) {
+          const filterNames = [
+            ...(query ? [`search: "${query}"`] : []),
+            ...(container.employeeFilter ? [`employee: ${container.employeeFilter}`] : []),
+            ...activeFilters
+          ];
+          listWrapper.appendChild(renderEmptyStateV2({
+            variant: 'filtered-empty',
+            icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
+            title: 'No tasks match your filters',
+            body: filterNames.length > 0
+              ? `Active filters: ${filterNames.join(', ')}. Clear them to see all ${tasks.length} tasks.`
+              : 'Adjust your search or filters to find tasks.',
+            actions: [
+              { text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: clearTaskFilters }
+            ]
+          }));
+        } else {
+          listWrapper.appendChild(renderEmptyStateV2({
+            variant: 'zero-state',
+            icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+            title: 'No tasks yet',
+            body: 'This work request does not have any tasks. Add the first task to begin tracking work.',
+            actions: [
+              {
+                text: '+ Add Task',
+                className: 'btn btn-primary btn-sm',
+                onClick: () => {
+                  this.showAddTaskModal(wr.id, () => App.handleRoute());
+                }
+              }
+            ]
+          }));
+        }
+        updateBulkBar();
+        return;
+      }
+
       if (this.taskViewMode === 'board') {
         const board = el('div', { class: 'board-v2', style: 'margin-top: 0;' });
         const statuses = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
@@ -5251,7 +5544,11 @@ const Workflow = {
           const cardContainer = el('div', { class: 'board-cards-scroll', style: 'display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3);' });
 
           if (colTasks.length === 0) {
-            cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No tasks' }));
+            cardContainer.appendChild(renderEmptyStateV2({
+              variant: 'compact',
+              title: 'No tasks',
+              body: ''
+            }));
           }
 
           colTasks.forEach(t => {
@@ -6515,7 +6812,12 @@ const Workflow = {
     const invCol = el('div', { class: 'financial-card' });
     invCol.appendChild(el('h4', { text: '📄 Invoices / Billings' }));
     if (invoices.length === 0) {
-      invCol.appendChild(el('p', { text: 'No linked invoices.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
+      invCol.appendChild(renderEmptyStateV2({
+        variant: 'card-empty',
+        icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
+        title: 'No linked invoices',
+        body: 'Billings linked to this work request will appear here.'
+      }));
     } else {
       const invList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
       invoices.forEach(inv => {
@@ -6562,7 +6864,12 @@ const Workflow = {
     const disbCol = el('div', { class: 'financial-card' });
     disbCol.appendChild(el('h4', { text: '💸 Expenses / Disbursements' }));
     if (disbursements.length === 0) {
-      disbCol.appendChild(el('p', { text: 'No linked disbursements.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
+      disbCol.appendChild(renderEmptyStateV2({
+        variant: 'card-empty',
+        icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle></svg>',
+        title: 'No linked disbursements',
+        body: 'Expenses and fund releases linked to this work request will appear here.'
+      }));
     } else {
       const disbList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
       disbursements.forEach(d => {
@@ -6599,7 +6906,12 @@ const Workflow = {
     const transCol = el('div', { class: 'financial-card' });
     transCol.appendChild(el('h4', { text: '📦 Transmittals' }));
     if (transmittals.length === 0) {
-      transCol.appendChild(el('p', { text: 'No linked transmittals.', class: 'empty-state', style: 'font-size: 0.8125rem;' }));
+      transCol.appendChild(renderEmptyStateV2({
+        variant: 'card-empty',
+        icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
+        title: 'No linked transmittals',
+        body: 'Transmittals linked to this work request will appear here.'
+      }));
     } else {
       const transList = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
       transmittals.forEach(t => {
