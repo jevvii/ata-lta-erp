@@ -2431,11 +2431,13 @@ const Workflow = {
     const canEdit = Auth.can('workflow:edit');
     const canApprove = Auth.can('workflow:approve');
 
-    // Four-phase board matching the reference image.
+    // Four-phase board: Draft, Pre-processing, Processing, Completed.
+    // Billing/Disbursement are no longer lifecycle phases; WRs in those legacy
+    // statuses are grouped under Processing until routed to Completed.
     const boardPhases = [
-      { key: 'new', label: 'New', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8', icon: 'circle' },
-      { key: 'in-progress', label: 'In Progress', statuses: ['Pre-processing', 'Processing'], targetStatus: 'Processing', color: '#3b82f6', icon: 'circle' },
-      { key: 'testing', label: 'Testing', statuses: ['Billing', 'Disbursement'], targetStatus: 'Billing', color: '#f59e0b', icon: 'circle' },
+      { key: 'draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8', icon: 'circle' },
+      { key: 'pre-processing', label: 'Pre-processing', statuses: ['Pre-processing'], targetStatus: 'Pre-processing', color: '#3b82f6', icon: 'circle' },
+      { key: 'processing', label: 'Processing', statuses: ['Processing', 'Billing', 'Disbursement'], targetStatus: 'Processing', color: '#f59e0b', icon: 'circle' },
       { key: 'completed', label: 'Completed', statuses: ['Completed'], targetStatus: 'Completed', color: '#10b981', icon: 'check' }
     ];
 
