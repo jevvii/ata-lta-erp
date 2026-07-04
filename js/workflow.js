@@ -2536,19 +2536,23 @@ const Workflow = {
         if (!autoScrollDir) { autoScrollRaf = null; return; }
         const intensity = Math.min(1, Math.max(0, (SCROLL_MARGIN - autoScrollDist) / SCROLL_MARGIN));
         const speed = Math.max(SCROLL_SPEED, Math.round(SCROLL_SPEED + (SCROLL_MAX_SPEED - SCROLL_SPEED) * intensity));
+        let scrolled = false;
         const el = autoScrollContainer;
         if (el) {
           const style = getComputedStyle(el);
           const overflowY = style.overflowY;
-          const scrollable = (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') &&
-            el.scrollHeight > el.clientHeight + 1;
+          const scrollable = (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1;
           if (scrollable) {
+            const prevScrollTop = el.scrollTop;
             el.scrollTop += autoScrollDir * speed;
-            autoScrollRaf = requestAnimationFrame(step);
-            return;
+            if (el.scrollTop !== prevScrollTop) {
+              scrolled = true;
+            }
           }
         }
-        window.scrollBy(0, autoScrollDir * speed);
+        if (!scrolled) {
+          window.scrollBy(0, autoScrollDir * speed);
+        }
         autoScrollRaf = requestAnimationFrame(step);
       };
       autoScrollRaf = requestAnimationFrame(step);
@@ -2556,19 +2560,28 @@ const Workflow = {
 
     function updateDragAutoScroll(clientY, container) {
       autoScrollContainer = container || null;
-      const rect = container?.getBoundingClientRect();
       let dir = 0;
       let dist = Infinity;
-      if (rect) {
+
+      if (clientY < SCROLL_MARGIN) {
+        dir = -1;
+        dist = clientY;
+      } else if (clientY > window.innerHeight - SCROLL_MARGIN) {
+        dir = 1;
+        dist = window.innerHeight - clientY;
+      } else if (container) {
+        const rect = container.getBoundingClientRect();
         const topDist = clientY - rect.top;
         const bottomDist = rect.bottom - clientY;
-        if (topDist < SCROLL_MARGIN) { dir = -1; dist = topDist; }
-        else if (bottomDist < SCROLL_MARGIN) { dir = 1; dist = bottomDist; }
+        if (topDist < SCROLL_MARGIN && topDist >= 0) {
+          dir = -1;
+          dist = topDist;
+        } else if (bottomDist < SCROLL_MARGIN && bottomDist >= 0) {
+          dir = 1;
+          dist = bottomDist;
+        }
       }
-      if (!dir) {
-        if (clientY < SCROLL_MARGIN) { dir = -1; dist = clientY; }
-        else if (clientY > window.innerHeight - SCROLL_MARGIN) { dir = 1; dist = window.innerHeight - clientY; }
-      }
+
       autoScrollDir = dir;
       autoScrollDist = dist;
       if (dir && !autoScrollRaf) beginDragAutoScroll();
