@@ -2101,7 +2101,7 @@ const Disbursement = {
     container.appendChild(titleSec);
 
     const formWrap = el('div', { class: 'side-pane-form-content' });
-    const form = el('form', { class: 'form-stacked', id: 'disb-tpl-form' });
+    const form = el('form', { class: 'form-stacked notion-form', id: 'disb-tpl-form' });
 
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });

@@ -2563,7 +2563,7 @@ const Billing = {
     container.appendChild(titleSec);
 
     const formWrap = el('div', { class: 'side-pane-form-content' });
-    const form = el('form', { class: 'form-stacked', id: 'billing-tpl-form' });
+    const form = el('form', { class: 'form-stacked notion-form', id: 'billing-tpl-form' });
     
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
