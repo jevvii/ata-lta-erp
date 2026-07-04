@@ -36,7 +36,7 @@ const Billing = {
       h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
       h1.appendChild(document.createTextNode(inv?.invoiceNumber || 'Detail'));
       titleBar.appendChild(h1);
- 
+
       const actions = el('div', { class: 'title-bar-actions' });
       if (inv && inv.status !== 'Draft' && inv.status !== 'Pending') {
         const noLogoLabel = el('label', { style: 'margin-right:12px; font-size:0.8125rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:var(--color-text-muted);' });
@@ -60,6 +60,18 @@ const Billing = {
       actions.appendChild(backBtn);
       titleBar.appendChild(actions);
       container.appendChild(titleBar);
+    } else if (this.view === 'form') {
+      container.classList.add('billing-tab-page');
+      const isNew = !this.detailId;
+      const inv = isNew ? null : this.getInvoiceById(this.detailId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Billing',
+        baseHash: '#billing',
+        currentText: isNew ? 'New Invoice' : (inv?.invoiceNumber || 'Edit Invoice'),
+        actions: [
+          { text: '← Back to Invoices', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
+        ]
+      }));
     } else {
       container.classList.add('billing-tab-page');
       // Tab views: list, templates, aging, trash
@@ -72,7 +84,7 @@ const Billing = {
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
-    else if (this.view === 'form') container.appendChild(this.renderForm());
+    else if (this.view === 'form') container.appendChild(this.renderForm(this.detailId));
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'aging') container.appendChild(this.renderAging());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
@@ -220,15 +232,15 @@ const Billing = {
     if (Auth.can('billing:edit')) {
       const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'billing');
       if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #ffc107;border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:#e65100;margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
+        const banner = el('div', { class: 'pending-requests-banner', style: 'background:var(--color-bg-muted);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
+        const bannerTitle = el('div', { style: 'font-weight:600;color:var(--color-text);margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
         bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Invoice Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
         banner.appendChild(bannerTitle);
         pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid #ffe082;' });
+          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid var(--color-border);' });
           const client = DB.getById('clients', req.clientId);
           const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:#333;' });
+          const info = el('span', { style: 'font-size:0.875rem;color:var(--color-text);' });
           info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
           row.appendChild(info);
           const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
@@ -459,15 +471,15 @@ const Billing = {
       if (inv.workRequestId) {
         const wr = DB.getById('workRequests', inv.workRequestId);
         if (wr) {
-          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #64748b; margin-top: 4px;' });
+          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: var(--color-text-muted); margin-top: 4px;' });
           wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 500;' }));
           if (inv.linkedTaskId) {
             const task = DB.getById('tasks', inv.linkedTaskId);
             if (task) {
-              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: #8c9ba5; font-style: italic;' }));
+              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: var(--color-text-muted); font-style: italic;' }));
             }
           } else {
-            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: #8c9ba5; font-style: italic;' }));
+            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: var(--color-text-muted); font-style: italic;' }));
           }
           tdInvoice.appendChild(wrWrap);
         }
@@ -506,7 +518,8 @@ const Billing = {
   },
 
   refreshBoard(container, invoices) {
-    const board = el('div', { class: 'board-v2' });
+    const canEdit = Auth.can('billing:edit');
+    const self = this;
     const statuses = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
     const statusColors = {
       'Draft': '#94a3b8',
@@ -518,124 +531,202 @@ const Billing = {
       'Overdue': '#ef4444'
     };
 
+    // Normalize boardOrder within each status column.
     statuses.forEach(st => {
-      const colColor = statusColors[st] || '#cbd5e1';
-      const colInvs = invoices.filter(inv => inv.status === st);
+      const colInvs = invoices.filter(inv => inv.status === st && !inv.pendingChangeId);
+      colInvs.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.createdAt || a.issueDate || 0) - new Date(b.createdAt || b.issueDate || 0);
+      });
+      colInvs.forEach((inv, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (inv.boardOrder !== newOrder) {
+          inv.boardOrder = newOrder;
+          DB.update('invoices', inv.id, { boardOrder: newOrder });
+        }
+      });
+    });
 
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
+    let cardNumber = 1;
 
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(st));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colInvs.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-
-      if (st === 'Draft') {
-        const addCard = el('div', {
-          class: 'board-card-v2 add-billing-card',
-          style: 'border: 1px dashed #94a3b8; background: rgba(148, 163, 184, 0.02); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: #94a3b8; margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
-        });
-        addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Billing';
-        addCard.addEventListener('click', () => {
-          this.showForm();
-        });
-        cardContainer.appendChild(addCard);
-      }
-
-      if (colInvs.length === 0 && st !== 'Draft') {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No invoices' }));
-      }
-
-      colInvs.forEach(inv => {
+    KanbanBoard.render({
+      container,
+      items: invoices,
+      columns: statuses.map(st => {
+        const col = {
+          key: st,
+          label: st,
+          targetStatus: st,
+          color: statusColors[st] || '#cbd5e1'
+        };
+        if (st === 'Draft' && canEdit) {
+          col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
+          col.addCard = { label: 'Add Billing', onClick: () => self.showForm() };
+        } else if (st !== 'Draft') {
+          col.emptyState = { variant: 'compact', title: 'No invoices', body: '' };
+        }
+        return col;
+      }),
+      renderCard(inv) {
         const client = DB.getById('clients', inv.clientId);
-        const paid = this.getPaidAmount(inv);
+        const paid = self.getPaidAmount(inv);
         const balance = inv.total - paid;
         const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
 
-        const card = el('div', { class: 'board-card-v2' });
-        card.style.borderLeftColor = colColor;
-        card.addEventListener('click', () => { location.hash = '#billing/detail/' + inv.id; });
+        const statusPriorityClass = {
+          'Paid': 'card-v2-priority-low',
+          'Approved': 'card-v2-priority-low',
+          'Sent': 'card-v2-priority-normal',
+          'Partially Paid': 'card-v2-priority-medium',
+          'Pending': 'card-v2-priority-medium',
+          'Draft': 'card-v2-priority-normal',
+          'Overdue': 'card-v2-priority-urgent'
+        }[inv.status] || 'card-v2-priority-normal';
 
-        // Top: Info path and Issue Date
-        const topRow = el('div', { class: 'card-v2-top' });
-        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${inv.status} >` }));
-        if (inv.fromTemplate) topRow.appendChild(this.recurringBadge(inv));
-        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(inv.issueDate) }));
-        card.appendChild(topRow);
-
-        // Title Row
-        const titleRow = el('div', { class: 'card-v2-title-row' });
-        titleRow.appendChild(el('div', { class: 'card-v2-title', text: inv.invoiceNumber }));
-        card.appendChild(titleRow);
-
-        // Client info
-        card.appendChild(el('div', { text: client?.name || '—', style: 'font-size:0.875rem;color:#64748b;margin-bottom:8px;' }));
-
-        // Linked WR/Task info
+        const descParts = [inv.invoiceNumber];
         if (inv.workRequestId) {
           const wr = DB.getById('workRequests', inv.workRequestId);
-          if (wr) {
-            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #1e40af; margin-bottom: 12px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
-            wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 600;' }));
-            if (inv.linkedTaskId) {
-              const task = DB.getById('tasks', inv.linkedTaskId);
-              if (task) {
-                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: #475569;' }));
-              }
-            } else {
-              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: #475569;' }));
-            }
-            card.appendChild(wrWrap);
-          }
+          if (wr) descParts.push(wr.title);
         }
+        if (inv.fromTemplate) descParts.push('Recurring');
 
-        // Meta: Progress and Financials
-        const metaRow = el('div', { class: 'card-v2-meta' });
-        const metaLeft = el('div', { class: 'card-v2-meta-left' });
-        
-        const progBar = el('div', { class: 'card-v2-progress' });
-        progBar.appendChild(el('div', { class: 'card-v2-progress-fill', style: `width: ${progress}%; background-color: ${colColor};` }));
-        metaLeft.appendChild(progBar);
-        metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${progress}%` }));
-        metaRow.appendChild(metaLeft);
+        const card = buildCompactBoardCard({
+          key: 'INV-' + cardNumber++,
+          progress,
+          statusColor: statusColors[inv.status] || '#cbd5e1',
+          title: inv.invoiceNumber,
+          description: client?.name || '—',
+          detail: descParts.slice(1).join(' • '),
+          date: inv.issueDate ? formatDate(inv.issueDate) : '',
+          priority: inv.status,
+          priorityClass: statusPriorityClass,
+          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+        });
 
-        const financials = el('div', { style: 'text-align:right;' });
-        financials.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(inv.total), style: 'font-weight:700;color:#1e293b;' }));
+        const footerRight = card.querySelector('.card-v2-footer-right');
         if (balance > 0 && balance < inv.total) {
-          financials.appendChild(el('div', { text: `Bal: ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:#ef4444;font-weight:600;' }));
+          footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
         }
-        metaRow.appendChild(financials);
-        card.appendChild(metaRow);
-
-        // Card actions for Draft invoices (only users with billing:edit)
-        if (inv.status === 'Draft' && Auth.can('billing:edit')) {
-          const cardActions = el('div', { style: 'display:flex; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0;' });
-          const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.showForm(inv.id);
+        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
+        return card;
+      },
+      cardMenuItems(inv) {
+        const items = [{
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+        }];
+        if (canEdit && inv.status === 'Draft' && !inv.pendingChangeId) {
+          items.push({
+            label: 'Edit',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+            onClick: () => self.showForm(inv.id)
           });
-          cardActions.appendChild(editBtn);
-          const trashBtn = el('button', { class: 'btn btn-danger btn-xs', text: 'Trash' });
-          trashBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.trashInvoice(inv.id);
+          items.push({
+            label: 'Trash',
+            className: 'danger',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+            onClick: () => self.trashInvoice(inv.id)
           });
-          cardActions.appendChild(trashBtn);
-          card.appendChild(cardActions);
         }
+        return items;
+      },
+      drag: {
+        enabled: true,
+        canDrag: inv => canEdit && !inv.pendingChangeId,
+        canDrop: ({ item, targetStatus }) => {
+          if (item.status === targetStatus) return true;
+          const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
+          const currentIdx = flow.indexOf(item.status);
+          const targetIdx = flow.indexOf(targetStatus);
+          if (currentIdx === -1 || targetIdx === -1) return false;
+          if (targetIdx <= currentIdx) return false;
 
-        cardContainer.appendChild(card);
-      });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+          // Payment status transitions require recorded payments that match the target.
+          const paid = self.getPaidAmount(item);
+          if (targetStatus === 'Partially Paid') {
+            return paid > 0 && paid < item.total;
+          }
+          if (targetStatus === 'Paid') {
+            return item.total > 0 && paid >= item.total;
+          }
+          return true;
+        },
+        orderField: 'boardOrder',
+        onDropDenied({ item, targetStatus }) {
+          if (targetStatus !== 'Partially Paid' && targetStatus !== 'Paid') return;
+          const paid = self.getPaidAmount(item);
+          if (targetStatus === 'Partially Paid') {
+            if (paid <= 0) {
+              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Partially Paid — no payments have been recorded.`, 'warning');
+            } else if (paid >= item.total) {
+              Workflow.showMessage('Already Fully Paid', `Invoice "${item.invoiceNumber}" has payments totaling ${formatPHP(paid)}. Use the Paid status instead.`, 'warning');
+            }
+          } else if (targetStatus === 'Paid') {
+            if (item.total <= 0) {
+              Workflow.showMessage('Invalid Invoice', `Invoice "${item.invoiceNumber}" has no billable amount and cannot be marked Paid.`, 'warning');
+            } else if (paid <= 0) {
+              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Paid — no payments have been recorded.`, 'warning');
+            } else if (paid < item.total) {
+              const balance = item.total - paid;
+              Workflow.showMessage('Balance Remaining', `Invoice "${item.invoiceNumber}" still has a balance of ${formatPHP(balance)}. Record the remaining payment before marking Paid.`, 'warning');
+            }
+          }
+        },
+        onDrop({ item, targetStatus, newOrder, fromStatus }) {
+          if (fromStatus === targetStatus) {
+            DB.update('invoices', item.id, { boardOrder: newOrder });
+            App.handleRoute();
+            return;
+          }
+
+          // Permission gate: only billing:approve can move to Approved
+          if (targetStatus === 'Approved' && !Auth.can('billing:approve')) {
+            Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve invoices.', 'danger');
+            return;
+          }
+
+          // Block if pending admin approval
+          if (item.pendingChangeId) {
+            Workflow.showMessage('Pending Approval', `Invoice "${item.invoiceNumber}" is pending administrative approval and cannot be moved.`, 'warning');
+            return;
+          }
+
+          // Block Draft → beyond Pending if no line items
+          if (fromStatus === 'Draft' && targetStatus !== 'Pending') {
+            const hasItems = item.items && item.items.length > 0;
+            if (!hasItems && (!item.total || item.total <= 0)) {
+              Workflow.showMessage('Incomplete Invoice', 'Cannot advance — invoice has no line items or amount.', 'warning');
+              return;
+            }
+          }
+
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+            DB.update('invoices', item.id, changes);
+            App.handleRoute();
+          };
+
+          // Confirm critical transitions
+          if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
+            const labels = {
+              'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
+              'Sent': { msg: `Mark invoice "${item.invoiceNumber}" as Sent to client?`, type: 'success' },
+              'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
+            };
+            const cfg = labels[targetStatus];
+            Workflow.showConfirm('Confirm Status Change', cfg.msg, applyMove, cfg.type);
+            return;
+          }
+
+          applyMove();
+        }
+      }
     });
-    container.appendChild(board);
   },
 
   refreshListCompact(container, invoices) {
@@ -732,27 +823,18 @@ const Billing = {
     this.pendingPrefill = null; // consume once
     const container = el('div');
 
-    // Header bar
-    const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: inv ? 'Edit Invoice' : 'Create Sales Invoice' }));
-    const topActions = el('div', { class: 'form-actions-top' });
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Invoice', form: 'invoice-form' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { location.hash = '#billing'; });
-    topActions.appendChild(saveBtn);
-    topActions.appendChild(cancelBtn);
-    headerBar.appendChild(topActions);
-    container.appendChild(headerBar);
+    const form = el('form', { id: 'invoice-form', class: 'form-stacked notion-form' });
 
-    const form = el('form', { id: 'invoice-form', class: 'form-stacked' });
+    // ── Top property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
     // Client
-    const clientGroup = el('div', { class: 'form-group' });
-    clientGroup.appendChild(el('label', { text: 'Client *' }));
-    const clientSelAttrs = { name: 'clientId', required: true };
+    const clientGroup = el('div', { class: 'notion-prop' });
+    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client' }));
+    const clientSelAttrs = { name: 'clientId', required: true, class: 'notion-prop-select' };
     if (prefill) clientSelAttrs.disabled = true;
     const clientSel = el('select', clientSelAttrs);
-    clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
+    clientSel.appendChild(el('option', { value: '', text: '— Select —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
       const opt = el('option', { value: c.id, text: c.name });
       if (inv && inv.clientId === c.id) opt.selected = true;
@@ -760,15 +842,13 @@ const Billing = {
       clientSel.appendChild(opt);
     });
     clientGroup.appendChild(clientSel);
-    if (prefill) {
-      clientGroup.appendChild(el('input', { type: 'hidden', name: 'clientId', value: prefill.clientId }));
-    }
-    form.appendChild(clientGroup);
+    if (prefill) clientGroup.appendChild(el('input', { type: 'hidden', name: 'clientId', value: prefill.clientId }));
+    propsGrid.appendChild(clientGroup);
 
     // Work Request link
-    const wrGroup = el('div', { class: 'form-group' });
-    wrGroup.appendChild(el('label', { text: 'Link to Work Request' }));
-    const wrSelAttrs = { name: 'workRequestId' };
+    const wrGroup = el('div', { class: 'notion-prop' });
+    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request' }));
+    const wrSelAttrs = { name: 'workRequestId', class: 'notion-prop-select' };
     if (prefill) wrSelAttrs.disabled = true;
     const wrSel = el('select', wrSelAttrs);
     wrSel.appendChild(el('option', { value: '', text: '— None —' }));
@@ -779,18 +859,16 @@ const Billing = {
       wrSel.appendChild(opt);
     });
     wrGroup.appendChild(wrSel);
-    if (prefill && prefill.workRequestId) {
-      wrGroup.appendChild(el('input', { type: 'hidden', name: 'workRequestId', value: prefill.workRequestId }));
-    }
-    form.appendChild(wrGroup);
+    if (prefill && prefill.workRequestId) wrGroup.appendChild(el('input', { type: 'hidden', name: 'workRequestId', value: prefill.workRequestId }));
+    propsGrid.appendChild(wrGroup);
 
     // Task link (Dynamic based on WR)
-    const taskGroup = el('div', { class: 'form-group' });
-    taskGroup.appendChild(el('label', { text: 'Link to Specific Task' }));
-    const taskSel = el('select', { name: 'linkedTaskId' });
+    const taskGroup = el('div', { class: 'notion-prop' });
+    taskGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> Task' }));
+    const taskSel = el('select', { name: 'linkedTaskId', class: 'notion-prop-select' });
     taskSel.appendChild(el('option', { value: '', text: '— Whole Project —' }));
     taskGroup.appendChild(taskSel);
-    form.appendChild(taskGroup);
+    propsGrid.appendChild(taskGroup);
 
     const updateTasks = () => {
       while (taskSel.firstChild) taskSel.removeChild(taskSel.firstChild);
@@ -806,33 +884,39 @@ const Billing = {
       }
     };
     wrSel.addEventListener('change', updateTasks);
-    updateTasks(); // Initial load
+    updateTasks();
 
-    // Dates
-    const dateGroup = el('div', { class: 'form-group' });
-    dateGroup.appendChild(el('label', { text: 'Issue Date *' }));
-    dateGroup.appendChild(el('input', { type: 'date', name: 'issueDate', value: inv ? inv.issueDate : new Date().toISOString().slice(0, 10), required: true }));
-    form.appendChild(dateGroup);
+    // Issue Date
+    const issueDateProp = el('div', { class: 'notion-prop' });
+    issueDateProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Issue Date' }));
+    issueDateProp.appendChild(el('input', { type: 'date', name: 'issueDate', class: 'notion-prop-input', value: inv ? inv.issueDate : new Date().toISOString().slice(0, 10), required: true }));
+    propsGrid.appendChild(issueDateProp);
 
-    const dueGroup = el('div', { class: 'form-group' });
-    dueGroup.appendChild(el('label', { text: 'Due Date *' }));
-    dueGroup.appendChild(el('input', { type: 'date', name: 'dueDate', value: inv ? inv.dueDate : '', required: true }));
-    form.appendChild(dueGroup);
+    // Due Date
+    const dueDateProp = el('div', { class: 'notion-prop' });
+    dueDateProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Due Date' }));
+    dueDateProp.appendChild(el('input', { type: 'date', name: 'dueDate', class: 'notion-prop-input', value: inv ? inv.dueDate : '', required: true }));
+    propsGrid.appendChild(dueDateProp);
 
     // Invoice Number (auto)
-    const numGroup = el('div', { class: 'form-group' });
-    numGroup.appendChild(el('label', { text: 'Invoice Number' }));
-    const numInput = el('input', { type: 'text', name: 'invoiceNumber', value: inv ? inv.invoiceNumber : this.nextInvoiceNumber(entity), readonly: true });
-    numGroup.appendChild(numInput);
-    form.appendChild(numGroup);
+    const numProp = el('div', { class: 'notion-prop' });
+    numProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><line x1="16" y1="3" x2="16" y2="7"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="4" y1="11" x2="20" y2="11"/></svg> Invoice Number' }));
+    numProp.appendChild(el('input', { type: 'text', name: 'invoiceNumber', class: 'notion-prop-input', value: inv ? inv.invoiceNumber : this.nextInvoiceNumber(entity), readonly: true }));
+    propsGrid.appendChild(numProp);
 
-    // Line Items
-    const itemsSection = el('div', { class: 'form-section' });
-    itemsSection.appendChild(el('h3', { text: 'Line Items' }));
-    const itemsList = el('div', { id: 'line-item-rows' });
+    form.appendChild(propsGrid);
+
+    // Line Items — Notion-style editable list
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Line Items' }));
+    const itemsSection = el('div', { class: 'notion-line-items' });
+    const itemsList = el('div', { class: 'notion-line-item-list', id: 'line-item-rows' });
     itemsSection.appendChild(itemsList);
 
-    const addItemBtn = el('button', { type: 'button', class: 'btn btn-ghost', text: '+ Add Line Item' });
+    const addItemBtn = el('button', {
+      type: 'button',
+      class: 'notion-add-line-item',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add line item'
+    });
     addItemBtn.addEventListener('click', () => this.addLineItemRow(itemsList));
     itemsSection.appendChild(addItemBtn);
     form.appendChild(itemsSection);
@@ -841,43 +925,27 @@ const Billing = {
     if (inv && inv.lineItems) {
       inv.lineItems.forEach(item => this.addLineItemRow(itemsList, item));
     } else if (opReq) {
-      this.addLineItemRow(itemsList, { 
-        type: 'Professional Fee', 
-        description: opReq.notes || 'Operations Request Billing', 
-        amount: opReq.amount ? String(opReq.amount) : '' 
+      this.addLineItemRow(itemsList, {
+        type: 'Professional Fee',
+        description: opReq.notes || 'Operations Request Billing',
+        amount: opReq.amount ? String(opReq.amount) : ''
       });
     } else {
       this.addLineItemRow(itemsList, { type: 'Professional Fee', description: '', amount: '' });
       this.addLineItemRow(itemsList, { type: 'Government Fee', description: '', amount: '' });
     }
 
-    // Totals (no VAT)
-    const totals = el('div', { class: 'invoice-totals' });
-    totals.appendChild(el('div', { class: 'total-row' }, [el('span', { text: 'Subtotal:' }), el('span', { id: 'inv-subtotal', text: '₱0.00' })]));
-    totals.appendChild(el('div', { class: 'total-row total-grand' }, [el('span', { text: 'Total:' }), el('span', { id: 'inv-total', text: '₱0.00' })]));
+    // Totals (no VAT) — Notion-style summary row
+    const totals = el('div', { class: 'notion-totals' });
+    totals.appendChild(el('div', { class: 'notion-total-row' }, [
+      el('span', { text: 'Subtotal' }),
+      el('span', { id: 'inv-subtotal', text: '₱0.00' })
+    ]));
+    totals.appendChild(el('div', { class: 'notion-total-row notion-total-grand' }, [
+      el('span', { text: 'Total' }),
+      el('span', { id: 'inv-total', text: '₱0.00' })
+    ]));
     form.appendChild(totals);
-
-    // Seller / Buyer info preview
-    const infoSection = el('div', { class: 'form-section' });
-    infoSection.appendChild(el('h3', { text: 'Seller / Buyer Info' }));
-    const infoBox = el('div', { class: 'invoice-info-box' });
-    infoBox.appendChild(el('p', { text: 'Seller: ' + entity + ' Accounting Firm | TIN: 000-000-000-0000 | Branch: 0001' }));
-    infoBox.appendChild(el('p', { id: 'buyer-info', text: 'Buyer: —' }));
-    infoSection.appendChild(infoBox);
-    form.appendChild(infoSection);
-
-    // Update buyer info on client change
-    clientSel.addEventListener('change', () => {
-      const cid = clientSel.value;
-      const c = cid ? DB.getById('clients', cid) : null;
-      const buyerEl = document.getElementById('buyer-info');
-      if (buyerEl && c) {
-        buyerEl.textContent = 'Buyer: ' + c.name + ' | TIN: ' + (c.tin || '—');
-      } else if (buyerEl) {
-        buyerEl.textContent = 'Buyer: —';
-      }
-    });
-    if (clientSel.value) clientSel.dispatchEvent(new Event('change'));
 
     // Recalculate totals on input changes
     form.addEventListener('input', () => this.recalcTotals(form));
@@ -890,9 +958,16 @@ const Billing = {
   },
 
   addLineItemRow(container, item) {
-    const row = el('div', { class: 'line-item-row' });
+    const row = el('div', { class: 'notion-line-item-row' });
 
-    const typeSel = el('select', { class: 'item-type' });
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
+    const typeSel = el('select', { class: 'item-type notion-line-item-type' });
     ['Professional Fee', 'Government Fee'].forEach(t => {
       const opt = el('option', { value: t, text: t });
       if (item?.type === t) opt.selected = true;
@@ -900,13 +975,18 @@ const Billing = {
     });
     row.appendChild(typeSel);
 
-    const descIn = el('input', { type: 'text', placeholder: 'Description', class: 'item-desc', value: item?.description || '' });
+    const descIn = el('input', { type: 'text', placeholder: 'Description', class: 'item-desc notion-line-item-desc', value: item?.description || '' });
     row.appendChild(descIn);
 
-    const amtIn = el('input', { type: 'number', placeholder: 'Amount', class: 'item-amt', value: item?.amount || '', min: 0, step: 0.01 });
+    const amtIn = el('input', { type: 'number', placeholder: '0.00', class: 'item-amt notion-line-item-amt', value: item?.amount || '', min: 0, step: 0.01 });
     row.appendChild(amtIn);
 
-    const removeBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: '×' });
+    const removeBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     removeBtn.addEventListener('click', () => {
       row.remove();
       const form = container.closest('form');
@@ -945,18 +1025,43 @@ const Billing = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+
+    // Validate line items: at least one complete row, no partially-filled rows.
+    const itemRows = form.querySelectorAll('.notion-line-item-row');
+    let validItemCount = 0;
+    let hasPartialItem = false;
+    itemRows.forEach(row => {
+      const desc = row.querySelector('.item-desc')?.value.trim() || '';
+      const amt = parseFloat(row.querySelector('.item-amt')?.value) || 0;
+      if (desc && amt > 0) {
+        validItemCount++;
+      } else if (desc || amt > 0) {
+        hasPartialItem = true;
+      }
+    });
+    if (hasPartialItem) {
+      Workflow.showMessage('Validation Error', 'Each line item must have both a description and a valid amount greater than zero.', 'warning');
+      return;
+    }
+    if (validItemCount === 0) {
+      Workflow.showMessage('Validation Error', 'Please add at least one line item with a description and a valid amount.', 'warning');
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(form).entries());
     const entity = Auth.activeEntity;
 
-    const rows = form.querySelectorAll('.line-item-row');
+    const rows = form.querySelectorAll('.notion-line-item-row');
     const lineItems = [];
     let subtotal = 0;
     rows.forEach(row => {
+      const desc = row.querySelector('.item-desc').value.trim();
       const amt = parseFloat(row.querySelector('.item-amt').value) || 0;
+      if (!desc || amt <= 0) return;
       subtotal += amt;
       lineItems.push({
         type: row.querySelector('.item-type').value,
-        description: row.querySelector('.item-desc').value.trim(),
+        description: desc,
         amount: amt
       });
     });
@@ -990,7 +1095,7 @@ const Billing = {
     }
 
     if (isNew) {
-      record.id = generateId('inv');
+      record.id = generateSequentialId('inv', 'invoices');
       record.createdAt = new Date().toISOString();
       record.updatedAt = record.createdAt;
     } else {
@@ -1065,12 +1170,18 @@ const Billing = {
     this.detailId = invoiceId;
     const isNew = !invoiceId;
     const inv = isNew ? null : this.getInvoiceById(invoiceId);
+    const fullPageRoute = isNew ? '#billing/form/new' : `#billing/form/${invoiceId}`;
 
+    // If the user (or stored preference) requests full-page/new-tab, openFormPanel will
+    // navigate directly via the route. For side/center peek we render inside the panel.
     openFormPanel({
       icon: '🧾',
       title: isNew ? 'Create Sales Invoice' : `Edit Invoice ${inv?.invoiceNumber || ''}`.trim(),
       formContent: this.renderForm(invoiceId),
       formId: 'invoice-form',
+      viewContext: 'invoice-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Save Invoice' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'invoice-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#billing') }
@@ -1229,7 +1340,7 @@ const Billing = {
     if (inv.status === 'Draft' && inv.rejectionReason) {
       const rejBanner = el('div', {
         class: 'alert-banner alert-danger',
-        style: 'background: #fef2f2; border: 1px solid #fee2e2; color: #b91c1c; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-danger); color: var(--color-danger); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
       });
       rejBanner.appendChild(el('span', { html: '❌' }));
       rejBanner.appendChild(el('span', { html: `<strong>Rejection Reason:</strong> ${inv.rejectionReason}` }));
@@ -1239,7 +1350,7 @@ const Billing = {
     if (inv.status === 'Pending') {
       const banner = el('div', {
         class: 'alert-banner alert-warning',
-        style: 'background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); color: var(--color-warning); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
       });
       banner.appendChild(el('span', { html: '⚠️' }));
       banner.appendChild(el('span', { text: 'This invoice is pending administrative approval and cannot be printed, sent, or have payments recorded until approved.' }));
@@ -2550,16 +2661,26 @@ const Billing = {
     const entity = Auth.activeEntity;
     const container = el('div');
 
-    // Notion-style title section
+    // Notion-style icon header (title is now the inline borderless title field)
     const titleSec = el('div', { class: 'side-pane-form-title' });
     titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📋' }));
-    titleSec.appendChild(el('h2', { text: existing ? 'Edit Template' : 'New Billing Template' }));
     container.appendChild(titleSec);
 
     const formWrap = el('div', { class: 'side-pane-form-content' });
-    const form = el('form', { class: 'form-stacked', id: 'billing-tpl-form' });
+    const form = el('form', { class: 'form-stacked notion-form', id: 'billing-tpl-form' });
     
-    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Template Name *' }), el('input', { type: 'text', name: 'name', required: true, value: existing?.name || '' })]));
+    // ── Title free-form ──
+    const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Template Name' }));
+    const nameInput = el('input', {
+      type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input',
+      placeholder: 'New Billing Template', required: true, value: existing?.name || ''
+    });
+    titleSection.appendChild(nameInput);
+    if (!existing) {
+      setTimeout(() => { nameInput.focus(); }, 60);
+    }
+    form.appendChild(titleSection);
 
     const clientGroup = el('div', { class: 'form-group' });
     clientGroup.appendChild(el('label', { text: 'Client *' }));
@@ -2623,7 +2744,11 @@ const Billing = {
     container.appendChild(footer);
 
     if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
-      window.SidePaneInstance.open({ content: container });
+      window.SidePaneInstance.open({
+        title: existing ? 'Edit Billing Template' : 'New Billing Template',
+        content: container,
+        viewContext: 'billing-template-form'
+      });
     }
   },
 
@@ -2631,7 +2756,7 @@ const Billing = {
     const entity = Auth.activeEntity;
     const now = new Date();
     const inv = {
-      id: generateId('inv'),
+      id: generateSequentialId('inv', 'invoices'),
       clientId: t.clientId,
       entity: entity,
       invoiceNumber: this.nextInvoiceNumber(entity),

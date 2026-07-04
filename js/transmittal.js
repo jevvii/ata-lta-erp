@@ -68,6 +68,22 @@ const Transmittal = {
       actions.appendChild(backBtn);
       titleBar.appendChild(actions);
       container.appendChild(titleBar);
+    } else if (this.view === 'form') {
+      container.classList.add('transmittal-tab-page');
+      if (!Auth.can('transmittal:create')) {
+        this.view = 'list';
+      } else {
+        const isNew = !this.detailId;
+        const existing = isNew ? null : DB.getById('transmittals', this.detailId);
+        container.appendChild(buildFormBreadcrumb({
+          baseLabel: 'Transmittal',
+          baseHash: '#transmittal',
+          currentText: isNew ? 'New Transmittal' : (existing?.trackingNumber || 'Edit Transmittal'),
+          actions: [
+            { text: '← Back to List', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#transmittal'; } }
+          ]
+        }));
+      }
     } else if (this.view === 'list') {
       container.classList.add('transmittal-tab-page');
       const titleBar = el('div', { class: 'page-title-bar-v2' });
@@ -77,14 +93,7 @@ const Transmittal = {
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
-    else if (this.view === 'form') {
-      if (!Auth.can('transmittal:create')) {
-        this.view = 'list';
-        container.appendChild(this.renderList());
-      } else {
-        container.appendChild(this.renderForm());
-      }
-    }
+    else if (this.view === 'form') container.appendChild(this.renderForm());
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
@@ -240,15 +249,15 @@ const Transmittal = {
     if (Auth.can('transmittal:create')) {
       const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'transmittal');
       if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #ffc107;border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:#e65100;margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
+        const banner = el('div', { class: 'pending-requests-banner', style: 'background:var(--color-bg-muted);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
+        const bannerTitle = el('div', { style: 'font-weight:600;color:var(--color-text);margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
         bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Transmittal Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
         banner.appendChild(bannerTitle);
         pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid #ffe082;' });
+          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid var(--color-border);' });
           const client = DB.getById('clients', req.clientId);
           const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:#333;' });
+          const info = el('span', { style: 'font-size:0.875rem;color:var(--color-text);' });
           info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
           row.appendChild(info);
           const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
@@ -489,10 +498,20 @@ const Transmittal = {
 
   renderBoardView(container, items) {
     if (items.length === 0) {
-      container.appendChild(el('p', { text: 'No transmittals found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        title: 'No transmittals found',
+        body: 'Create a transmittal to start tracking document delivery.'
+      }));
       return;
     }
-    const board = el('div', { class: 'board-v2' });
+
+    const canCreate = Auth.can('transmittal:create');
+    const canEdit = Auth.can('transmittal:edit');
+    const canMark = Auth.can('transmittal:mark');
+    const self = this;
+
     const statuses = ['Draft', 'Sent', 'Acknowledged'];
     const statusColors = {
       'Draft': '#94a3b8',
@@ -501,68 +520,162 @@ const Transmittal = {
     };
 
     statuses.forEach(st => {
-      const colColor = statusColors[st] || '#cbd5e1';
-      const colItems = items.filter(t => t.status === st);
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
-
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(st));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colItems.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-      if (colItems.length === 0) {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No transmittals' }));
-      }
-
-      colItems.forEach(t => {
-        const clientName = this.getClientName(t.clientId);
-        const itemCount = (t.items || []).length;
-
-        const card = el('div', { class: 'board-card-v2' });
-        card.style.borderLeftColor = colColor;
-        card.addEventListener('click', () => { location.hash = '#transmittal/detail/' + t.id; });
-
-        // Top: Status path and Date
-        const topRow = el('div', { class: 'card-v2-top' });
-        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${t.status} >` }));
-        const date = t.sentAt || t.createdAt;
-        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(date) }));
-        card.appendChild(topRow);
-
-        // Title Row
-        const titleRow = el('div', { class: 'card-v2-title-row' });
-        titleRow.appendChild(el('div', { class: 'card-v2-title', text: t.trackingNumber }));
-        card.appendChild(titleRow);
-
-        // Subtitle: Client and Item Count
-        card.appendChild(el('div', { text: `${clientName} • ${itemCount} items`, style: 'font-size:0.875rem;color:#64748b;margin-bottom:12px;' }));
-
-        // Meta: Details
-        const metaRow = el('div', { class: 'card-v2-meta' });
-        const wr = DB.getById('workRequests', t.workRequestId);
-        if (wr) {
-          metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: wr.title, style: 'font-weight:600;color:#1e293b;font-size:0.75rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }));
-        }
-        card.appendChild(metaRow);
-
-        if (this.canEditTransmittal(t)) {
-          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;margin-top:8px;' });
-          const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
-          editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
-          cardActions.appendChild(editBtn);
-          card.appendChild(cardActions);
-        }
-        cardContainer.appendChild(card);
+      const colItems = items.filter(t => t.status === st && !t.pendingChangeId);
+      colItems.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.createdAt || a.sentAt || 0) - new Date(b.createdAt || b.sentAt || 0);
       });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+      colItems.forEach((t, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (t.boardOrder !== newOrder) {
+          t.boardOrder = newOrder;
+          DB.update('transmittals', t.id, { boardOrder: newOrder });
+        }
+      });
     });
-    container.appendChild(board);
+
+    let cardNumber = 1;
+
+    KanbanBoard.render({
+      container,
+      items,
+      columns: statuses.map(st => {
+        const col = {
+          key: st,
+          label: st,
+          targetStatus: st,
+          color: statusColors[st] || '#cbd5e1',
+          emptyState: st === 'Draft' && canCreate ? false : { variant: 'compact', title: 'No transmittals', body: '' }
+        };
+        if (st === 'Draft' && canCreate) {
+          col.addButton = { label: 'Add Transmittal', onClick: () => self.showForm() };
+          col.addCard = { label: 'Add Transmittal', onClick: () => self.showForm() };
+        }
+        return col;
+      }),
+      renderCard(t) {
+        const clientName = self.getClientName(t.clientId);
+        const itemCount = (t.items || []).length;
+        const date = t.sentAt || t.createdAt;
+
+        const statusPriorityClass = {
+          'Draft': 'card-v2-priority-normal',
+          'Sent': 'card-v2-priority-medium',
+          'Acknowledged': 'card-v2-priority-low'
+        }[t.status] || 'card-v2-priority-normal';
+
+        const progressMap = { 'Draft': 0, 'Sent': 50, 'Acknowledged': 100 };
+        const progress = progressMap[t.status] || 0;
+
+        const wr = DB.getById('workRequests', t.workRequestId);
+        const detail = wr ? wr.title : '';
+
+        return buildCompactBoardCard({
+          key: 'TX-' + cardNumber++,
+          progress,
+          statusColor: statusColors[t.status] || '#cbd5e1',
+          title: t.trackingNumber,
+          description: clientName,
+          detail: `${itemCount} item${itemCount === 1 ? '' : 's'}` + (detail ? ` • ${detail}` : ''),
+          date: date ? formatDate(date) : '',
+          priority: t.status,
+          priorityClass: statusPriorityClass,
+          onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+        });
+      },
+      cardMenuItems(t) {
+        const menu = [{
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+        }];
+        if (self.canEditTransmittal(t)) {
+          menu.push({
+            label: 'Edit',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+            onClick: () => self.showForm(t.id)
+          });
+        }
+        if (canMark && t.status === 'Draft' && !t.pendingChangeId) {
+          menu.push({
+            label: 'Mark as Sent',
+            className: 'primary',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+            onClick: () => Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
+              const markData = { status: 'Sent', sentAt: new Date().toISOString(), sentBy: Auth.user.id };
+              if (Auth.canBypassReview('transmittals')) {
+                DB.update('transmittals', t.id, markData);
+              } else {
+                const record = Object.assign({}, t, markData, { id: t.id });
+                PendingChanges.submit('transmittals', record, false);
+              }
+              App.handleRoute();
+            }, 'success')
+          });
+        }
+        if (canMark && t.status === 'Sent') {
+          menu.push({
+            label: 'Acknowledge Receipt',
+            className: 'primary',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+            onClick: () => self.showAcknowledgeDialog(t.id)
+          });
+        }
+        return menu;
+      },
+      drag: {
+        enabled: true,
+        canDrag: t => canEdit && !t.pendingChangeId,
+        canDrop: ({ item, targetStatus }) => {
+          if (item.status === targetStatus) return true;
+          const flow = ['Draft', 'Sent', 'Acknowledged'];
+          const currentIdx = flow.indexOf(item.status);
+          const targetIdx = flow.indexOf(targetStatus);
+          if (currentIdx === -1 || targetIdx === -1) return false;
+          return targetIdx > currentIdx;
+        },
+        orderField: 'boardOrder',
+        onDrop({ item, targetStatus, newOrder, fromStatus }) {
+          if (fromStatus === targetStatus) {
+            DB.update('transmittals', item.id, { boardOrder: newOrder });
+            App.handleRoute();
+            return;
+          }
+
+          // Block if pending admin approval
+          if (item.pendingChangeId) {
+            Workflow.showMessage('Pending Approval', 'This transmittal is pending administrative approval and cannot be moved.', 'warning');
+            return;
+          }
+
+          // Block Sent if no items attached
+          if (targetStatus === 'Sent' && (!item.items || item.items.length === 0)) {
+            Workflow.showMessage('Incomplete Transmittal', 'Cannot send — transmittal has no items attached.', 'warning');
+            return;
+          }
+
+          const label = item.trackingNumber || item.id;
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+            if (targetStatus === 'Sent') changes.sentAt = new Date().toISOString();
+            if (targetStatus === 'Acknowledged') changes.acknowledgedAt = new Date().toISOString();
+            DB.update('transmittals', item.id, changes);
+            App.handleRoute();
+          };
+
+          // Confirm both Sent and Acknowledged
+          const msgs = {
+            'Sent': `Mark transmittal "${label}" as Sent? This indicates the documents have been dispatched.`,
+            'Acknowledged': `Mark transmittal "${label}" as Acknowledged by the recipient?`
+          };
+          Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
+        }
+      }
+    });
   },
 
   renderCompactListView(container, items) {
@@ -594,12 +707,16 @@ const Transmittal = {
     this.detailId = txId;
     const isNew = !txId;
     const existing = isNew ? null : DB.getById('transmittals', txId);
+    const fullPageRoute = isNew ? '#transmittal/form/new' : `#transmittal/form/${txId}`;
 
     openFormPanel({
       icon: '📨',
       title: isNew ? 'Create Transmittal' : `Edit Transmittal — ${existing?.trackingNumber || ''}`.trim(),
       formContent: this.renderForm(),
       formId: 'transmittal-form',
+      viewContext: 'transmittal-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Create Transmittal' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'transmittal-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#transmittal') }
@@ -617,104 +734,124 @@ const Transmittal = {
 
     const container = el('div');
 
-    // Form header bar
     const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: isNew ? 'Create Transmittal' : 'Edit Transmittal' }));
     const headerActions = el('div', { class: 'form-actions-top' });
-    const saveTopBtn = el('button', { type: 'button', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
-    saveTopBtn.addEventListener('click', () => { this.submitForm(form); });
-    headerActions.appendChild(saveTopBtn);
+    const saveBtnTop = el('button', { type: 'submit', form: 'transmittal-form', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
+    headerActions.appendChild(saveBtnTop);
     const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { location.hash = '#transmittal'; });
+    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#transmittal'));
     headerActions.appendChild(cancelBtn);
     headerBar.appendChild(headerActions);
     container.appendChild(headerBar);
 
-    const form = el('form', { id: 'transmittal-form', class: 'form-stacked' });
+    const form = el('form', { id: 'transmittal-form', class: 'form-stacked notion-form' });
 
-    // Work Request
-    const wrGroup = el('div', { class: 'form-group' });
-    wrGroup.appendChild(el('label', { text: 'Work Request *' }));
-    const wrSel = el('select', { name: 'workRequestId', required: true });
-    wrSel.appendChild(el('option', { value: '', text: '— Select Work Request —' }));
-    DB.getWhere('workRequests', wr => wr.entity === entity).forEach(wr => {
-      const opt = el('option', { value: wr.id, text: wr.title });
-      if (existing && existing.workRequestId === wr.id) opt.selected = true;
-      else if (!existing && this.prefilledWrId && this.prefilledWrId === wr.id) opt.selected = true;
-      wrSel.appendChild(opt);
+    // ── Top property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
+
+    // Client
+    const clientGroup = el('div', { class: 'notion-prop' });
+    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client *' }));
+    const clientSel = el('select', { name: 'clientId', required: true, class: 'notion-prop-select' });
+    clientSel.appendChild(el('option', { value: '', text: '— Select —' }));
+    DB.getWhere('clients', c => c.entity === entity).forEach(c => {
+      const opt = el('option', { value: c.id, text: c.name });
+      if (existing && existing.clientId === c.id) opt.selected = true;
+      else if (!existing && this.prefilledClientId && this.prefilledClientId === c.id) opt.selected = true;
+      clientSel.appendChild(opt);
     });
+    clientGroup.appendChild(clientSel);
+    propsGrid.appendChild(clientGroup);
+
+    // Work Request (filtered by selected client)
+    const wrGroup = el('div', { class: 'notion-prop' });
+    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request *' }));
+    const wrSel = el('select', { name: 'workRequestId', required: true, class: 'notion-prop-select' });
+    wrSel.appendChild(el('option', { value: '', text: '— Select —' }));
     wrGroup.appendChild(wrSel);
-    form.appendChild(wrGroup);
-
-    // Client display (auto-populated from WR)
-    const clientGroup = el('div', { class: 'form-group' });
-    clientGroup.appendChild(el('label', { text: 'Client' }));
-    const prefilledClient = this.prefilledClientId ? this.getClientName(this.prefilledClientId) : '';
-    const clientDisplay = el('input', { type: 'text', name: 'clientDisplay', disabled: true, value: existing ? this.getClientName(existing.clientId) : prefilledClient });
-    clientGroup.appendChild(clientDisplay);
-    const clientIdInput = el('input', { type: 'hidden', name: 'clientId', value: existing ? existing.clientId : (this.prefilledClientId || '') });
-    clientGroup.appendChild(clientIdInput);
-    form.appendChild(clientGroup);
-
-    wrSel.addEventListener('change', () => {
-      const wr = DB.getById('workRequests', wrSel.value);
-      if (wr) {
-        clientDisplay.value = this.getClientName(wr.clientId);
-        clientIdInput.value = wr.clientId;
-      } else {
-        clientDisplay.value = '';
-        clientIdInput.value = '';
-      }
-    });
+    propsGrid.appendChild(wrGroup);
 
     // Tracking Number
-    const tnGroup = el('div', { class: 'form-group' });
-    tnGroup.appendChild(el('label', { text: 'Tracking Number' }));
-    const tnWrap = el('div', { style: 'display:flex; gap: var(--spacing-sm); align-items:center;' });
-    const tnInput = el('input', { type: 'text', name: 'trackingNumber', readonly: true, value: existing ? existing.trackingNumber : '' });
+    const tnGroup = el('div', { class: 'notion-prop' });
+    tnGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h3M4 17v3h3M20 7V4h-3M20 17v3h-3M9 9h6v6H9z"/></svg> Tracking Number' }));
+    const tnWrap = el('div', { class: 'notion-input-with-btn' });
+    const tnInput = el('input', { type: 'text', name: 'trackingNumber', class: 'notion-prop-input', readonly: true, value: existing ? existing.trackingNumber : '' });
     tnInput.style.flex = '1';
     tnWrap.appendChild(tnInput);
     const genBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Generate' });
-    genBtn.addEventListener('click', () => {
-      tnInput.value = this.generateTrackingNumber(entity);
-    });
+    genBtn.addEventListener('click', () => { tnInput.value = this.generateTrackingNumber(entity); });
     tnWrap.appendChild(genBtn);
     tnGroup.appendChild(tnWrap);
-    form.appendChild(tnGroup);
+    propsGrid.appendChild(tnGroup);
 
-    // Itemized document list
-    const itemsSection = el('div', { class: 'form-group' });
-    itemsSection.appendChild(el('label', { text: 'Items *' }));
-    const itemsTable = el('table', { class: 'data-table', style: 'margin-bottom: var(--spacing-sm);' });
-    const itemsThead = el('thead');
-    const itemsThr = el('tr');
-    ['Document Type', 'Description', ''].forEach(h => itemsThr.appendChild(el('th', { text: h })));
-    itemsThead.appendChild(itemsThr);
-    itemsTable.appendChild(itemsThead);
-    const itemsTbody = el('tbody');
-    itemsTbody.id = 'transmittal-items-tbody';
-    itemsTable.appendChild(itemsTbody);
-    itemsSection.appendChild(itemsTable);
+    form.appendChild(propsGrid);
 
-    const addRowBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Item' });
-    addRowBtn.addEventListener('click', () => this.addItemRow(itemsTbody));
+    const populateWRs = (extraWrIds = new Set()) => {
+      const selectedClientId = clientSel.value;
+      const currentWR = wrSel.value;
+      while (wrSel.firstChild) wrSel.removeChild(wrSel.firstChild);
+      wrSel.appendChild(el('option', { value: '', text: '— Select —' }));
+      let matchedCurrent = false;
+      DB.getWhere('workRequests', wr => {
+        if (wr.entity !== entity) return false;
+        return extraWrIds.has(wr.id) || !selectedClientId || wr.clientId === selectedClientId;
+      }).forEach(wr => {
+        const opt = el('option', { value: wr.id, text: wr.title });
+        if (wr.id === currentWR) { opt.selected = true; matchedCurrent = true; }
+        wrSel.appendChild(opt);
+      });
+      if (!matchedCurrent) wrSel.value = '';
+    };
+
+    clientSel.addEventListener('change', () => populateWRs());
+
+    wrSel.addEventListener('change', () => {
+      const wr = DB.getById('workRequests', wrSel.value);
+      if (wr?.clientId && clientSel.value !== wr.clientId) {
+        clientSel.value = wr.clientId;
+        const extra = new Set(wr.id ? [wr.id] : []);
+        populateWRs(extra);
+        wrSel.value = wr.id;
+      }
+    });
+
+    // Initial population
+    const initialWRId = existing?.workRequestId || this.prefilledWrId || '';
+    const initialClientId = existing?.clientId || this.prefilledClientId || '';
+    if (initialClientId) clientSel.value = initialClientId;
+    const initialExtra = new Set(initialWRId ? [initialWRId] : []);
+    populateWRs(initialExtra);
+    if (initialWRId) wrSel.value = initialWRId;
+
+    // Itemized document list — Notion-style editable list
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Transmittal Items' }));
+    const itemsSection = el('div', { class: 'notion-line-items' });
+    const itemsList = el('div', { class: 'notion-line-item-list', id: 'transmittal-items-list' });
+    itemsSection.appendChild(itemsList);
+
+    const addRowBtn = el('button', {
+      type: 'button',
+      class: 'notion-add-line-item',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add item'
+    });
+    addRowBtn.addEventListener('click', () => this.addItemRow(itemsList));
     itemsSection.appendChild(addRowBtn);
     form.appendChild(itemsSection);
 
     // Pre-populate rows for existing
     if (existing && existing.items && existing.items.length > 0) {
-      existing.items.forEach(item => this.addItemRow(itemsTbody, item.description, item.documentType));
+      existing.items.forEach(item => this.addItemRow(itemsList, item.description, item.documentType));
     } else {
-      this.addItemRow(itemsTbody);
+      this.addItemRow(itemsList);
     }
 
-    // Notes
-    const notesGroup = el('div', { class: 'form-group' });
-    notesGroup.appendChild(el('label', { text: 'Notes' }));
-    const notesTextarea = el('textarea', { name: 'notes', rows: 3 });
+    // Notes — Notion free-form section
+    const notesSection = el('div', { class: 'notion-freeform' });
+    notesSection.appendChild(el('label', { class: 'notion-section-label', text: 'Notes' }));
+    const notesTextarea = el('textarea', { name: 'notes', class: 'notion-freeform-textarea', rows: 3, placeholder: 'Add any extra details...' });
     notesTextarea.textContent = existing ? (existing.notes || '') : '';
-    notesGroup.appendChild(notesTextarea);
-    form.appendChild(notesGroup);
+    notesSection.appendChild(notesTextarea);
+    form.appendChild(notesSection);
 
     form.addEventListener('submit', (e) => { e.preventDefault(); this.submitForm(form); });
 
@@ -722,36 +859,42 @@ const Transmittal = {
     return container;
   },
 
-  addItemRow(tbody, description = '', documentType = '') {
-    const tr = el('tr');
+  addItemRow(container, description = '', documentType = '') {
+    const row = el('div', { class: 'notion-line-item-row' });
 
-    const typeTd = el('td');
-    const typeSel = el('select', { class: 'item-doc-type', required: true });
-    typeSel.appendChild(el('option', { value: '', text: '— Select Type —' }));
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
+    const typeSel = el('select', { class: 'item-doc-type notion-line-item-type', required: true });
+    typeSel.appendChild(el('option', { value: '', text: '— Type —' }));
     ['Original Scan', 'Generated Copy', 'Government Receipt', 'Final Deliverable', 'Other'].forEach(t => {
       const opt = el('option', { value: t, text: t });
       if (documentType === t) opt.selected = true;
       typeSel.appendChild(opt);
     });
-    typeTd.appendChild(typeSel);
-    tr.appendChild(typeTd);
+    row.appendChild(typeSel);
 
-    const descTd = el('td');
-    const descInput = el('input', { type: 'text', class: 'item-description', required: true, value: description, placeholder: 'Description' });
-    descTd.appendChild(descInput);
-    tr.appendChild(descTd);
+    const descInput = el('input', { type: 'text', class: 'item-description notion-line-item-desc', required: true, value: description, placeholder: 'Description' });
+    row.appendChild(descInput);
 
-    const actTd = el('td');
-    const remBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: 'Remove' });
+    const remBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     remBtn.addEventListener('click', () => {
-      if (tbody.querySelectorAll('tr').length > 1) {
-        tbody.removeChild(tr);
+      if (container.querySelectorAll('.notion-line-item-row').length > 1) {
+        row.remove();
       }
     });
-    actTd.appendChild(remBtn);
-    tr.appendChild(actTd);
+    row.appendChild(remBtn);
 
-    tbody.appendChild(tr);
+    container.appendChild(row);
   },
 
   submitForm(form) {
@@ -760,10 +903,10 @@ const Transmittal = {
     const entity = Auth.activeEntity;
     const data = Object.fromEntries(new FormData(form).entries());
     const isNew = !this.detailId;
-    const tbody = document.getElementById('transmittal-items-tbody');
+    const itemsList = document.getElementById('transmittal-items-list');
 
     const items = [];
-    tbody.querySelectorAll('tr').forEach(row => {
+    itemsList.querySelectorAll('.notion-line-item-row').forEach(row => {
       const desc = row.querySelector('.item-description')?.value.trim();
       const type = row.querySelector('.item-doc-type')?.value;
       if (desc && type) {
@@ -865,7 +1008,7 @@ const Transmittal = {
       return wrEnt === entity.toUpperCase();
     });
 
-    const wrapper = el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' });
+    const wrapper = el('div', { class: 'form-stacked', style: 'display: flex; flex-direction: column;' });
     const selectGroup = el('div', { class: 'form-group' });
     selectGroup.appendChild(el('label', { text: 'Select Work Request *' }));
     const wrSelect = el('select', { class: 'form-select', style: 'width:100%;' });
@@ -1071,7 +1214,7 @@ const Transmittal = {
       }
     }
 
-    const letter = el('div', { class: 'transmittal-letter', style: 'background:#fff; color:#000; font-family:Arial, sans-serif; padding:20px; border:1px solid #ccc; max-width:700px; margin:0 auto; box-sizing:border-box;' });
+    const letter = el('div', { class: 'transmittal-letter', style: 'background:var(--color-surface); color:var(--color-text); font-family:Arial, sans-serif; padding:20px; border:1px solid var(--color-border); max-width:700px; margin:0 auto; box-sizing:border-box;' });
 
     // Styles local to the preview to ensure styling matches
     const styleEl = el('style', { textContent: `
