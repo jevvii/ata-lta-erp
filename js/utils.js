@@ -204,7 +204,9 @@ function buildCompactBoardCard(opts) {
     e.stopPropagation();
     if (typeof opts.moreOptions === 'function') opts.moreOptions(e);
   });
-  header.appendChild(moreBtn);
+  const moreWrap = el('div', { class: 'action-menu card-v2-action-menu' });
+  moreWrap.appendChild(moreBtn);
+  header.appendChild(moreWrap);
   card.appendChild(header);
 
   // 2. Title

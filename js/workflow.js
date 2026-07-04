@@ -2453,9 +2453,21 @@ const Workflow = {
 
       const colWrs = wrs.filter(wr => wr.status === st);
 
+      // Aggregate column progress across all work requests in the column
+      let colTotalTasks = 0;
+      let colCompletedTasks = 0;
+      colWrs.forEach(wr => {
+        const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
+        colTotalTasks += tasks.length;
+        colCompletedTasks += tasks.filter(t => t.status === 'Completed').length;
+      });
+      const colProgress = colTotalTasks > 0 ? Math.round((colCompletedTasks / colTotalTasks) * 100) : 0;
+
       const header = el('div', { class: 'board-column-header-v2' });
       const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
+      const dotEl = el('span', { class: 'board-column-dot' });
+      dotEl.innerHTML = buildProgressRingSVG(colProgress, colColor);
+      titleWrap.appendChild(dotEl);
       titleWrap.appendChild(document.createTextNode(st));
       titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colWrs.length) }));
       header.appendChild(titleWrap);
@@ -2514,7 +2526,6 @@ const Workflow = {
         }
 
         const client = DB.getById('clients', wr.clientId);
-        const transition = this.getPhaseTransitionStatus(wr.id);
         const priorityConfig = {
           'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
           'Priority': { label: 'Priority', cls: 'card-v2-priority-urgent' },
@@ -2564,6 +2575,79 @@ const Workflow = {
           priorityClass: priorityConfig.cls,
           avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
           counts,
+          moreOptions: (e) => {
+            const wrapper = e.currentTarget.parentElement;
+            let menu = wrapper.querySelector('.action-menu-list');
+            if (!menu) {
+              menu = el('div', { class: 'action-menu-list hidden' });
+
+              const viewItem = el('button', {
+                class: 'action-menu-item',
+                html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> View Details'
+              });
+              viewItem.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                menu.classList.remove('open'); menu.classList.add('hidden');
+                location.hash = '#operations/detail/' + wr.id;
+              });
+              menu.appendChild(viewItem);
+
+              if (Auth.can('workflow:edit') && !wr.isPendingApproval) {
+                const editItem = el('button', {
+                  class: 'action-menu-item',
+                  html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit'
+                });
+                editItem.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                  menu.classList.remove('open'); menu.classList.add('hidden');
+                  location.hash = '#operations/form/' + wr.id;
+                });
+                menu.appendChild(editItem);
+              }
+
+              if (wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+                const cancelItem = el('button', {
+                  class: 'action-menu-item danger',
+                  html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel'
+                });
+                cancelItem.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                  menu.classList.remove('open'); menu.classList.add('hidden');
+                  this.cancelWorkRequest(wr.id);
+                });
+                menu.appendChild(cancelItem);
+              }
+
+              if (Auth.can('workflow:edit') && wr.status === 'Draft' && !wr.isPendingApproval) {
+                const deleteItem = el('button', {
+                  class: 'action-menu-item danger',
+                  html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete'
+                });
+                deleteItem.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                  menu.classList.remove('open'); menu.classList.add('hidden');
+                  this.showConfirm('Delete Work Request', `Are you sure you want to delete "${wr.title}" and all its tasks?`, () => {
+                    DB.getWhere('tasks', t => t.workRequestId === wr.id).forEach(t => DB.delete('tasks', t.id));
+                    DB.delete('workRequests', wr.id);
+                    App.handleRoute();
+                  }, 'danger');
+                });
+                menu.appendChild(deleteItem);
+              }
+
+              wrapper.appendChild(menu);
+            }
+            document.querySelectorAll('.action-menu-list').forEach(m => {
+              if (m !== menu) { m.classList.add('hidden'); m.classList.remove('open'); }
+            });
+            if (menu.classList.contains('hidden')) {
+              menu.classList.remove('hidden');
+              setTimeout(() => menu.classList.add('open'), 10);
+            } else {
+              menu.classList.remove('open');
+              menu.classList.add('hidden');
+            }
+          },
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
         });
 
