@@ -500,6 +500,11 @@ const Clients = {
       return;
     }
 
+    const entityRadio = form.querySelector('[name="entity"]:checked, select[name="entity"]');
+    if (!entityRadio || !entityRadio.value) {
+      showFieldError(entityRadio || form.querySelector('[name="entity"]'), 'Entity is required.');
+      return;
+    }
     // Collect contact details
     const contactDetails = [];
     let hasContactError = false;

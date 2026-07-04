@@ -78,19 +78,6 @@ const App = {
     this.updateSidebarNotifications();
     this.setupStickyTrayResize();
 
-    // Check and show pending toast message after page reload
-    const pendingToast = sessionStorage.getItem('pending_toast');
-    if (pendingToast) {
-      sessionStorage.removeItem('pending_toast');
-      try {
-        const { title, message, type } = JSON.parse(pendingToast);
-        if (typeof Workflow !== 'undefined' && typeof Workflow.showMessage === 'function') {
-          Workflow.showMessage(title, message, type);
-        }
-      } catch (e) {
-        console.error('Error parsing pending toast:', e);
-      }
-    }
 
     // Close split button dropdown menus when clicking outside
     document.addEventListener('click', (e) => {
@@ -713,23 +700,41 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.classList.remove('loading-active');
   }
 
-  // Handle fading out of loading screen if active, or ensure it is hidden
-  if (loadingScreen) {
-    if (document.documentElement.classList.contains('loading-active')) {
-      loadingScreen.classList.remove('hidden');
-      setTimeout(() => {
-        loadingScreen.style.transition = 'opacity 0.2s ease-in-out';
-        loadingScreen.style.opacity = '0';
-        setTimeout(() => {
-          document.documentElement.classList.remove('loading-active');
-          loadingScreen.classList.add('hidden');
-          loadingScreen.style.transition = '';
-          loadingScreen.style.opacity = '';
-        }, 200);
-      }, 450); // Keep it visible for 450ms for a smooth syncing transition feel
-      sessionStorage.removeItem('is_syncing');
-    } else {
-      loadingScreen.classList.add('hidden');
-    }
+  // Clear the show timeout to prevent it from firing if the page loaded fast
+  if (window.LoadingManager && typeof window.LoadingManager.clear === 'function') {
+    window.LoadingManager.clear();
   }
+
+  const showPendingToast = () => {
+    const pendingToast = sessionStorage.getItem('pending_toast');
+    if (pendingToast) {
+      sessionStorage.removeItem('pending_toast');
+      try {
+        const { title, message, type } = JSON.parse(pendingToast);
+        if (typeof Workflow !== 'undefined' && typeof Workflow.showMessage === 'function') {
+          Workflow.showMessage(title, message, type);
+        }
+      } catch (e) {
+        console.error('Error parsing pending toast:', e);
+      }
+    }
+  };
+
+  // Handle fading out of loading screen if active
+  if (document.documentElement.classList.contains('loading-active') && loadingScreen) {
+    // Rely entirely on the CSS transition timing function by only toggling the opacity property
+    loadingScreen.style.opacity = '0';
+    setTimeout(() => {
+      document.documentElement.classList.remove('loading-active');
+      loadingScreen.classList.add('hidden');
+      loadingScreen.style.opacity = '';
+      showPendingToast(); // Show modal only after loading screen is completely faded out
+    }, window.LoadingManager ? window.LoadingManager.TRANSITION_MS : 250);
+  } else {
+    if (loadingScreen) loadingScreen.classList.add('hidden');
+    showPendingToast(); // Show modal immediately if loading screen was not active
+  }
+  
+  // Always ensure is_syncing is cleared after routing and initialization
+  sessionStorage.removeItem('is_syncing');
 });

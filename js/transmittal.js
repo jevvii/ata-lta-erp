@@ -736,15 +736,11 @@ const Transmittal = {
 
     const headerBar = el('div', { class: 'form-header-bar' });
     const headerActions = el('div', { class: 'form-actions-top' });
-    const submitBtnTop = el('button', { type: 'submit', form: 'transmittal-form', class: 'btn btn-primary', text: existing ? 'Update Transmittal' : 'Create Transmittal' });
-    const cancelBtnTop = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtnTop.addEventListener('click', () => {
-      if (App.sidePane) App.sidePane.close();
-      this.view = 'list';
-      App.handleRoute();
-    });
-    headerActions.appendChild(submitBtnTop);
-    headerActions.appendChild(cancelBtnTop);
+    const saveBtnTop = el('button', { type: 'submit', form: 'transmittal-form', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
+    headerActions.appendChild(saveBtnTop);
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#transmittal'));
+    headerActions.appendChild(cancelBtn);
     headerBar.appendChild(headerActions);
     container.appendChild(headerBar);
 

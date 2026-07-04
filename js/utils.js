@@ -3,16 +3,53 @@
  * Safe DOM builder, formatting helpers, and general utilities.
  */
 
-// Set loading-active class instantly if reload was triggered by a sync operation
-(function() {
-  if (sessionStorage.getItem('is_syncing') === 'true') {
-    document.documentElement.classList.add('loading-active');
-    document.addEventListener('DOMContentLoaded', () => {
+// Centralized Loading Manager to handle state and timing concerns.
+// Scoped to window.LoadingManager to avoid global namespace pollution. Timings are derived from CSS variables.
+window.LoadingManager = {
+  timeoutId: null,
+
+  getTiming: function(cssVar, defaultVal) {
+    let raw = '';
+    try {
+      raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+    } catch (e) {}
+    const val = raw || defaultVal;
+    const parsed = parseFloat(val);
+    if (isNaN(parsed)) {
+      const fallback = parseFloat(defaultVal);
+      return (isNaN(fallback) ? 0.25 : fallback) * (defaultVal.endsWith('ms') ? 1 : 1000);
+    }
+    return parsed * (val.endsWith('ms') ? 1 : 1000);
+  },
+
+  get DELAY_MS() {
+    return this.getTiming('--delay-loading', '0.25s');
+  },
+
+  get TRANSITION_MS() {
+    return this.getTiming('--transition-loading', '0.25s');
+  },
+
+  start: function() {
+    this.clear();
+    this.timeoutId = setTimeout(() => {
+      document.documentElement.classList.add('loading-active');
       const ls = document.getElementById('loading-screen');
       if (ls) ls.classList.remove('hidden');
-    });
+    }, this.DELAY_MS);
+  },
+
+  clear: function() {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
   }
-})();
+};
+
+if (sessionStorage.getItem('is_syncing') === 'true') {
+  window.LoadingManager.start();
+}
 
 function formatPHP(n) {
   return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -67,11 +104,11 @@ function generateSequentialId(prefix, table) {
 }
 
 function showFieldError(field, message) {
-  if (!field) return;
   if (typeof field === 'string') field = document.getElementById(field);
   if (!field || !field.parentElement) return;
   // If the field is inside a datepicker/timepicker wrapper, target the form-group parent instead
   let container = field.parentElement;
+  if (!container) return;
   if (container && (container.classList.contains('mdp-wrapper') || container.classList.contains('mtp-wrapper'))) {
     // Also show error style on the wrapper
     container.classList.add('input-error');
