@@ -425,7 +425,7 @@ a:hover {
   height: 32px;
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   cursor: pointer;
   color: var(--color-text-muted);
   transition: background 0.2s, color 0.2s;
@@ -668,7 +668,7 @@ select:focus {
   gap: var(--spacing-xs);
   padding: 8px 18px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   font-family: inherit;
   font-size: var(--btn-font-size);
   font-weight: var(--btn-font-weight);
@@ -882,7 +882,7 @@ tbody tr:hover {
 .modal {
   background: var(--color-surface);
   border: none;
-  border-radius: var(--radius-xl);
+  border-radius: 12px;
   width: 100%;
   max-width: 560px;
   max-height: 90vh;
@@ -952,7 +952,7 @@ tbody tr:hover {
   justify-content: center;
   gap: var(--spacing-xs);
   padding: 8px 18px;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   font-family: inherit;
   font-size: var(--btn-font-size);
   font-weight: var(--btn-font-weight);
@@ -969,6 +969,134 @@ tbody tr:hover {
 .modal-btn-cancel:hover {
   background: var(--color-bg);
   border-color: #93b0df;
+}
+
+/* ============================================================
+ * Notion-inspired typography for plain modal forms
+ * (Add Task, Add Time Log, Request/Billing/Disbursement/
+ *  Transmittal, Generate modals, etc.)
+ * ============================================================ */
+
+/* Modal forms use airy vertical rhythm */
+.modal-body .form-stacked {
+  gap: 20px;
+}
+
+/* Muted uppercase label style matching center-peek notion forms */
+.modal-body .form-group {
+  gap: 6px;
+}
+
+.modal-body .form-group label,
+.modal-body .form-section label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+/* Rounded, background-tinted inputs matching notion property fields */
+.modal-body .form-group input[type="text"],
+.modal-body .form-group input[type="email"],
+.modal-body .form-group input[type="password"],
+.modal-body .form-group input[type="number"],
+.modal-body .form-group input[type="date"],
+.modal-body .form-group input[type="time"],
+.modal-body .form-group textarea,
+.modal-body .form-group select,
+.modal-body .form-group .form-select,
+.modal-body .form-group .form-control {
+  border-radius: 6px;
+  background: var(--color-bg);
+  font-weight: 500;
+}
+
+.modal-body .form-group input:focus,
+.modal-body .form-group textarea:focus,
+.modal-body .form-group select:focus,
+.modal-body .form-group .form-select:focus,
+.modal-body .form-group .form-control:focus {
+  background: var(--color-surface);
+}
+
+/* Read-only modal inputs keep a subtle filled look */
+.modal-body .form-group input[readonly] {
+  background: var(--color-bg) !important;
+  cursor: default;
+}
+
+/* Notion-style oversized title input inside modal forms */
+.modal-body .form-stacked input[name="title"],
+.modal-body .form-stacked .notion-title-input {
+  font-size: 1.75rem !important;
+  font-weight: 700 !important;
+  padding: 12px 0 !important;
+  border: none !important;
+  border-bottom: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--color-text) !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.25 !important;
+  width: 100% !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.modal-body .form-stacked input[name="title"]::placeholder,
+.modal-body .form-stacked .notion-title-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.65;
+}
+
+/* Section headings inside modal forms */
+.modal-body .form-section h4 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+/* Modal property grid for side-by-side related fields */
+.modal-body .form-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px 20px;
+}
+
+/* Modal form action buttons align with notion airy spacing */
+.modal-body .form-actions,
+.modal-body > form > .btn,
+.modal-body > .form-stacked > .btn,
+.modal-body .form-stacked > button[type="submit"] {
+  margin-top: 4px;
+}
+
+/* Notion-style line-item rows inside modal forms */
+.modal-body .line-item-row {
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.modal-body .line-item-row input,
+.modal-body .line-item-row select {
+  border-radius: 6px;
+  background: var(--color-bg);
+  font-weight: 500;
+}
+
+.modal-body .line-item-row input:focus,
+.modal-body .line-item-row select:focus {
+  background: var(--color-surface);
 }
 
 /* Progress Bar */
@@ -1088,7 +1216,7 @@ tbody tr:hover {
 .checkbox-label { display: flex; align-items: center; gap: var(--spacing-xs); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
 
 /* Small Button */
-.btn-sm { padding: 6px 12px; font-size: var(--btn-font-size-sm); line-height: var(--btn-line-height); border-radius: var(--radius-sm); }
+.btn-sm { padding: 6px 12px; font-size: var(--btn-font-size-sm); line-height: var(--btn-line-height); border-radius: 12px; }
 
 /* Form Actions */
 .form-actions { display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-lg); }
@@ -1101,7 +1229,7 @@ tbody tr:hover {
   color: var(--color-primary, #4f6ef7);
   border: 1.5px solid var(--color-primary, #4f6ef7);
   padding: 8px 16px;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   cursor: pointer;
   font-size: var(--btn-font-size);
   font-weight: var(--btn-font-weight);
@@ -1149,8 +1277,8 @@ tbody tr:hover {
 }
 
 /* View Mode Toggle */
-.view-mode-toggle { display: flex; gap: var(--space-1, 4px); background: var(--color-surface, #ffffff); border: 1px solid var(--color-border, #dfdbe3); padding: 2px; border-radius: var(--radius-sm, 8px); }
-.view-mode-toggle button { padding: 6px 12px; border: none; background: transparent; border-radius: calc(var(--radius-sm, 8px) - 2px); cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: 500; letter-spacing: var(--btn-letter-spacing); line-height: 1.4; display: inline-flex; align-items: center; gap: var(--space-2, 8px); color: var(--color-text-muted); transition: all 0.2s ease; }
+.view-mode-toggle { display: flex; gap: var(--space-1, 4px); background: var(--color-surface, #ffffff); border: 1px solid var(--color-border, #dfdbe3); padding: 2px; border-radius: 12px; }
+.view-mode-toggle button { padding: 6px 12px; border: none; background: transparent; border-radius: 10px; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: 500; letter-spacing: var(--btn-letter-spacing); line-height: 1.4; display: inline-flex; align-items: center; gap: var(--space-2, 8px); color: var(--color-text-muted); transition: all 0.2s ease; }
 .view-mode-toggle button svg { flex-shrink: 0; }
 .view-mode-toggle button:hover { background: var(--color-bg, #fafafa); color: var(--color-text); }
 .view-mode-toggle button.active { background: var(--color-primary, #2563eb); color: #ffffff; font-weight: 500; }
@@ -1546,7 +1674,7 @@ tbody tr:hover {
   font-family: inherit;
   font-size: 0.875rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: var(--color-surface);
   color: var(--color-text);
   text-align: left;
@@ -3911,7 +4039,7 @@ tbody tr:hover {
   font-size: 0.6875rem; /* ~11px */
   letter-spacing: var(--btn-letter-spacing);
   line-height: var(--btn-line-height);
-  border-radius: 4px;
+  border-radius: 12px;
   min-height: 24px;
   gap: 4px;
 }
@@ -3963,7 +4091,7 @@ tbody tr:hover {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   border: 1px solid transparent;
 }
 
@@ -4047,7 +4175,7 @@ tbody tr:hover {
 .modal-btn-sure {
   padding: 10px 24px;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
 }
 
 .modal-message-wrapper .modal-btn-cancel {
@@ -4056,7 +4184,7 @@ tbody tr:hover {
   border: 1px solid var(--color-border);
   color: var(--color-text);
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
 }
 
 .modal-message-wrapper .modal-btn-cancel:hover {
@@ -9254,7 +9382,7 @@ tbody tr:hover {
   padding: 12px 16px;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
   margin-top: 8px;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -9369,7 +9497,7 @@ tbody tr:hover {
 .notion-popover-submit {
   width: 100%;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: 12px;
   border: none;
   background: var(--color-primary);
   color: #fff;
@@ -9408,7 +9536,7 @@ tbody tr:hover {
   padding: 8px 10px;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 0.8125rem;
   transition: all 0.15s ease;
@@ -9843,7 +9971,7 @@ tbody tr * {
   width: 100%;
   padding: 8px 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   background: transparent;
   color: var(--color-text);
   font-size: 0.8125rem;
@@ -10045,7 +10173,7 @@ tbody tr * {
   padding: 6px 10px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 12px;
   color: var(--color-text-muted);
   font-size: 0.875rem;
   font-weight: 500;
@@ -10383,7 +10511,7 @@ tbody tr * {
   display: inline-flex;
   align-items: stretch;
   margin-left: 16px;
-  border-radius: var(--radius-md, 8px);
+  border-radius: 12px;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
@@ -10463,7 +10591,7 @@ tbody tr * {
   align-items: center;
   gap: 8px;
   font-family: inherit;
-  border-radius: 6px;
+  border-radius: 12px;
   transition: background 0.15s ease, color 0.15s ease;
 }
 

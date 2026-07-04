@@ -496,7 +496,7 @@ const KanbanBoard = {
       if (column.addCard) {
         const addCard = el('div', {
           class: 'board-card-v2 add-card',
-          style: column.addCard.style || 'background: transparent; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
+          style: column.addCard.style || 'background: transparent; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: 12px;'
         });
         addCard.innerHTML = (column.addCard.icon || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>') + ' ' + escapeHtml(column.addCard.label || 'Add');
         addCard.addEventListener('click', () => column.addCard.onClick(column));

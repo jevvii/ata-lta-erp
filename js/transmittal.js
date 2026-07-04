@@ -974,7 +974,7 @@ const Transmittal = {
       return wrEnt === entity.toUpperCase();
     });
 
-    const wrapper = el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' });
+    const wrapper = el('div', { class: 'form-stacked', style: 'display: flex; flex-direction: column;' });
     const selectGroup = el('div', { class: 'form-group' });
     selectGroup.appendChild(el('label', { text: 'Select Work Request *' }));
     const wrSelect = el('select', { class: 'form-select', style: 'width:100%;' });

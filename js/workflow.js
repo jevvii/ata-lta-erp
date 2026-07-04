@@ -787,7 +787,7 @@ const Workflow = {
     const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
 
     const wrapper = el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' });
-    const form = el('form', { id: 'gen-billing-form' });
+    const form = el('form', { id: 'gen-billing-form', class: 'form-stacked' });
 
     // ---------- Client (read-only, auto-filled) ----------
     const clientGroup = el('div', { class: 'form-group' });
@@ -865,7 +865,7 @@ const Workflow = {
 
     // ---------- Line Items ----------
     const itemsSection = el('div', { class: 'form-section', style: 'margin-top: 4px;' });
-    itemsSection.appendChild(el('h4', { text: 'Line Items', style: 'margin-bottom: 8px; font-size: 0.9rem;' }));
+    itemsSection.appendChild(el('h4', { text: 'Line Items' }));
     const itemsList = el('div', { id: 'modal-line-item-rows' });
     itemsSection.appendChild(itemsList);
 
@@ -1014,7 +1014,7 @@ const Workflow = {
     const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
 
     const wrapper = el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' });
-    const form = el('form', { id: 'gen-disbursement-form' });
+    const form = el('form', { id: 'gen-disbursement-form', class: 'form-stacked' });
 
     // ---------- Client (read-only, auto-filled) ----------
     const clientGroup = el('div', { class: 'form-group' });
@@ -1206,7 +1206,7 @@ const Workflow = {
     const client = DB.getById('clients', wr.clientId);
 
     const wrapper = el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' });
-    const form = el('form', { id: 'gen-transmittal-form' });
+    const form = el('form', { id: 'gen-transmittal-form', class: 'form-stacked' });
 
     // ---------- Client (read-only, auto-filled) ----------
     const clientGroup = el('div', { class: 'form-group' });
@@ -1245,7 +1245,7 @@ const Workflow = {
 
     // ---------- Itemized Document List ----------
     const itemsSection = el('div', { class: 'form-section', style: 'margin-top: 4px;' });
-    itemsSection.appendChild(el('h4', { text: 'Document Items', style: 'margin-bottom: 8px; font-size: 0.9rem;' }));
+    itemsSection.appendChild(el('h4', { text: 'Document Items' }));
 
     // Column headers
     const headerLabelStyle = 'font-size: 0.75rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; padding-left: 13px;';
@@ -7574,11 +7574,14 @@ const Workflow = {
     const task = DB.getById('tasks', taskId);
     if (!task) return;
     
-    const container = el('div', { style: 'display: flex; flex-direction: column; gap: 12px; padding: 8px;' });
-    container.appendChild(el('label', { text: 'Figma File URL:', style: 'font-weight: 500; font-size: 0.875rem;' }));
-    const input = el('input', { type: 'text', placeholder: 'https://www.figma.com/file/...', class: 'form-control', style: 'width: 100%;' });
-    container.appendChild(input);
-    
+    const container = el('div', { class: 'form-stacked', style: 'display: flex; flex-direction: column; padding: 8px;' });
+    const inputGroup = el('div', { class: 'form-group' }, [
+      el('label', { text: 'Figma File URL' }),
+      el('input', { type: 'text', placeholder: 'https://www.figma.com/file/...', class: 'form-control', style: 'width: 100%;' })
+    ]);
+    container.appendChild(inputGroup);
+    const input = inputGroup.querySelector('input');
+
     const btnRow = el('div', { style: 'display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px;' });
     const cancelBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Cancel' });
     const submitBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Embed' });
