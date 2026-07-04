@@ -552,7 +552,7 @@ const Billing = {
       if (st === 'Draft') {
         const addCard = el('div', {
           class: 'board-card-v2 add-billing-card',
-          style: 'border: 1px dashed var(--color-text-muted); background: transparent; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
+          style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
         });
         addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Billing';
         addCard.addEventListener('click', () => {
@@ -582,7 +582,6 @@ const Billing = {
         }[inv.status] || 'card-v2-priority-normal';
 
         const descParts = [inv.invoiceNumber];
-        if (progress > 0) descParts.push(`${progress}% paid`);
         if (inv.workRequestId) {
           const wr = DB.getById('workRequests', inv.workRequestId);
           if (wr) descParts.push(wr.title);
@@ -590,18 +589,15 @@ const Billing = {
         if (inv.fromTemplate) descParts.push('Recurring');
         const description = descParts.join(' • ');
 
-        const counts = [];
-        if (progress > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${progress}%` });
-
         const card = buildCompactBoardCard({
           key: 'INV-' + cardNumber++,
+          progress,
           statusColor: colColor,
           title: inv.invoiceNumber,
           description: client?.name || '—',
           date: inv.issueDate ? formatDate(inv.issueDate) : '',
           priority: inv.status,
           priorityClass: statusPriorityClass,
-          counts,
           onClick: () => { location.hash = '#billing/detail/' + inv.id; }
         });
 

@@ -155,6 +155,19 @@ const BoardCardIcons = {
  * @param {Function} [opts.moreOptions] - Optional "..." button click handler.
  * @returns {HTMLElement}
  */
+function buildProgressRingSVG(progress, color) {
+  const pct = Math.max(0, Math.min(100, Number(progress) || 0));
+  const r = 6;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - pct / 100);
+  return `<svg width="14" height="14" viewBox="0 0 14 14" class="card-v2-progress-ring">
+    <circle cx="7" cy="7" r="${r}" fill="none" stroke="var(--color-border, #e2e8f0)" stroke-width="2"/>
+    <circle cx="7" cy="7" r="${r}" fill="none" stroke="${color || 'var(--color-text-muted)'}" stroke-width="2"
+      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${offset}"
+      transform="rotate(-90 7 7)"/>
+  </svg>`;
+}
+
 function buildCompactBoardCard(opts) {
   const card = el('div', { class: 'board-card-v2 compact' });
 
@@ -163,7 +176,12 @@ function buildCompactBoardCard(opts) {
   const keyGroup = el('div', { class: 'card-v2-key-group' });
   keyGroup.appendChild(el('span', { class: 'card-v2-key-icon', html: BoardCardIcons.link }));
   keyGroup.appendChild(el('span', { class: 'card-v2-key', text: opts.key || '' }));
-  if (opts.statusColor) {
+  if (opts.progress !== undefined && opts.progress !== null) {
+    keyGroup.appendChild(el('span', {
+      class: 'card-v2-status-dot',
+      html: buildProgressRingSVG(opts.progress, opts.statusColor)
+    }));
+  } else if (opts.statusColor) {
     keyGroup.appendChild(el('span', {
       class: 'card-v2-status-dot',
       style: 'border-color:' + opts.statusColor + ';'
@@ -198,8 +216,6 @@ function buildCompactBoardCard(opts) {
   if (opts.date) {
     metaLeft.appendChild(el('span', { class: 'card-v2-meta-icon', html: BoardCardIcons.calendar }));
     metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: escapeHtml(opts.date) }));
-  } else {
-    metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: '' }));
   }
   metaRow.appendChild(metaLeft);
 
@@ -212,7 +228,7 @@ function buildCompactBoardCard(opts) {
   metaRow.appendChild(metaRight);
   card.appendChild(metaRow);
 
-  // 5. Footer Row (avatars left, counts right)
+  // 5. Footer Row (avatars left, badges + counts right)
   const footer = el('div', { class: 'card-v2-footer' });
   const footerLeft = el('div', { class: 'card-v2-footer-left' });
   if (opts.avatars && opts.avatars.length) {
@@ -238,6 +254,9 @@ function buildCompactBoardCard(opts) {
   footer.appendChild(footerLeft);
 
   const footerRight = el('div', { class: 'card-v2-footer-right' });
+  if (opts.badges && opts.badges.length) {
+    opts.badges.forEach(b => footerRight.appendChild(b));
+  }
   if (opts.counts && opts.counts.length) {
     opts.counts.forEach(c => {
       if (!c.value) return;

@@ -2802,11 +2802,11 @@ tbody tr:hover {
   background: var(--color-surface, #ffffff);
   border: 1px solid var(--color-border, #e8ecf1);
   border-radius: 12px;
-  padding: 12px;
+  padding: 14px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
@@ -2859,14 +2859,33 @@ tbody tr:hover {
 }
 
 .card-v2-status-dot {
-  width: 9px;
-  height: 9px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 2px solid var(--color-surface);
-  box-shadow: 0 0 0 1.5px currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--color-surface);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
   color: var(--color-text-muted);
   background: transparent;
+}
+
+.card-v2-status-dot:has(.card-v2-progress-ring) {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.card-v2-progress-ring {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.card-v2-progress-ring circle {
+  transition: stroke-dashoffset 0.3s ease;
 }
 
 .card-v2-menu {
@@ -2994,7 +3013,7 @@ tbody tr:hover {
 .board-card-v2.compact .card-v2-priority-low { color: var(--color-success); }
 .board-card-v2.compact .card-v2-priority-normal { color: var(--color-text-muted); }
 
-/* 5. Footer Row: avatars left, counts right */
+/* 5. Footer Row: avatars left, badges + counts right */
 .board-card-v2.compact .card-v2-footer {
   display: flex;
   align-items: center;
@@ -3002,6 +3021,8 @@ tbody tr:hover {
   gap: 8px;
   min-width: 0;
   margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border, #e8ecf1);
 }
 
 .board-card-v2.compact .card-v2-footer-left {
@@ -3027,6 +3048,18 @@ tbody tr:hover {
   gap: 4px;
   font-size: 0.75rem;
   color: var(--color-text-muted);
+}
+
+.board-card-v2.compact .card-v2-footer .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .board-card-v2.compact .card-v2-footer-item svg,

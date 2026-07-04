@@ -541,6 +541,9 @@ const Transmittal = {
           'Acknowledged': 'card-v2-priority-low'
         }[t.status] || 'card-v2-priority-normal';
 
+        const progressMap = { 'Draft': 0, 'Sent': 50, 'Acknowledged': 100 };
+        const progress = progressMap[t.status] || 0;
+
         const descParts = [`${itemCount} item${itemCount === 1 ? '' : 's'}`];
         const wr = DB.getById('workRequests', t.workRequestId);
         if (wr) descParts.push(wr.title);
@@ -548,6 +551,7 @@ const Transmittal = {
 
         const card = buildCompactBoardCard({
           key: 'TX-' + cardNumber++,
+          progress,
           statusColor: colColor,
           title: clientName,
           description,

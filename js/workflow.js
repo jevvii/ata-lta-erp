@@ -2464,7 +2464,7 @@ const Workflow = {
       if (st === 'Draft' && Auth.can('workflow:edit')) {
         const addCard = el('div', {
           class: 'board-card-v2 add-wr-card',
-          style: 'border: 1px dashed var(--color-text-muted); background: transparent; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
+          style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
         });
         addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request';
         addCard.addEventListener('click', () => {
@@ -2527,10 +2527,35 @@ const Workflow = {
         const counts = [];
         if (allDocs > 0) counts.push({ icon: BoardCardIcons.attachment, value: allDocs });
         if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
-        if (totalTasks > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${progress}%` });
+
+        const badges = [];
+        if (transition && transition.canTransition) {
+          const readyBadge = el('span', {
+            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>',
+            class: 'badge badge-success',
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;'
+          });
+          readyBadge.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.transitionWorkRequest(wr.id);
+          });
+          badges.push(readyBadge);
+        } else if (transition && transition.missing && transition.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+          const blockerBadge = el('span', {
+            html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + transition.missing.length + ' pending',
+            class: 'badge badge-warn',
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:help;'
+          });
+          blockerBadge.title = transition.missing.join('\n');
+          badges.push(blockerBadge);
+        }
+        if (wr.isPendingApproval) {
+          badges.push(el('span', { text: 'Awaiting Approval', class: 'badge badge-warning', style: 'font-size:10px;border-radius:10px;' }));
+        }
 
         const card = buildCompactBoardCard({
           key: 'WR-' + cardNumber++,
+          progress,
           statusColor: colColor,
           title: wr.title,
           description,
@@ -2539,6 +2564,7 @@ const Workflow = {
           priorityClass: priorityConfig.cls,
           avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
           counts,
+          badges,
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
         });
 
@@ -5509,12 +5535,13 @@ const Workflow = {
             }[t.priority] || { label: t.priority || 'Normal', cls: 'card-v2-priority-normal' };
 
             const counts = [];
-            if (comp.total > 0) counts.push({ icon: BoardCardIcons.attachment, value: `${comp.done}/${comp.total}` });
+            if (comp.total > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${comp.percent}%` });
 
             const avatars = assigneeName ? [{ name: assigneeName }] : [];
 
             const card = buildCompactBoardCard({
               key: 'TSK-' + taskNumber++,
+              progress: comp.percent,
               statusColor: colColor,
               title: t.title,
               date: t.dueDate ? formatDate(t.dueDate) : '',

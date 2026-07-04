@@ -745,6 +745,16 @@ const Disbursement = {
           'Rejected': 'card-v2-priority-urgent'
         }[d.status] || 'card-v2-priority-normal';
 
+        const progressMap = {
+          'Draft': 0,
+          'Pending': 25,
+          'Approved': 50,
+          'Release Pending Approval': 75,
+          'Released': 100,
+          'Rejected': 0
+        };
+        const progress = progressMap[d.status] || 0;
+
         const descParts = [`${emp?.name || '—'} • ${source}`];
         if (d.linkedWorkRequestId) {
           const wr = DB.getById('workRequests', d.linkedWorkRequestId);
@@ -762,6 +772,7 @@ const Disbursement = {
 
         const card = buildCompactBoardCard({
           key: 'DIS-' + cardNumber++,
+          progress,
           statusColor: colColor,
           title: d.category,
           description: `${emp?.name || '—'} • ${source}`,

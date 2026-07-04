@@ -379,6 +379,7 @@ const Reports = {
         const assignee = t.assigneeName
           ? { name: t.assigneeName }
           : DB.getById('users', t.assigneeId || t.assignedTo);
+        const comp = getTaskChecklistCompletion(t);
 
         const priorityConfig = {
           'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
@@ -393,8 +394,12 @@ const Reports = {
           avatarUrl: assignee.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(assignee.name)}&background=2563eb&color=fff`
         }] : [];
 
+        const counts = [];
+        if (comp.total > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${comp.percent}%` });
+
         const card = buildCompactBoardCard({
           key: 'TSK-' + taskNumber++,
+          progress: comp.percent,
           statusColor: colColor,
           title: t.title,
           description: client?.name || '',
@@ -402,6 +407,7 @@ const Reports = {
           priority: priorityConfig.label,
           priorityClass: priorityConfig.cls,
           avatars,
+          counts,
           onClick: () => { /* reports board is read-only summary */ }
         });
 
