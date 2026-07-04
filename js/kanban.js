@@ -161,6 +161,7 @@ const KanbanBoard = {
       canDrag: () => false,
       canDrop: () => false,
       onDrop: () => {},
+      onDropDenied: () => {},
       orderField: 'boardOrder',
       getItemId: item => item.id,
       ...drag
@@ -417,6 +418,16 @@ const KanbanBoard = {
         });
         if (!allowed) {
           clearDragIndicators();
+          if (typeof dragConfig.onDropDenied === 'function') {
+            dragConfig.onDropDenied({
+              item,
+              targetColumn: col,
+              targetStatus,
+              beforeItem,
+              afterItem,
+              fromStatus: item.status
+            });
+          }
           return;
         }
       }

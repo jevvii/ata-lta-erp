@@ -644,9 +644,39 @@ const Billing = {
           const currentIdx = flow.indexOf(item.status);
           const targetIdx = flow.indexOf(targetStatus);
           if (currentIdx === -1 || targetIdx === -1) return false;
-          return targetIdx > currentIdx;
+          if (targetIdx <= currentIdx) return false;
+
+          // Payment status transitions require recorded payments that match the target.
+          const paid = self.getPaidAmount(item);
+          if (targetStatus === 'Partially Paid') {
+            return paid > 0 && paid < item.total;
+          }
+          if (targetStatus === 'Paid') {
+            return item.total > 0 && paid >= item.total;
+          }
+          return true;
         },
         orderField: 'boardOrder',
+        onDropDenied({ item, targetStatus }) {
+          if (targetStatus !== 'Partially Paid' && targetStatus !== 'Paid') return;
+          const paid = self.getPaidAmount(item);
+          if (targetStatus === 'Partially Paid') {
+            if (paid <= 0) {
+              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Partially Paid — no payments have been recorded.`, 'warning');
+            } else if (paid >= item.total) {
+              Workflow.showMessage('Already Fully Paid', `Invoice "${item.invoiceNumber}" has payments totaling ${formatPHP(paid)}. Use the Paid status instead.`, 'warning');
+            }
+          } else if (targetStatus === 'Paid') {
+            if (item.total <= 0) {
+              Workflow.showMessage('Invalid Invoice', `Invoice "${item.invoiceNumber}" has no billable amount and cannot be marked Paid.`, 'warning');
+            } else if (paid <= 0) {
+              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Paid — no payments have been recorded.`, 'warning');
+            } else if (paid < item.total) {
+              const balance = item.total - paid;
+              Workflow.showMessage('Balance Remaining', `Invoice "${item.invoiceNumber}" still has a balance of ${formatPHP(balance)}. Record the remaining payment before marking Paid.`, 'warning');
+            }
+          }
+        },
         onDrop({ item, targetStatus, newOrder, fromStatus }) {
           if (fromStatus === targetStatus) {
             DB.update('invoices', item.id, { boardOrder: newOrder });
@@ -995,18 +1025,43 @@ const Billing = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+
+    // Validate line items: at least one complete row, no partially-filled rows.
+    const itemRows = form.querySelectorAll('.notion-line-item-row');
+    let validItemCount = 0;
+    let hasPartialItem = false;
+    itemRows.forEach(row => {
+      const desc = row.querySelector('.item-desc')?.value.trim() || '';
+      const amt = parseFloat(row.querySelector('.item-amt')?.value) || 0;
+      if (desc && amt > 0) {
+        validItemCount++;
+      } else if (desc || amt > 0) {
+        hasPartialItem = true;
+      }
+    });
+    if (hasPartialItem) {
+      Workflow.showMessage('Validation Error', 'Each line item must have both a description and a valid amount greater than zero.', 'warning');
+      return;
+    }
+    if (validItemCount === 0) {
+      Workflow.showMessage('Validation Error', 'Please add at least one line item with a description and a valid amount.', 'warning');
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(form).entries());
     const entity = Auth.activeEntity;
 
-    const rows = form.querySelectorAll('.line-item-row');
+    const rows = form.querySelectorAll('.notion-line-item-row');
     const lineItems = [];
     let subtotal = 0;
     rows.forEach(row => {
+      const desc = row.querySelector('.item-desc').value.trim();
       const amt = parseFloat(row.querySelector('.item-amt').value) || 0;
+      if (!desc || amt <= 0) return;
       subtotal += amt;
       lineItems.push({
         type: row.querySelector('.item-type').value,
-        description: row.querySelector('.item-desc').value.trim(),
+        description: desc,
         amount: amt
       });
     });

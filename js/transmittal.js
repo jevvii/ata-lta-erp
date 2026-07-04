@@ -739,29 +739,27 @@ const Transmittal = {
     // ── Top property grid ──
     const propsGrid = el('div', { class: 'notion-property-grid' });
 
-    // Work Request
+    // Client
+    const clientGroup = el('div', { class: 'notion-prop' });
+    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client *' }));
+    const clientSel = el('select', { name: 'clientId', required: true, class: 'notion-prop-select' });
+    clientSel.appendChild(el('option', { value: '', text: '— Select —' }));
+    DB.getWhere('clients', c => c.entity === entity).forEach(c => {
+      const opt = el('option', { value: c.id, text: c.name });
+      if (existing && existing.clientId === c.id) opt.selected = true;
+      else if (!existing && this.prefilledClientId && this.prefilledClientId === c.id) opt.selected = true;
+      clientSel.appendChild(opt);
+    });
+    clientGroup.appendChild(clientSel);
+    propsGrid.appendChild(clientGroup);
+
+    // Work Request (filtered by selected client)
     const wrGroup = el('div', { class: 'notion-prop' });
-    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request' }));
+    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request *' }));
     const wrSel = el('select', { name: 'workRequestId', required: true, class: 'notion-prop-select' });
     wrSel.appendChild(el('option', { value: '', text: '— Select —' }));
-    DB.getWhere('workRequests', wr => wr.entity === entity).forEach(wr => {
-      const opt = el('option', { value: wr.id, text: wr.title });
-      if (existing && existing.workRequestId === wr.id) opt.selected = true;
-      else if (!existing && this.prefilledWrId && this.prefilledWrId === wr.id) opt.selected = true;
-      wrSel.appendChild(opt);
-    });
     wrGroup.appendChild(wrSel);
     propsGrid.appendChild(wrGroup);
-
-    // Client (read-only derived from WR)
-    const clientGroup = el('div', { class: 'notion-prop' });
-    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client' }));
-    const prefilledClient = this.prefilledClientId ? this.getClientName(this.prefilledClientId) : '';
-    const clientDisplay = el('input', { type: 'text', name: 'clientDisplay', class: 'notion-prop-input', disabled: true, value: existing ? this.getClientName(existing.clientId) : prefilledClient });
-    clientGroup.appendChild(clientDisplay);
-    const clientIdInput = el('input', { type: 'hidden', name: 'clientId', value: existing ? existing.clientId : (this.prefilledClientId || '') });
-    clientGroup.appendChild(clientIdInput);
-    propsGrid.appendChild(clientGroup);
 
     // Tracking Number
     const tnGroup = el('div', { class: 'notion-prop' });
@@ -778,16 +776,42 @@ const Transmittal = {
 
     form.appendChild(propsGrid);
 
+    const populateWRs = (extraWrIds = new Set()) => {
+      const selectedClientId = clientSel.value;
+      const currentWR = wrSel.value;
+      while (wrSel.firstChild) wrSel.removeChild(wrSel.firstChild);
+      wrSel.appendChild(el('option', { value: '', text: '— Select —' }));
+      let matchedCurrent = false;
+      DB.getWhere('workRequests', wr => {
+        if (wr.entity !== entity) return false;
+        return extraWrIds.has(wr.id) || !selectedClientId || wr.clientId === selectedClientId;
+      }).forEach(wr => {
+        const opt = el('option', { value: wr.id, text: wr.title });
+        if (wr.id === currentWR) { opt.selected = true; matchedCurrent = true; }
+        wrSel.appendChild(opt);
+      });
+      if (!matchedCurrent) wrSel.value = '';
+    };
+
+    clientSel.addEventListener('change', () => populateWRs());
+
     wrSel.addEventListener('change', () => {
       const wr = DB.getById('workRequests', wrSel.value);
-      if (wr) {
-        clientDisplay.value = this.getClientName(wr.clientId);
-        clientIdInput.value = wr.clientId;
-      } else {
-        clientDisplay.value = '';
-        clientIdInput.value = '';
+      if (wr?.clientId && clientSel.value !== wr.clientId) {
+        clientSel.value = wr.clientId;
+        const extra = new Set(wr.id ? [wr.id] : []);
+        populateWRs(extra);
+        wrSel.value = wr.id;
       }
     });
+
+    // Initial population
+    const initialWRId = existing?.workRequestId || this.prefilledWrId || '';
+    const initialClientId = existing?.clientId || this.prefilledClientId || '';
+    if (initialClientId) clientSel.value = initialClientId;
+    const initialExtra = new Set(initialWRId ? [initialWRId] : []);
+    populateWRs(initialExtra);
+    if (initialWRId) wrSel.value = initialWRId;
 
     // Itemized document list — Notion-style editable list
     form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Transmittal Items' }));

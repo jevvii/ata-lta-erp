@@ -1142,6 +1142,20 @@ const Disbursement = {
     const receiptFile = receiptInput?.files?.[0];
     const isNew = !this.detailId;
 
+    const amount = parseFloat(data.amount) || 0;
+    if (amount <= 0) {
+      Workflow.showMessage('Validation Error', 'Please enter a disbursement amount greater than zero.', 'warning');
+      return;
+    }
+
+    // On create, a receipt must be attached (or already provided via a fulfilled operations request).
+    const hasExistingReceipt = !isNew && (DB.getById('disbursements', this.detailId)?.receiptFilename || null);
+    const hasPrefilledReceipt = isNew && (this.prefilledRequestId ? DB.getById('operationsRequests', this.prefilledRequestId)?.receiptFilename : null);
+    if (isNew && !receiptFile && !hasPrefilledReceipt) {
+      Workflow.showMessage('Validation Error', 'Please attach a receipt for this disbursement.', 'warning');
+      return;
+    }
+
     const record = {
       category: data.category,
       description: data.description.trim(),
