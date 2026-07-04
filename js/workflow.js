@@ -5547,7 +5547,6 @@ const Workflow = {
       }
 
       if (this.taskViewMode === 'board') {
-        const board = el('div', { class: 'board-v2', style: 'margin-top: 0;' });
         const statuses = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
         const statusColors = {
           'Draft': '#94a3b8',
@@ -5557,34 +5556,21 @@ const Workflow = {
           'Completed': '#17a34a',
           'Cancelled': '#dc2626'
         };
-
+        const self = this;
         let taskNumber = 1;
 
-        statuses.forEach(st => {
-          const colColor = statusColors[st] || '#cbd5e1';
-          const colTasks = filteredTasks.filter(t => t.status === st);
-          const col = el('div', { class: 'board-column-v2' });
-          col.style.setProperty('--column-phase-color', colColor);
-          
-          const header = el('div', { class: 'board-column-header-v2' });
-          const titleWrap = el('div', { class: 'board-column-title' });
-          titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-          titleWrap.appendChild(document.createTextNode(st));
-          titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colTasks.length) }));
-          header.appendChild(titleWrap);
-          col.appendChild(header);
-
-          const cardContainer = el('div', { class: 'board-cards-scroll', style: 'display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3);' });
-
-          if (colTasks.length === 0) {
-            cardContainer.appendChild(renderEmptyStateV2({
-              variant: 'compact',
-              title: 'No tasks',
-              body: ''
-            }));
-          }
-
-          colTasks.forEach(t => {
+        const board = KanbanBoard.render({
+          items: filteredTasks,
+          className: 'board-v2',
+          columns: statuses.map(st => ({
+            key: st,
+            label: st,
+            targetStatus: st,
+            color: statusColors[st] || '#cbd5e1',
+            cardContainerStyle: { display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginTop: 'var(--space-3)' },
+            emptyState: { variant: 'compact', title: 'No tasks', body: '' }
+          })),
+          renderCard(t) {
             const comp = getTaskChecklistCompletion(t);
             const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
             const priorityConfig = {
@@ -5603,14 +5589,14 @@ const Workflow = {
             const card = buildCompactBoardCard({
               key: 'TSK-' + taskNumber++,
               progress: comp.percent,
-              statusColor: colColor,
+              statusColor: statusColors[t.status] || '#cbd5e1',
               title: t.title,
               date: t.dueDate ? formatDate(t.dueDate) : '',
               priority: priorityConfig.label,
               priorityClass: priorityConfig.cls,
               avatars,
               counts,
-              onClick: () => { this.showTaskSidePane(t.id, card); }
+              onClick: () => { self.showTaskSidePane(t.id, card); }
             });
 
             if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
@@ -5618,13 +5604,44 @@ const Workflow = {
               window.SidePaneInstance.activeElement = card;
             }
 
-            cardContainer.appendChild(card);
-          });
+            return card;
+          },
+          drag: {
+            enabled: true,
+            canDrag: () => Auth.can('workflow:task_approve') || Auth.can('workflow:edit') || Auth.can('workflow:task_add'),
+            canDrop: ({ item, targetStatus }) => {
+              const allowed = self.getValidNextStatuses(item);
+              return allowed.includes(targetStatus);
+            },
+            orderField: 'boardOrder',
+            onDrop({ item, targetStatus, newOrder, fromStatus }) {
+              if (fromStatus === targetStatus) {
+                DB.update('tasks', item.id, { boardOrder: newOrder });
+                App.handleRoute();
+                return;
+              }
 
-          col.appendChild(cardContainer);
-          board.appendChild(col);
+              const result = self.updateTaskStatus(item.id, targetStatus);
+              if (!result.success) {
+                self.showMessage('Status Change Blocked', result.error, 'warning');
+                return;
+              }
+              DB.update('tasks', item.id, { boardOrder: newOrder });
+
+              if (result.cascaded?.length) {
+                self.showMessage(
+                  'Task Updated',
+                  `Status changed to ${targetStatus}. ${result.cascaded.length} dependent task(s) were cancelled.`,
+                  'info'
+                );
+              }
+
+              App.handleRoute();
+            }
+          }
         });
 
+        board.style.marginTop = '0';
         listWrapper.appendChild(board);
         return;
       }
