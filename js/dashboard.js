@@ -192,9 +192,9 @@ const Dashboard = {
     // If all incomplete tasks have a log today, no prompt needed.
     if (tasksNeedingLogs.length === 0) return null;
 
-    const banner = el('div', { 
-      class: 'alert-banner', 
-      style: 'background: #fffbeb; border: 1px solid #f59e0b; color: #92400e; padding: 12px 16px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);' 
+    const banner = el('div', {
+      class: 'alert-banner',
+      style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); color: var(--color-text); padding: 12px 16px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);'
     });
     
     const left = el('div', { style: 'display: flex; align-items: center; gap: 12px;' });

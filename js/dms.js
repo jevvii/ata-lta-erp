@@ -332,22 +332,123 @@ const DMS = {
 
   renderBoardView(container, docs) {
     const states = ['collected', 'with_documentations', 'scanned', 'in_envelope', 'stored'];
-    const board = el('div', { class: 'board-view' });
+    const stateColors = {
+      'collected': '#94a3b8',
+      'with_documentations': '#3b82f6',
+      'scanned': '#f59e0b',
+      'in_envelope': '#a855f7',
+      'stored': '#10b981'
+    };
+    const canEdit = Auth.can('dms:edit');
+    const self = this;
+
+    // Normalize boardOrder within each lifecycle column.
     states.forEach(state => {
-      const col = el('div', { class: 'board-column' });
-      col.appendChild(el('div', { class: 'board-column-header', text: this.lifecycleLabel(state) }));
       const stateDocs = docs.filter(d => (d.documentLifecycle || 'collected') === state);
-      stateDocs.forEach(doc => {
-        const uploader = DB.getById('users', doc.uploader);
-        const card = el('div', { class: 'board-card' });
-        card.appendChild(el('div', { class: 'board-card-title', text: doc.fileName }));
-        card.appendChild(el('div', { class: 'board-card-meta', text: (uploader?.name || '—') + ' • ' + formatDate(doc.uploadDate) }));
-        card.addEventListener('click', () => { this.view = 'detail'; this.detailId = doc.id; App.handleRoute(); });
-        col.appendChild(card);
+      stateDocs.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.uploadDate || 0) - new Date(b.uploadDate || 0);
       });
-      board.appendChild(col);
+      stateDocs.forEach((doc, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (doc.boardOrder !== newOrder) {
+          doc.boardOrder = newOrder;
+          DB.update('documents', doc.id, { boardOrder: newOrder });
+        }
+      });
     });
-    container.appendChild(board);
+
+    let cardNumber = 1;
+
+    KanbanBoard.render({
+      container,
+      items: docs,
+      getColumnKey: doc => doc.documentLifecycle || 'collected',
+      columns: states.map(state => ({
+        key: state,
+        label: self.lifecycleLabel(state),
+        targetStatus: state,
+        color: stateColors[state] || '#cbd5e1',
+        emptyState: { variant: 'compact', title: `No ${self.lifecycleLabel(state).toLowerCase()}`, body: '' }
+      })),
+      renderCard(doc) {
+        const uploader = DB.getById('users', doc.uploader);
+        const badge = self.docTypeBadge(doc.document_type);
+        return buildCompactBoardCard({
+          key: 'DOC-' + cardNumber++,
+          title: doc.fileName,
+          description: uploader?.name || '—',
+          date: doc.uploadDate ? formatDate(doc.uploadDate) : '',
+          statusColor: stateColors[doc.documentLifecycle || 'collected'] || '#cbd5e1',
+          badges: [badge],
+          onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
+        });
+      },
+      cardMenuItems(doc) {
+        const menu = [{
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
+        }];
+        const nextState = self.lifecycleNext(doc.documentLifecycle || 'collected');
+        if (canEdit && nextState) {
+          menu.push({
+            label: `Move to ${self.lifecycleLabel(nextState)}`,
+            className: 'primary',
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+            onClick: () => {
+              const updates = { documentLifecycle: nextState };
+              if (nextState === 'with_documentations') updates.receivedByDocumentationAt = new Date().toISOString();
+              if (nextState === 'scanned') updates.scannedAt = new Date().toISOString();
+              if (nextState === 'in_envelope') updates.storedInEnvelopeAt = new Date().toISOString();
+              if (nextState === 'stored') updates.storedAt = new Date().toISOString();
+              DB.update('documents', doc.id, updates);
+              App.handleRoute();
+            }
+          });
+        }
+        return menu;
+      },
+      drag: {
+        enabled: true,
+        canDrag: () => canEdit,
+        canDrop: ({ item, targetStatus }) => {
+          const currentState = item.documentLifecycle || 'collected';
+          if (currentState === targetStatus) return true;
+          const flow = ['collected', 'with_documentations', 'scanned', 'in_envelope', 'stored'];
+          const currentIdx = flow.indexOf(currentState);
+          const targetIdx = flow.indexOf(targetStatus);
+          if (currentIdx === -1 || targetIdx === -1) return false;
+          return targetIdx > currentIdx;
+        },
+        orderField: 'boardOrder',
+        onDrop({ item, targetStatus, newOrder, fromStatus }) {
+          const currentState = item.documentLifecycle || 'collected';
+          if (currentState === targetStatus) {
+            DB.update('documents', item.id, { boardOrder: newOrder });
+            App.handleRoute();
+            return;
+          }
+
+          const stageLabel = self.lifecycleLabel(targetStatus) || targetStatus;
+          const applyMove = () => {
+            const changes = { boardOrder: newOrder, documentLifecycle: targetStatus };
+            if (targetStatus === 'with_documentations') changes.receivedByDocumentationAt = new Date().toISOString();
+            if (targetStatus === 'scanned') changes.scannedAt = new Date().toISOString();
+            if (targetStatus === 'in_envelope') changes.storedInEnvelopeAt = new Date().toISOString();
+            if (targetStatus === 'stored') changes.storedAt = new Date().toISOString();
+            DB.update('documents', item.id, changes);
+            App.handleRoute();
+          };
+
+          Workflow.showConfirm('Confirm Lifecycle Change', `Move "${item.fileName}" to "${stageLabel}"?`, applyMove, 'success');
+        }
+      }
+    });
   },
 
   renderCompactListView(container, docs) {

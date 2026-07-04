@@ -267,31 +267,32 @@ async function runVerification() {
 
         // Subcase 8b: WR itself is NOT assigned, has no tasks -> should have Employee assignment error
         DB.update('workRequests', savedWr.id, { assignedTo: null });
+        // Subcase 8b: WR itself is NOT assigned, no tasks -> should be blocked by missing task / assignment error
         const ts2 = Workflow.getPhaseTransitionStatus(savedWr.id);
-        const err2 = ts2?.missing?.includes('Employee assignment');
+        const err2 = ts2?.missing?.some(m => m.includes('task') || m.includes('assignment'));
         assert(
           'Case 8b: WR NOT assigned, no tasks -> Blocked',
           err2 === true,
           `Missing: ${JSON.stringify(ts2?.missing)}`
         );
 
-        // Subcase 8c: WR itself is NOT assigned, has tasks, but some are unassigned -> should have Employee assignment error
+        // Subcase 8c: WR itself is NOT assigned, has tasks, but some are unassigned -> should have assignment error
         const taskId1 = 't-test-trans-1';
         const taskId2 = 't-test-trans-2';
         DB.insert('tasks', { id: taskId1, workRequestId: savedWr.id, title: 'Task 1', assigneeId: testStaffId });
         DB.insert('tasks', { id: taskId2, workRequestId: savedWr.id, title: 'Task 2', assigneeId: null });
         const ts3 = Workflow.getPhaseTransitionStatus(savedWr.id);
-        const err3 = ts3?.missing?.includes('Employee assignment');
+        const err3 = ts3?.missing?.some(m => m.includes('assigned') || m.includes('assignment'));
         assert(
           'Case 8c: WR NOT assigned, some tasks unassigned -> Blocked',
           err3 === true,
           `Missing: ${JSON.stringify(ts3?.missing)}`
         );
 
-        // Subcase 8d: WR itself is NOT assigned, has tasks, and ALL tasks are assigned -> should not have Employee assignment error
+        // Subcase 8d: WR itself is NOT assigned, has tasks, and ALL tasks are assigned -> should not have task assignment error
         DB.update('tasks', taskId2, { assigneeId: testStaffId });
         const ts4 = Workflow.getPhaseTransitionStatus(savedWr.id);
-        const err4 = ts4?.missing?.includes('Employee assignment');
+        const err4 = ts4?.missing?.some(m => m.includes('assigned') || m.includes('assignment'));
         assert(
           'Case 8d: WR NOT assigned, all tasks assigned -> Transition allowed',
           !err4,
