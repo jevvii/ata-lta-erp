@@ -38,7 +38,7 @@ const Transmittal = {
                   sentAt: new Date().toISOString(),
                   sentBy: Auth.user.id
                 };
-                if (Auth.user.role === 'Admin') {
+                if (Auth.canBypassReview('transmittals')) {
                   // Admin marks are applied immediately
                   DB.update('transmittals', t.id, markData);
                 } else {
@@ -977,7 +977,7 @@ const Transmittal = {
         acknowledgedBy: Auth.user.id,
         receivedByName: fd.get('receivedBy')
       };
-      if (Auth.user.role === 'Admin') {
+      if (Auth.canBypassReview('transmittals')) {
         // Admin acknowledgments are applied immediately
         DB.update('transmittals', t.id, ackData);
       } else {
