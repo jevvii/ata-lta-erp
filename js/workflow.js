@@ -2433,73 +2433,200 @@ const Workflow = {
     // Exclude cancelled from board
     wrs = wrs.filter(wr => wr.status !== 'Cancelled');
     const board = el('div', { class: 'board-v2' });
-    const statuses = ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed'];
-    const statusColors = {
-      'Draft': '#94a3b8',
-      'Pre-processing': '#3b82f6',
-      'Processing': '#f59e0b',
-      'Billing': '#a855f7',
-      'Disbursement': '#6366f1',
-      'Completed': '#10b981',
-      'Cancelled': '#ef4444'
-    };
+    const canEdit = Auth.can('workflow:edit');
+    const canApprove = Auth.can('workflow:approve');
+
+    // Four-phase board matching the reference image.
+    const boardPhases = [
+      { key: 'new', label: 'New', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8', icon: 'circle' },
+      { key: 'in-progress', label: 'In Progress', statuses: ['Pre-processing', 'Processing'], targetStatus: 'Processing', color: '#3b82f6', icon: 'circle' },
+      { key: 'testing', label: 'Testing', statuses: ['Billing', 'Disbursement'], targetStatus: 'Billing', color: '#f59e0b', icon: 'circle' },
+      { key: 'completed', label: 'Completed', statuses: ['Completed'], targetStatus: 'Completed', color: '#10b981', icon: 'check' }
+    ];
+
+    function closeAllMenus(except) {
+      document.querySelectorAll('.action-menu-list').forEach(m => {
+        if (m !== except) { m.classList.add('hidden'); m.classList.remove('open'); }
+      });
+    }
+
+    function toggleMenu(menu) {
+      closeAllMenus(menu);
+      if (menu.classList.contains('hidden')) {
+        menu.classList.remove('hidden');
+        requestAnimationFrame(() => menu.classList.add('open'));
+      } else {
+        menu.classList.remove('open');
+        menu.classList.add('hidden');
+      }
+    }
+
+    function openNewWrForm() {
+      this.editingId = null;
+      const fullPageRoute = '#operations/form/new';
+      openFormPanel({
+        icon: '📝', title: ' ',
+        formContent: this.renderForm(), formId: 'wr-form',
+        viewContext: 'work-request-form',
+        fullPageRoute,
+        newTabRoute: fullPageRoute,
+        actions: [
+          { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
+          { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
+        ]
+      });
+    }
+
+    function statusIconSvg(phase) {
+      if (phase.icon === 'check') {
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${phase.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      }
+      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="${phase.color}"><circle cx="12" cy="12" r="6"/></svg>`;
+    }
+
+    let dragSrcWrId = null;
+
+    function handleDragStart(e) {
+      dragSrcWrId = this.dataset.wrId;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragSrcWrId);
+    }
+
+    function handleDragEnd(e) {
+      this.classList.remove('dragging');
+      document.querySelectorAll('.board-column-v2.drag-over').forEach(c => c.classList.remove('drag-over'));
+      dragSrcWrId = null;
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const col = this.closest('.board-column-v2');
+      if (col && !col.classList.contains('drag-over')) {
+        document.querySelectorAll('.board-column-v2.drag-over').forEach(c => c.classList.remove('drag-over'));
+        col.classList.add('drag-over');
+      }
+    }
+
+    function handleDragLeave(e) {
+      const col = this.closest('.board-column-v2');
+      if (col && !col.contains(e.relatedTarget)) {
+        col.classList.remove('drag-over');
+      }
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      const col = this.closest('.board-column-v2');
+      if (!col) return;
+      col.classList.remove('drag-over');
+      const wrId = e.dataTransfer.getData('text/plain') || dragSrcWrId;
+      const targetStatus = col.dataset.targetStatus;
+      if (!wrId || !targetStatus) return;
+      const wr = DB.getById('workRequests', wrId);
+      if (!wr) return;
+      if (wr.status === targetStatus) return;
+      if (!canApprove) {
+        this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
+        return;
+      }
+      DB.update('workRequests', wrId, { status: targetStatus, updatedAt: new Date().toISOString() });
+      App.handleRoute();
+    }
 
     let cardNumber = 1;
 
-    statuses.forEach(st => {
-      const colColor = statusColors[st] || '#cbd5e1';
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
+    boardPhases.forEach(phase => {
+      const col = el('div', { class: 'board-column-v2', 'data-target-status': phase.targetStatus });
+      col.style.setProperty('--column-phase-color', phase.color);
 
-      const colWrs = wrs.filter(wr => wr.status === st);
-
-      // Aggregate column progress across all work requests in the column
-      let colTotalTasks = 0;
-      let colCompletedTasks = 0;
-      colWrs.forEach(wr => {
-        const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
-        colTotalTasks += tasks.length;
-        colCompletedTasks += tasks.filter(t => t.status === 'Completed').length;
-      });
-      const colProgress = colTotalTasks > 0 ? Math.round((colCompletedTasks / colTotalTasks) * 100) : 0;
+      const colWrs = wrs.filter(wr => phase.statuses.includes(wr.status));
 
       const header = el('div', { class: 'board-column-header-v2' });
       const titleWrap = el('div', { class: 'board-column-title' });
       const dotEl = el('span', { class: 'board-column-dot' });
-      dotEl.innerHTML = buildProgressRingSVG(colProgress, colColor);
+      dotEl.innerHTML = statusIconSvg(phase);
       titleWrap.appendChild(dotEl);
-      titleWrap.appendChild(document.createTextNode(st));
+      titleWrap.appendChild(el('span', { class: 'board-column-label', text: phase.label }));
       titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colWrs.length) }));
       header.appendChild(titleWrap);
+
+      const actionsWrap = el('div', { class: 'board-column-actions' });
+
+      // Header plus button — quick add a work request.
+      if (phase.key === 'new' && canEdit) {
+        const addBtn = el('button', {
+          class: 'board-column-add',
+          type: 'button',
+          'aria-label': 'Add Work Request',
+          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+        });
+        addBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openNewWrForm.call(this);
+        });
+        actionsWrap.appendChild(addBtn);
+      }
+
+      // Header three-dots menu.
+      const menuBtn = el('button', {
+        class: 'board-column-menu',
+        type: 'button',
+        'aria-label': 'Column options',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>'
+      });
+      const colMenu = el('div', { class: 'action-menu-list hidden' });
+
+      if (phase.key === 'new' && canEdit) {
+        const addMenuItem = el('button', {
+          class: 'action-menu-item',
+          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request'
+        });
+        addMenuItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          colMenu.classList.remove('open'); colMenu.classList.add('hidden');
+          openNewWrForm.call(this);
+        });
+        colMenu.appendChild(addMenuItem);
+      }
+
+      const collapseItem = el('button', {
+        class: 'action-menu-item',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg> Collapse column'
+      });
+      collapseItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        colMenu.classList.remove('open'); colMenu.classList.add('hidden');
+        col.classList.toggle('collapsed');
+      });
+      colMenu.appendChild(collapseItem);
+
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMenu(colMenu);
+      });
+      actionsWrap.appendChild(menuBtn);
+      actionsWrap.appendChild(colMenu);
+      header.appendChild(actionsWrap);
       col.appendChild(header);
 
       const cardContainer = el('div', { class: 'board-cards-scroll' });
+      cardContainer.addEventListener('dragover', handleDragOver.bind(this));
+      cardContainer.addEventListener('dragleave', handleDragLeave);
+      cardContainer.addEventListener('drop', handleDrop.bind(this));
 
-      if (st === 'Draft' && Auth.can('workflow:edit')) {
+      if (phase.key === 'new' && canEdit) {
         const addCard = el('div', {
           class: 'board-card-v2 add-wr-card',
-          style: 'background: transparent; border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
+          style: 'background: transparent; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: var(--radius-sm);'
         });
         addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request';
-        addCard.addEventListener('click', () => {
-          this.editingId = null;
-          const fullPageRoute = '#operations/form/new';
-          openFormPanel({
-            icon: '📝', title: ' ',
-            formContent: this.renderForm(), formId: 'wr-form',
-            viewContext: 'work-request-form',
-            fullPageRoute,
-            newTabRoute: fullPageRoute,
-            actions: [
-              { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
-              { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
-            ]
-          });
-        });
+        addCard.addEventListener('click', () => openNewWrForm.call(this));
         cardContainer.appendChild(addCard);
       }
 
-      if (colWrs.length === 0 && (st !== 'Draft' || !Auth.can('workflow:edit'))) {
+      if (colWrs.length === 0 && (phase.key !== 'new' || !canEdit)) {
         cardContainer.appendChild(renderEmptyStateV2({
           variant: 'compact',
           title: 'No work requests',
@@ -2564,10 +2691,13 @@ const Workflow = {
         }
         if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
 
+        const transitionStatus = this.getPhaseTransitionStatus(wr.id);
+        const showQuickRoute = canApprove && transitionStatus && transitionStatus.canTransition && transitionStatus.nextPhase;
+
         const card = buildCompactBoardCard({
           key: 'WR-' + cardNumber++,
           progress,
-          statusColor: colColor,
+          statusColor: phase.color,
           title: wr.title,
           description,
           date: wr.dueDate ? formatDate(wr.dueDate) : '',
@@ -2592,7 +2722,20 @@ const Workflow = {
               });
               menu.appendChild(viewItem);
 
-              if (Auth.can('workflow:edit') && !wr.isPendingApproval) {
+              if (showQuickRoute) {
+                const routeItem = el('button', {
+                  class: 'action-menu-item primary',
+                  html: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg> Advance to ${escapeHtml(transitionStatus.nextPhase)}`
+                });
+                routeItem.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                  menu.classList.remove('open'); menu.classList.add('hidden');
+                  this.transitionWorkRequest(wr.id);
+                });
+                menu.appendChild(routeItem);
+              }
+
+              if (canEdit && !wr.isPendingApproval) {
                 const editItem = el('button', {
                   class: 'action-menu-item',
                   html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit'
@@ -2618,7 +2761,7 @@ const Workflow = {
                 menu.appendChild(cancelItem);
               }
 
-              if (Auth.can('workflow:edit') && wr.status === 'Draft' && !wr.isPendingApproval) {
+              if (canEdit && wr.status === 'Draft' && !wr.isPendingApproval) {
                 const deleteItem = el('button', {
                   class: 'action-menu-item danger',
                   html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete'
@@ -2637,27 +2780,26 @@ const Workflow = {
 
               wrapper.appendChild(menu);
             }
-            document.querySelectorAll('.action-menu-list').forEach(m => {
-              if (m !== menu) { m.classList.add('hidden'); m.classList.remove('open'); }
-            });
-            if (menu.classList.contains('hidden')) {
-              menu.classList.remove('hidden');
-              setTimeout(() => menu.classList.add('open'), 10);
-            } else {
-              menu.classList.remove('open');
-              menu.classList.add('hidden');
-            }
+            toggleMenu(menu);
           },
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
         });
+
+        card.dataset.wrId = wr.id;
+        if (canApprove) {
+          card.draggable = true;
+          card.addEventListener('dragstart', handleDragStart);
+          card.addEventListener('dragend', handleDragEnd);
+          card.style.cursor = 'grab';
+        }
 
         cardContainer.appendChild(card);
       });
 
       col.appendChild(cardContainer);
-      
       board.appendChild(col);
     });
+
     container.appendChild(board);
   },
 
