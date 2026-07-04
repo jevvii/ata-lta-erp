@@ -1625,6 +1625,7 @@ const seedData = {
 
 const DB = {
   SCHEMA_VERSION: 13,
+  _pendingWrIdsCache: null,
 
   init() {
     const stored = localStorage.getItem('erp_schema_version');
@@ -1828,7 +1829,29 @@ const DB = {
   },
 
   getAll(table) {
-    return JSON.parse(localStorage.getItem('erp_' + table) || '[]');
+    let records = JSON.parse(localStorage.getItem('erp_' + table) || '[]');
+    if (table === 'workRequests' && records.length > 0) {
+      records = records.map(r => ({ ...r }));
+      if (!this._pendingWrIdsCache) {
+        const pcStr = localStorage.getItem('erp_pendingChanges') || '[]';
+        try {
+          const pcs = JSON.parse(pcStr);
+          this._pendingWrIdsCache = new Set(
+            pcs.filter(pc => pc.status === 'pending' && pc.table === 'workRequests' && pc.proposedData)
+               .map(pc => pc.proposedData.id || pc.proposedData.key || pc.proposedData.workRequestId)
+               .filter(Boolean)
+          );
+        } catch (e) {
+          this._pendingWrIdsCache = new Set();
+        }
+      }
+      records.forEach(r => {
+        if (this._pendingWrIdsCache.has(r.id)) {
+          r.isPendingApproval = true;
+        }
+      });
+    }
+    return records;
   },
 
   getById(table, id) {
@@ -1844,21 +1867,35 @@ const DB = {
   },
 
   insert(table, record) {
+    this._pendingWrIdsCache = null;
     const all = this.getAll(table);
-    all.push(record);
+    const cleanRecord = { ...record };
+    if (table === 'workRequests') {
+      delete cleanRecord.isPendingApproval;
+    }
+    all.push(cleanRecord);
     this.save(table, all);
   },
 
   update(table, id, changes) {
+    this._pendingWrIdsCache = null;
     const all = this.getAll(table);
     const idx = all.findIndex(r => r.id === id);
     if (idx !== -1) {
-      all[idx] = { ...all[idx], ...changes };
+      const cleanChanges = { ...changes };
+      if (table === 'workRequests') {
+        delete cleanChanges.isPendingApproval;
+      }
+      all[idx] = { ...all[idx], ...cleanChanges };
+      if (table === 'workRequests') {
+        delete all[idx].isPendingApproval;
+      }
       this.save(table, all);
     }
   },
 
   delete(table, id) {
+    this._pendingWrIdsCache = null;
     const all = this.getAll(table).filter(r => r.id !== id);
     this.save(table, all);
   },
