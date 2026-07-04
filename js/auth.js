@@ -103,7 +103,7 @@ const Auth = {
     if (role === 'Admin') return true;
     if (!this.user.entities.includes(entity)) return false;
     const perms = {
-      Manager: ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','audit:view_all','transmittal:view','transmittal:mark'],
+      Manager: ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','reports:view','users:view','audit:view_all','transmittal:view','transmittal:mark','bypass_review:tasks','approve_change:tasks'],
       Accounting: ['clients:view','workflow:view','workflow:task_add','billing:view','billing:edit','disbursement:view','disbursement:create','disbursement:edit','dms:view','transmittal:view'],
       Operations: ['clients:view','workflow:view','workflow:task_add','workflow:task_upload','billing:view','billing:request','disbursement:view','disbursement:request','dms:view','transmittal:view','transmittal:request'],
       Documentation: ['clients:view','workflow:view','workflow:task_add','billing:view','disbursement:view','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:create','transmittal:edit','transmittal:mark'],
@@ -113,6 +113,14 @@ const Auth = {
     };
     // Note: audit:view_all is shared by Admin and Manager (Admin always returns true).
     return perms[role]?.includes(action) || false;
+  },
+
+  canBypassReview(table) {
+    return this.can('bypass_review:' + table);
+  },
+
+  canApproveChange(table) {
+    return this.can('approve_change:' + table);
   },
 
   isManagerial() {
@@ -133,20 +141,62 @@ const Auth = {
     if (!this.user) return false;
     if (this.user.role === 'Admin') return true;
     if (this.user.role === 'Manager') {
-      return wr && wr.assignedTo === this.user.id;
+      return wr && (wr.assignedTo === this.user.id || wr.submittedBy === this.user.id || wr.requestedBy === this.user.id);
     }
-    return true;
+    // Staff roles (non-managerial)
+    if (!wr) return false;
+    if (wr.submittedBy === this.user.id || wr.assignedTo === this.user.id || wr.requestedBy === this.user.id) return true;
+    
+    // Check tasks
+    const tasks = wr.tasks || (wr.isPendingApproval ? [] : DB.getWhere('tasks', t => t.workRequestId === wr.id));
+    const isAssigned = tasks.some(t => {
+      if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
+      if (t.assigneeName && t.assigneeName === this.user.name) return true;
+      if ((t.coAssignees || []).includes(this.user.name)) return true;
+      return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === this.user.name);
+    });
+    return isAssigned;
+  },
+
+  /**
+   * canViewWr variant that accepts a pre-built task map to avoid N+1 DB lookups.
+   * taskMap: { [workRequestId]: Task[] }
+   */
+  canViewWrWithTasks(wr, taskMap) {
+    if (!this.user) return false;
+    if (this.user.role === 'Admin') return true;
+    if (this.user.role === 'Manager') {
+      return wr && (wr.assignedTo === this.user.id || wr.submittedBy === this.user.id || wr.requestedBy === this.user.id);
+    }
+    if (!wr) return false;
+    if (wr.submittedBy === this.user.id || wr.assignedTo === this.user.id || wr.requestedBy === this.user.id) return true;
+    const tasks = wr.isPendingApproval ? (wr.tasks || []) : (taskMap[wr.id] || []);
+    return tasks.some(t => {
+      if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
+      if (t.assigneeName && t.assigneeName === this.user.name) return true;
+      if ((t.coAssignees || []).includes(this.user.name)) return true;
+      return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === this.user.name);
+    });
   },
 
   canViewDisbursement(d) {
     if (!this.user) return false;
-    if (this.user.role === 'Admin') return true;
+    if (this.user.role === 'Admin' || this.user.role === 'Accounting') return true;
     if (this.user.role === 'Manager') {
       if (!d.linkedWorkRequestId) return false;
       const wr = DB.getById('workRequests', d.linkedWorkRequestId);
       return wr && this.canViewWr(wr);
     }
-    return true;
+    // Operations, Documentation, and HR:
+    // Staff can see WR-linked disbursements if they can view the WR,
+    // or non-linked disbursements they personally requested.
+    // This is intentionally more restrictive than the previous blanket 'return true'
+    // to match the documented role matrix (see file header).
+    if (d.linkedWorkRequestId) {
+      const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+      return wr && this.canViewWr(wr);
+    }
+    return d.requestedBy === this.user.id;
   },
 
   switchEntity(entity) {

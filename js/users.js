@@ -44,9 +44,7 @@ const Users = {
       const entity = Auth.activeEntity;
       const pendingDisbursements = DB.getWhere('disbursements', d => d.entity === entity && (d.status === 'Submitted' || d.status === 'Under Review'));
       let pendingChanges = PendingChanges.getAllPending();
-      if (Auth.user.role === 'Manager') {
-        pendingChanges = pendingChanges.filter(pc => PendingChanges.canApproveChange(pc));
-      }
+      pendingChanges = pendingChanges.filter(pc => PendingChanges.canApproveChange(pc));
       const totalPending = pendingDisbursements.length + pendingChanges.length;
 
       const pendingTab = el('button', {
@@ -564,10 +562,7 @@ const Users = {
 
     const entity = Auth.activeEntity;
     let pendingChanges = PendingChanges.getAllPending();
-    // Manager can only approve tasks — filter to show only approvable items
-    if (Auth.user.role === 'Manager') {
-      pendingChanges = pendingChanges.filter(pc => PendingChanges.canApproveChange(pc));
-    }
+    pendingChanges = pendingChanges.filter(pc => PendingChanges.canApproveChange(pc));
     const pendingDisbursements = DB.getWhere('disbursements', d => d.entity === entity && (d.status === 'Submitted' || d.status === 'Under Review'));
 
     if (pendingChanges.length === 0 && pendingDisbursements.length === 0) {
