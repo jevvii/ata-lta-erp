@@ -9,8 +9,17 @@ window.LoadingManager = {
   timeoutId: null,
 
   getTiming: function(cssVar, defaultVal) {
-    const val = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || defaultVal;
-    return parseFloat(val) * (val.endsWith('ms') ? 1 : 1000);
+    let raw = '';
+    try {
+      raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+    } catch (e) {}
+    const val = raw || defaultVal;
+    const parsed = parseFloat(val);
+    if (isNaN(parsed)) {
+      const fallback = parseFloat(defaultVal);
+      return (isNaN(fallback) ? 0.25 : fallback) * (defaultVal.endsWith('ms') ? 1 : 1000);
+    }
+    return parsed * (val.endsWith('ms') ? 1 : 1000);
   },
 
   get DELAY_MS() {
