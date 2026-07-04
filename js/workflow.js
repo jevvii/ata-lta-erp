@@ -2479,12 +2479,21 @@ const Workflow = {
 
     function statusIconSvg(phase) {
       const color = escapeHtml(phase.color);
-      if (phase.icon === 'check') {
-        // Moon-phase check icon: crescent-like circle with a check inside.
-        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="20 6 9 17 4 12"/></svg>`;
+      // Moon-phase icons matching the reference image.
+      if (phase.key === 'new') {
+        // New: empty circle (new moon).
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>`;
       }
-      // Moon-phase crescent icon.
-      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 1 0 0 18 7 7 0 0 1 0-18z" fill="${color}"/></svg>`;
+      if (phase.key === 'in-progress') {
+        // In Progress: first-quarter half moon (left half filled).
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9" fill="${color}" fill-opacity="0.15"/><path d="M12 3a9 9 0 1 1 0 18V3z" fill="${color}"/></svg>`;
+      }
+      if (phase.key === 'testing') {
+        // Testing: gibbous / nearly full moon.
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9" fill="${color}" fill-opacity="0.15"/><path d="M12 3a9 9 0 1 1 0 18c0-5-2-8-6-9 4-1 6-4 6-9z" fill="${color}"/></svg>`;
+      }
+      // Completed: full circle with white check.
+      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="${color}"/><polyline points="8 12 11 15 16 9" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     }
 
     let dragSrcWrId = null;
@@ -2516,10 +2525,12 @@ const Workflow = {
     }
 
     function updatePlaceholder(container, y) {
+      const draggedId = dragSrcWrId;
       const cards = Array.from(container.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)'));
       let target = null;
       let after = false;
       for (const card of cards) {
+        if (card.dataset.wrId === draggedId) continue;
         const rect = card.getBoundingClientRect();
         const mid = rect.top + rect.height / 2;
         if (y < mid) { target = card; after = false; break; }
@@ -2534,28 +2545,42 @@ const Workflow = {
           container.insertBefore(placeholder, target);
         }
       } else {
-        // Append before add-wr-card if present, otherwise at end
         const addCard = container.querySelector('.board-card-v2.add-wr-card');
         if (addCard) container.insertBefore(placeholder, addCard);
         else container.appendChild(placeholder);
       }
     }
 
+    function getTargetContainer(target) {
+      return target.closest('.board-cards-scroll') || target.closest('.board-column-v2')?.querySelector('.board-cards-scroll');
+    }
+
     function handleDragOver(e) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      const col = this.closest('.board-column-v2');
+      const cardContainer = getTargetContainer(e.currentTarget);
+      const col = cardContainer?.closest('.board-column-v2');
       if (col && !col.classList.contains('drag-over')) {
         clearDragIndicators();
         col.classList.add('drag-over');
       }
-      if (e.currentTarget.classList.contains('board-cards-scroll')) {
-        updatePlaceholder(e.currentTarget, e.clientY);
+      if (cardContainer) {
+        // Show placeholder even when empty (no cards in target column).
+        const cards = cardContainer.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)');
+        const placeholder = getDragPlaceholder();
+        if (cards.length === 0) {
+          const addCard = cardContainer.querySelector('.board-card-v2.add-wr-card');
+          if (addCard) cardContainer.insertBefore(placeholder, addCard);
+          else cardContainer.appendChild(placeholder);
+        } else {
+          updatePlaceholder(cardContainer, e.clientY);
+        }
       }
     }
 
     function handleDragLeave(e) {
-      const col = this.closest('.board-column-v2');
+      const cardContainer = getTargetContainer(e.currentTarget);
+      const col = cardContainer?.closest('.board-column-v2');
       if (col && !col.contains(e.relatedTarget)) {
         col.classList.remove('drag-over');
         document.querySelectorAll('.board-card-v2.drag-placeholder').forEach(p => p.remove());
@@ -2564,7 +2589,8 @@ const Workflow = {
 
     function handleDrop(e) {
       e.preventDefault();
-      const col = this.closest('.board-column-v2');
+      const cardContainer = getTargetContainer(e.currentTarget);
+      const col = cardContainer?.closest('.board-column-v2');
       if (!col) return;
       col.classList.remove('drag-over');
       const wrId = e.dataTransfer.getData('text/plain') || dragSrcWrId;
@@ -2577,8 +2603,22 @@ const Workflow = {
         this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
         return;
       }
-      DB.update('workRequests', wrId, { status: targetStatus, updatedAt: new Date().toISOString() });
-      App.handleRoute();
+
+      // Validate whether the drop target is a valid routing destination.
+      const transitionStatus = this.getPhaseTransitionStatus(wrId);
+      if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
+        const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
+        const blockers = transitionStatus?.missing?.length
+          ? transitionStatus.missing.join('\n- ')
+          : `This Work Request cannot be routed to "${targetPhaseLabel}" yet.`;
+        this.showMessage('Routing Blocked', `Cannot move "${wr.title}" to ${targetPhaseLabel}:\n- ${blockers}`, 'warning');
+        return;
+      }
+
+      this.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, () => {
+        DB.update('workRequests', wrId, { status: targetStatus, updatedAt: new Date().toISOString() });
+        App.handleRoute();
+      }, 'success');
     }
 
     let cardNumber = 1;
@@ -2622,6 +2662,9 @@ const Workflow = {
       cardContainer.addEventListener('dragover', handleDragOver.bind(this));
       cardContainer.addEventListener('dragleave', handleDragLeave);
       cardContainer.addEventListener('drop', handleDrop.bind(this));
+      col.addEventListener('dragover', handleDragOver.bind(this));
+      col.addEventListener('dragleave', handleDragLeave);
+      col.addEventListener('drop', handleDrop.bind(this));
 
       if (phase.key === 'new' && canEdit) {
         const addCard = el('div', {
@@ -2668,9 +2711,7 @@ const Workflow = {
           'Low': { label: 'Low', cls: 'card-v2-priority-low' }
         }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
 
-        // Card description: prefer WR description, fall back to client name.
-        const wrDescription = (wr.description || '').trim();
-        const description = wrDescription || client?.name || '';
+        const description = client?.name || '—';
 
         const allChecklistItems = tasks.flatMap(t => t.checklist || []);
         const documentItems = allChecklistItems.filter(c => c.category === 'document');
@@ -2709,6 +2750,7 @@ const Workflow = {
           statusColor: phase.color,
           title: wr.title,
           description,
+          detail: (wr.description || '').trim(),
           date: wr.dueDate ? formatDate(wr.dueDate) : '',
           priority: priorityConfig.label,
           priorityClass: priorityConfig.cls,

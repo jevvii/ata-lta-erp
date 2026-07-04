@@ -228,6 +228,11 @@ function buildCompactBoardCard(opts) {
 
   // 3. Description
   if (opts.description) body.appendChild(el('div', { class: 'card-v2-desc', text: opts.description }));
+
+  // 3b. Additional muted detail paragraph (e.g. work-request description).
+  if (opts.detail) {
+    body.appendChild(el('div', { class: 'card-v2-detail', text: opts.detail }));
+  }
   card.appendChild(body);
 
   // 4. Metadata Row (date left, priority right)

@@ -2946,6 +2946,17 @@ tbody tr:hover {
   overflow: hidden;
 }
 
+.board-card-v2.compact .card-v2-detail {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  opacity: 0.85;
+}
+
 /* Extra badges (transition / approval chips) */
 .board-card-v2.compact .card-v2-badges {
   display: flex;
@@ -3245,16 +3256,17 @@ tbody tr:hover {
 }
 
 .board-card-v2.drag-placeholder {
-  height: 2px;
-  min-height: 2px;
+  height: 3px;
+  min-height: 3px;
   padding: 0;
-  margin: 8px 0;
+  margin: 6px 0;
   border: none;
-  border-radius: 1px;
-  background: var(--color-primary);
-  box-shadow: none;
+  border-radius: 2px;
+  background: var(--column-phase-color, var(--color-primary));
+  box-shadow: 0 0 0 1px var(--color-surface), 0 0 0 2px var(--column-phase-color, var(--color-primary));
   pointer-events: none;
   opacity: 1;
+  transition: none;
 }
 
 .board-column-v2.collapsed {
