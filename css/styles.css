@@ -2575,9 +2575,9 @@ tbody tr:hover {
   align-items: center;
   position: sticky;
   top: 0;
-  z-index: 20;
-  background: #f1f5f9;
-  border-bottom: 1px solid #cbd5e1;
+  z-index: 40;
+  background: var(--color-bg-light, #f1f5f9);
+  border-bottom: 1px solid var(--color-border, #cbd5e1);
   border-radius: var(--radius-md, 12px) var(--radius-md, 12px) 0 0;
 }
 
@@ -3055,27 +3055,35 @@ tbody tr:hover {
   overflow: hidden;
 }
 
+/* Stacking context elevation when menu is active */
+.board-column-v2.menu-open {
+  z-index: 50 !important;
+}
+.board-card-v2.menu-open {
+  z-index: 60 !important;
+}
+.card-v2-action-menu.menu-open {
+  z-index: 70 !important;
+}
+
 .board-card-v2.compact .card-v2-action-menu {
   position: relative;
-  z-index: 30;
+  margin-left: auto;
 }
 
 .board-card-v2.compact .action-menu-list {
   min-width: 150px;
-  right: auto;
-  left: calc(100% - 18px);
-  top: calc(100% + 4px);
-  transform-origin: top left;
-}
-
-.board-card-v2.compact .action-menu-list.edge-left {
-  right: auto;
-  left: -6px;
-}
-
-.board-card-v2.compact .action-menu-list.edge-right {
-  right: -6px;
+  right: 0;
   left: auto;
+  top: calc(100% + 4px);
+  bottom: auto;
+  transform-origin: top right;
+}
+
+.board-card-v2.compact .action-menu-list.open-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+  transform-origin: bottom right;
 }
 
 .board-card-v2.compact .action-menu-list .action-menu-item {
@@ -3143,17 +3151,16 @@ tbody tr:hover {
   margin-left: 0;
 }
 
-/* ── Board action menu (styleless in operations board) ── */
+/* ── Board action menu ── */
 .board-card-v2.compact .action-menu-list,
 .board-column-v2 .action-menu-list {
   background: var(--color-surface, #ffffff);
   border: 1px solid var(--color-border, #e2e8f0);
   border-radius: var(--radius-md, 12px);
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
   padding: var(--spacing-xs, 6px) 0;
   min-width: 170px;
-  /* Keep menus beneath sticky module nav/toolbars (z-index 24-25) and board headers (20) */
-  z-index: 19;
+  z-index: 100;
 }
 
 .board-card-v2.compact .action-menu-list .action-menu-item,

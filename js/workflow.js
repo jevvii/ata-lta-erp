@@ -2443,18 +2443,47 @@ const Workflow = {
 
     function closeAllMenus(except) {
       document.querySelectorAll('.action-menu-list').forEach(m => {
-        if (m !== except) { m.classList.add('hidden'); m.classList.remove('open'); }
+        if (m !== except) {
+          m.classList.add('hidden');
+          m.classList.remove('open', 'open-up');
+        }
+      });
+      document.querySelectorAll('.menu-open').forEach(el => {
+        if (!except || !el.contains(except)) {
+          el.classList.remove('menu-open');
+        }
       });
     }
 
-    function toggleMenu(menu) {
+    function toggleMenu(menu, button) {
+      const isCurrentlyHidden = menu.classList.contains('hidden');
       closeAllMenus(menu);
-      if (menu.classList.contains('hidden')) {
+      if (isCurrentlyHidden) {
+        if (button) {
+          const btnRect = button.getBoundingClientRect();
+          if (btnRect.bottom > window.innerHeight - 180) {
+            menu.classList.add('open-up');
+          } else {
+            menu.classList.remove('open-up');
+          }
+        }
         menu.classList.remove('hidden');
         requestAnimationFrame(() => menu.classList.add('open'));
+        const actionMenuWrap = menu.closest('.card-v2-action-menu');
+        const card = menu.closest('.board-card-v2');
+        const col = menu.closest('.board-column-v2');
+        if (actionMenuWrap) actionMenuWrap.classList.add('menu-open');
+        if (card) card.classList.add('menu-open');
+        if (col) col.classList.add('menu-open');
       } else {
-        menu.classList.remove('open');
+        menu.classList.remove('open', 'open-up');
         menu.classList.add('hidden');
+        const actionMenuWrap = menu.closest('.card-v2-action-menu');
+        const card = menu.closest('.board-card-v2');
+        const col = menu.closest('.board-column-v2');
+        if (actionMenuWrap) actionMenuWrap.classList.remove('menu-open');
+        if (card) card.classList.remove('menu-open');
+        if (col) col.classList.remove('menu-open');
       }
     }
 
@@ -2835,7 +2864,7 @@ const Workflow = {
 
               wrapper.appendChild(menu);
             }
-            toggleMenu(menu);
+            toggleMenu(menu, e.currentTarget);
           },
           onClick: () => { location.hash = '#operations/detail/' + wr.id; }
         });
