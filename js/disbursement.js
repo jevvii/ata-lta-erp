@@ -253,6 +253,7 @@ const Disbursement = {
     this.detailId = disbId;
     const isNew = !disbId;
     const existing = isNew ? null : DB.getById('disbursements', disbId);
+    const fullPageRoute = isNew ? '#disbursement/form/new' : `#disbursement/form/${disbId}`;
 
     openFormPanel({
       icon: '💰',
@@ -260,7 +261,8 @@ const Disbursement = {
       formContent: this.renderForm(),
       formId: 'disbursement-form',
       viewContext: 'expense-form',
-      fullPageRoute: isNew ? '#disbursement/form/new' : `#disbursement/form/${disbId}`,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Submit Expense' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'disbursement-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement') }

@@ -1803,6 +1803,18 @@ const Workflow = {
       titleBar.appendChild(el('h1', { text: 'Operations' }));
       container.appendChild(titleBar);
       container.appendChild(this.renderTabNav());
+    } else if (this.view === 'form' || this.view === 'templateForm') {
+      // Full-page form routes: render a minimal header with a back button and
+      // leave the rest of the container for the form content below.
+      container.classList.add('operations-tab-page');
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      titleBar.appendChild(el('h1', { text: this.view === 'templateForm' ? 'Retainer Template' : 'Work Request' }));
+      const actions = el('div', { class: 'actions-bar' });
+      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to Operations' });
+      backBtn.addEventListener('click', () => { location.hash = '#operations'; });
+      actions.appendChild(backBtn);
+      titleBar.appendChild(actions);
+      container.appendChild(titleBar);
     }
 
     if (this.view === 'list') {
@@ -1906,11 +1918,13 @@ const Workflow = {
       });
       addBtn.addEventListener('click', () => {
         this.editingId = null;
+        const fullPageRoute = '#operations/form/new';
         openFormPanel({
           icon: '📝', title: ' ',
           formContent: this.renderForm(), formId: 'wr-form',
           viewContext: 'work-request-form',
-          fullPageRoute: '#operations/form/new',
+          fullPageRoute,
+          newTabRoute: fullPageRoute,
           actions: [
             { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
             { text: 'Cancel', class: 'btn btn-secondary', onClick: () => { closeFormPanelAndRoute('#operations'); } }
@@ -2262,11 +2276,13 @@ const Workflow = {
         addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request';
         addCard.addEventListener('click', () => {
           this.editingId = null;
+          const fullPageRoute = '#operations/form/new';
           openFormPanel({
             icon: '📝', title: ' ',
             formContent: this.renderForm(), formId: 'wr-form',
             viewContext: 'work-request-form',
-            fullPageRoute: '#operations/form/new',
+            fullPageRoute,
+            newTabRoute: fullPageRoute,
             actions: [
               { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
               { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
@@ -8279,11 +8295,13 @@ const Workflow = {
     const addBtn = el('button', { class: 'btn btn-primary', text: 'Create Template' });
     addBtn.addEventListener('click', () => {
       this.templateEditingId = null;
+      const fullPageRoute = '#operations/templateForm/new';
       openFormPanel({
         icon: '📋', title: 'Create Template',
         formContent: this.renderTemplateForm(), formId: 'template-form',
         viewContext: 'retainer-template-form',
-        fullPageRoute: '#operations/templateForm/new',
+        fullPageRoute,
+        newTabRoute: fullPageRoute,
         actions: [
           { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
           { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
@@ -8320,11 +8338,13 @@ const Workflow = {
       editBtn.addEventListener('click', () => {
         this.templateEditingId = t.id;
         const tpl = DB.getById('retainerTemplates', t.id);
+        const fullPageRoute = `#operations/templateForm/${this.templateEditingId || 'new'}`;
         openFormPanel({
           icon: '📋', title: tpl ? tpl.name : 'Edit Template',
           formContent: this.renderTemplateForm(), formId: 'template-form',
           viewContext: 'retainer-template-form',
-          fullPageRoute: `#operations/templateForm/${this.templateEditingId || 'new'}`,
+          fullPageRoute,
+          newTabRoute: fullPageRoute,
           actions: [
             { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
             { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }

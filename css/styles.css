@@ -8989,14 +8989,13 @@ tbody tr * {
   pointer-events: none;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  /* Center-peek panels should scroll their body, not the whole panel. */
+  overflow: hidden;
 }
 .side-pane.side-pane--center-peek.open {
   transform: translate(-50%, 0);
   opacity: 1;
   pointer-events: auto;
-}
-.side-pane.side-pane--center-peek {
-  overflow: visible;
 }
 
 /* Overlay only used by center-peek */
@@ -9580,6 +9579,21 @@ tbody tr * {
 /* Center-peek body scrolls within rounded panel */
 .side-pane--center-peek .side-pane-body {
   max-height: calc(86vh - 110px);
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+/* Center-peek form layout: spacious padding matching Notion's modal aesthetic */
+.side-pane--center-peek .side-pane-header {
+  padding: 8px 16px;
+}
+
+.side-pane--center-peek .side-pane-form-title {
+  padding: 20px 40px 12px;
+}
+
+.side-pane--center-peek .side-pane-form-content {
+  padding: 8px 40px 100px;
 }
 
 @media (max-width: 900px) {

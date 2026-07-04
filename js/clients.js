@@ -71,6 +71,22 @@ const Clients = {
     const formContainer = el('div', { class: 'form-container hidden' });
     container.appendChild(formContainer);
 
+    // Full-page form route: when editingId is set (e.g. from #clients/form/:id),
+    // render the form inline instead of the list/archive tab content.
+    if (this.editingId) {
+      while (container.firstChild) container.removeChild(container.firstChild);
+      container.classList.add('clients-tab-page');
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      titleBar.appendChild(el('h1', { text: this.editingId === 'new' ? 'Add Client' : 'Edit Client' }));
+      const actions = el('div', { class: 'actions-bar' });
+      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to Clients' });
+      backBtn.addEventListener('click', () => { this.editingId = null; location.hash = '#clients'; });
+      actions.appendChild(backBtn);
+      titleBar.appendChild(actions);
+      container.appendChild(titleBar);
+      container.appendChild(this.renderForm(el('div'), this.editingId));
+    }
+
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
   },
@@ -233,6 +249,7 @@ const Clients = {
     this.editingId = clientId || 'new';
     const isNew = this.editingId === 'new';
     const client = isNew ? null : DB.getById('clients', this.editingId);
+    const fullPageRoute = isNew ? '#clients/form/new' : `#clients/form/${clientId}`;
 
     const formContainer = el('div', { class: 'form-container' });
     this.renderForm(formContainer, this.editingId);
@@ -243,7 +260,8 @@ const Clients = {
       formContent: formContainer,
       formId: 'client-form',
       viewContext: 'client-form',
-      fullPageRoute: isNew ? '#clients/form/new' : `#clients/form/${clientId}`,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Save Client' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'client-form', testId: 'client-save' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showList(), testId: 'client-cancel' }

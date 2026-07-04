@@ -735,7 +735,9 @@ class SidePane {
       this.pane.classList.remove('side-pane--side-peek', 'side-pane--center-peek');
       this.pane.classList.add(this.mode === PaneMode.CENTER_PEEK ? 'side-pane--center-peek' : 'side-pane--side-peek');
       this.pane.classList.add('open');
-      if (this.mode === PaneMode.CENTER_PEEK) this.trapFocus();
+      // Center-peek forms focus the title input first; other center-peek content
+      // falls back to the first focusable element in the panel.
+      if (this.mode === PaneMode.CENTER_PEEK) this.trapFocus('.notion-title-input');
     });
   }
 
@@ -857,7 +859,7 @@ class SidePane {
       this.pane.classList.add(this.mode === PaneMode.CENTER_PEEK ? 'side-pane--center-peek' : 'side-pane--side-peek');
       this.pane.classList.add('open');
       this.updateViewMenuActiveState();
-      if (this.mode === PaneMode.CENTER_PEEK) this.trapFocus();
+      if (this.mode === PaneMode.CENTER_PEEK) this.trapFocus('.notion-title-input');
     });
   }
 
@@ -953,7 +955,16 @@ class SidePane {
     }
   }
 
-  trapFocus() {
+  trapFocus(preferredSelector) {
+    // For center-peek forms, try to focus the title input first so the user lands
+    // directly on the primary editable area instead of the close button.
+    if (preferredSelector) {
+      const preferred = this.pane.querySelector(preferredSelector);
+      if (preferred && typeof preferred.focus === 'function' && preferred.offsetParent !== null) {
+        preferred.focus();
+        return;
+      }
+    }
     const focusable = this.getFocusableElements();
     if (focusable.length) focusable[0].focus();
   }
@@ -1024,6 +1035,21 @@ function focusFormTitle(container) {
 /**
  * Opens a form inside the side panel with Notion-style layout:
  * Icon + Title at top, form content in body, action buttons in sticky footer.
+ *
+ * View-mode routing notes:
+ * - side-peek  (default): slides the panel in from the right; keeps the list visible.
+ * - center-peek: opens a centered modal-like panel with a dimmed overlay.
+ * - full-page: navigates to #module/form/:id via location.hash; App.handleRoute() renders
+ *   the form inline in the main content area. Requires the caller to provide fullPageRoute.
+ * - new-tab: opens fullPageRoute in a new browser tab.
+ *
+ * Per-module full-page routes implemented in this branch:
+ *   #operations/form/new | #operations/form/:id
+ *   #operations/templateForm/new | #operations/templateForm/:id
+ *   #billing/form/new | #billing/form/:id
+ *   #disbursement/form/new | #disbursement/form/:id
+ *   #transmittal/form/new | #transmittal/form/:id
+ *   #clients/form/new | #clients/form/:id
  *
  * @param {Object} opts
  * @param {string} opts.icon - Emoji icon for the title

@@ -475,16 +475,22 @@ const App = {
     // When there's no sub-path, only reset to 'list' if the current view is a URL-driven
     // view (detail/form) — this preserves internal module views like 'templates', 'archive',
     // 'aging', 'trash', 'report', 'templateForm' that buttons set before calling handleRoute().
+    //
+    // Note on full-page form routes:
+    // #module/form/new and #module/form/:id are now implemented for operations, billing,
+    // disbursement, transmittal, clients, and retainer templates. These routes render the
+    // form inline in the main content area (PaneMode.FULL_PAGE behavior) and set the module
+    // editing state so that module.render() can display the form directly.
     if (baseHash === '#operations') {
       if (pathParts[1] === 'detail' && pathParts[2]) {
         Workflow.view = 'detail';
         Workflow.detailWrId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Workflow.view = 'form';
-        Workflow.editingId = pathParts[2] || null;
+        Workflow.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (pathParts[1] === 'templateForm') {
         Workflow.view = 'templateForm';
-        Workflow.templateEditingId = pathParts[2] || null;
+        Workflow.templateEditingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (!Workflow.view || Workflow.view === 'detail' || Workflow.view === 'form' || Workflow.view === 'templateForm') {
         Workflow.view = 'list';
         Workflow.detailWrId = null;
@@ -497,7 +503,7 @@ const App = {
         Billing.detailId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Billing.view = 'form';
-        Billing.detailId = pathParts[2] || null;
+        Billing.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (!Billing.view || Billing.view === 'detail' || Billing.view === 'form') {
         Billing.view = 'list';
         Billing.detailId = null;
@@ -508,7 +514,7 @@ const App = {
         Disbursement.detailId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Disbursement.view = 'form';
-        Disbursement.detailId = pathParts[2] || null;
+        Disbursement.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (!Disbursement.view || Disbursement.view === 'detail' || Disbursement.view === 'form') {
         Disbursement.view = 'list';
         Disbursement.detailId = null;
@@ -519,7 +525,7 @@ const App = {
         Transmittal.detailId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Transmittal.view = 'form';
-        Transmittal.detailId = pathParts[2] || null;
+        Transmittal.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (!Transmittal.view || Transmittal.view === 'detail' || Transmittal.view === 'form') {
         Transmittal.view = 'list';
         Transmittal.detailId = null;

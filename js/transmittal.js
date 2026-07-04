@@ -594,6 +594,7 @@ const Transmittal = {
     this.detailId = txId;
     const isNew = !txId;
     const existing = isNew ? null : DB.getById('transmittals', txId);
+    const fullPageRoute = isNew ? '#transmittal/form/new' : `#transmittal/form/${txId}`;
 
     openFormPanel({
       icon: '📨',
@@ -601,7 +602,8 @@ const Transmittal = {
       formContent: this.renderForm(),
       formId: 'transmittal-form',
       viewContext: 'transmittal-form',
-      fullPageRoute: isNew ? '#transmittal/form/new' : `#transmittal/form/${txId}`,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Create Transmittal' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'transmittal-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#transmittal') }

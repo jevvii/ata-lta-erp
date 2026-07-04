@@ -72,7 +72,7 @@ const Billing = {
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
-    else if (this.view === 'form') container.appendChild(this.renderForm());
+    else if (this.view === 'form') container.appendChild(this.renderForm(this.detailId));
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'aging') container.appendChild(this.renderAging());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
@@ -1054,14 +1054,18 @@ const Billing = {
     this.detailId = invoiceId;
     const isNew = !invoiceId;
     const inv = isNew ? null : this.getInvoiceById(invoiceId);
+    const fullPageRoute = isNew ? '#billing/form/new' : `#billing/form/${invoiceId}`;
 
+    // If the user (or stored preference) requests full-page/new-tab, openFormPanel will
+    // navigate directly via the route. For side/center peek we render inside the panel.
     openFormPanel({
       icon: '🧾',
       title: isNew ? 'Create Sales Invoice' : `Edit Invoice ${inv?.invoiceNumber || ''}`.trim(),
       formContent: this.renderForm(invoiceId),
       formId: 'invoice-form',
       viewContext: 'invoice-form',
-      fullPageRoute: isNew ? '#billing/form/new' : `#billing/form/${invoiceId}`,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Save Invoice' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'invoice-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#billing') }
