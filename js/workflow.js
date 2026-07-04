@@ -4,6 +4,18 @@ const FINANCIAL_ACTION_ICONS = {
   transmittal: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`
 };
 
+/**
+ * Lucide-style SVG icons used by signal modals (info / success / warning / danger).
+ * They inherit the modal's type color via currentColor, so every type stays crisp
+ * and consistent in both light and dark themes.
+ */
+const SignalIcons = {
+  info: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+  success: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 12 15 16 9"/></svg>`,
+  warning: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  danger: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
+};
+
 const makeToolbarIcon = (svg) => {
   if (!svg) return '';
   if (/class=["']/i.test(svg)) {
@@ -558,13 +570,11 @@ const Workflow = {
 
   showMessage(title, message, type = 'info') {
     const wrapper = el('div', { class: `modal-message-wrapper type-${type}` });
-    
-    const iconMap = { 'info': 'ℹ️', 'success': '✅', 'warning': '⚠️', 'danger': '!' };
-    const icon = el('div', { class: 'modal-icon-v2', text: iconMap[type] || 'i' });
+    const icon = el('div', { class: 'modal-icon-v2', html: SignalIcons[type] || SignalIcons.info });
     wrapper.appendChild(icon);
 
     wrapper.appendChild(el('p', { text: message, class: 'modal-text' }));
-    
+
     const footer = el('div', { class: 'modal-footer' });
     const okBtn = el('button', { class: 'btn btn-primary modal-btn-sure', text: 'OK' });
     footer.appendChild(okBtn);
@@ -786,14 +796,13 @@ const Workflow = {
   showConfirm(title, message, onConfirm, type = 'warning', onCancel = null) {
     const wrapper = el('div', { class: `modal-message-wrapper type-${type}` });
 
-    const iconMap = { 'info': 'ℹ️', 'success': '✅', 'warning': '⚠️', 'danger': '!' };
-    const icon = el('div', { class: 'modal-icon-v2', text: iconMap[type] || '?' });
+    const icon = el('div', { class: 'modal-icon-v2', html: SignalIcons[type] || SignalIcons.warning });
     wrapper.appendChild(icon);
 
     wrapper.appendChild(el('p', { text: message, class: 'modal-text' }));
 
     const footer = el('div', { class: 'modal-footer' });
-    const cancelBtn = el('button', { class: 'modal-btn-cancel', text: 'No, cancel' });
+    const cancelBtn = el('button', { class: 'btn modal-btn-cancel', text: 'No, cancel' });
     const confirmBtn = el('button', {
         class: `btn modal-btn-sure ${type === 'danger' ? 'btn-danger' : 'btn-primary'}`,
         text: "Yes, I'm sure"

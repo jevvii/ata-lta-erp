@@ -941,9 +941,8 @@ tbody tr:hover {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--color-bg);
-  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  padding: var(--spacing-md) 0 0;
+  background: transparent;
 }
 
 /* Modal cancel button — ensure it always uses the secondary tier */
@@ -3433,13 +3432,32 @@ tbody tr:hover {
   box-shadow: none;
 }
 
-/* Modal Message Wrappers (Redesign V2) */
+/* Modal Message Wrappers (Redesign V2) — signal / confirm / alert modals */
 .modal-message-wrapper {
-  padding: var(--spacing-lg) 0;
+  padding: var(--spacing-xl) var(--spacing-lg);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+
+.modal-message-wrapper.type-danger {
+  background: color-mix(in oklab, var(--color-danger) 6%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-danger) 14%, var(--color-border));
+}
+.modal-message-wrapper.type-warning {
+  background: color-mix(in oklab, var(--color-warning) 8%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-warning) 16%, var(--color-border));
+}
+.modal-message-wrapper.type-success {
+  background: color-mix(in oklab, var(--color-success) 7%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-success) 14%, var(--color-border));
+}
+.modal-message-wrapper.type-info {
+  background: color-mix(in oklab, var(--color-primary) 5%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-primary) 12%, var(--color-border));
 }
 
 .modal-icon-v2 {
@@ -3456,30 +3474,36 @@ tbody tr:hover {
 }
 
 .modal-message-wrapper.type-danger .modal-icon-v2 {
-  color: #ef4444;
-  border-color: #ef4444;
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
 .modal-message-wrapper.type-warning .modal-icon-v2 {
-  color: #f59e0b;
-  border-color: #f59e0b;
+  color: var(--color-warning);
+  border-color: var(--color-warning);
 }
 
 .modal-message-wrapper.type-success .modal-icon-v2 {
-  color: #10b981;
-  border-color: #10b981;
+  color: var(--color-success);
+  border-color: var(--color-success);
 }
 
 .modal-message-wrapper.type-info .modal-icon-v2 {
-  color: #3b82f6;
-  border-color: #3b82f6;
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.modal-icon-v2 svg {
+  width: 40px;
+  height: 40px;
+  stroke-width: 1.75;
 }
 
 .modal-text {
   font-size: 1.125rem;
   font-weight: 500;
-  color: #334155;
-  margin-bottom: var(--spacing-lg);
+  color: var(--color-text);
+  margin-bottom: 0;
   line-height: 1.6;
   max-width: 400px;
   white-space: pre-wrap;
@@ -3487,32 +3511,33 @@ tbody tr:hover {
 
 .modal-message-wrapper .modal-footer {
   display: flex;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   justify-content: center;
   width: 100%;
   background: transparent;
-  padding: 0;
+  padding: var(--spacing-md) 0 0;
   margin-top: var(--spacing-lg);
+  border-radius: 0;
 }
 
 .modal-btn-sure {
   padding: 10px 24px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
-.modal-btn-cancel {
+.modal-message-wrapper .modal-btn-cancel {
   padding: 10px 24px;
-  background: var(--color-surface);
-  border: 1px solid #e2e8f0;
-  color: #64748b;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
-.modal-btn-cancel:hover {
-  background: #fafafa;
-  color: #1e293b;
+.modal-message-wrapper .modal-btn-cancel:hover {
+  background: var(--color-bg-muted);
+  color: var(--color-text);
 }
 
 /* ==========================================================================
@@ -10451,8 +10476,20 @@ tbody tr * {
   --color-primary-light: rgba(212, 184, 255, 0.18);
   --color-primary-alpha: rgba(212, 184, 255, 0.14);
   --color-danger: #ff8585;
+  --color-danger-bg: #450a0a;
+  --color-danger-text: #fca5a5;
+  --color-danger-border: #7f1d1d;
   --color-success: #34d399;
+  --color-success-bg: #064e3b;
+  --color-success-text: #6ee7b7;
+  --color-success-border: #065f46;
   --color-warning: #fbbf24;
+  --color-warning-bg: #451a03;
+  --color-warning-text: #fcd34d;
+  --color-warning-border: #78350f;
+  --color-info-bg: #1e3a8a;
+  --color-info-text: #93c5fd;
+  --color-info-border: #1e40af;
   color-scheme: dark;
 }
 
@@ -10656,7 +10693,16 @@ tbody tr * {
   --color-danger-text: #fca5a5;
   --color-danger-border: #7f1d1d;
   --color-success: #34d399;
+  --color-success-bg: #064e3b;
+  --color-success-text: #6ee7b7;
+  --color-success-border: #065f46;
   --color-warning: #fbbf24;
+  --color-warning-bg: #451a03;
+  --color-warning-text: #fcd34d;
+  --color-warning-border: #78350f;
+  --color-info-bg: #1e3a8a;
+  --color-info-text: #93c5fd;
+  --color-info-border: #1e40af;
   color-scheme: dark;
 }
 
@@ -11018,19 +11064,67 @@ tbody tr * {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
-/* Modal message icon/text colors */
+/* Signal modal (message / confirm / warning / error) — dark mode overrides */
 [data-theme="dark"] .modal-message-wrapper.type-danger .modal-icon-v2 { color: var(--color-danger-text); border-color: var(--color-danger-text); }
-[data-theme="dark"] .modal-message-wrapper.type-warning .modal-icon-v2 { color: #fcd34d; border-color: #fcd34d; }
-[data-theme="dark"] .modal-message-wrapper.type-success .modal-icon-v2 { color: #6ee7b7; border-color: #6ee7b7; }
-[data-theme="dark"] .modal-message-wrapper.type-info .modal-icon-v2 { color: #93c5fd; border-color: #93c5fd; }
+[data-theme="dark"] .modal-message-wrapper.type-warning .modal-icon-v2 { color: var(--color-warning-text); border-color: var(--color-warning-text); }
+[data-theme="dark"] .modal-message-wrapper.type-success .modal-icon-v2 { color: var(--color-success-text); border-color: var(--color-success-text); }
+[data-theme="dark"] .modal-message-wrapper.type-info .modal-icon-v2 { color: var(--color-info-text); border-color: var(--color-info-text); }
 
-/* Error/danger modal — tinted surface for readability in dark mode */
 [data-theme="dark"] .modal-message-wrapper.type-danger {
   background: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-lg);
+  border-color: var(--color-danger-border);
 }
+[data-theme="dark"] .modal-message-wrapper.type-warning {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+[data-theme="dark"] .modal-message-wrapper.type-success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+}
+[data-theme="dark"] .modal-message-wrapper.type-info {
+  background: var(--color-info-bg);
+  border-color: var(--color-info-border);
+}
+
+[data-theme="dark"] .modal-message-wrapper .modal-text { color: var(--color-text); }
+
+/* Remove the dark "lip" behind signal-modal action buttons */
+[data-theme="dark"] .modal-message-wrapper .modal-footer {
+  background: transparent;
+  border-color: transparent;
+}
+
+[data-theme="dark"] .modal-message-wrapper .modal-btn-cancel {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+[data-theme="dark"] .modal-message-wrapper .modal-btn-cancel:hover {
+  background: color-mix(in oklab, var(--color-text) 10%, transparent);
+  border-color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .modal-message-wrapper.type-danger .modal-btn-sure {
+  background: var(--color-danger);
+  color: var(--color-bg);
+  border-color: var(--color-danger);
+}
+[data-theme="dark"] .modal-message-wrapper.type-danger .modal-btn-sure:hover {
+  background: var(--color-danger-text);
+  border-color: var(--color-danger-text);
+}
+
+[data-theme="dark"] .modal-message-wrapper.type-danger .modal-btn-cancel {
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-text);
+}
+[data-theme="dark"] .modal-message-wrapper.type-danger .modal-btn-cancel:hover {
+  background: color-mix(in oklab, var(--color-danger-text) 12%, transparent);
+  border-color: var(--color-danger-text);
+}
+
+[data-theme="dark"] .modal-text { color: var(--color-text); }
 
 /* Cancel/destructive buttons inside redesign views must stay readable in dark mode */
 [data-theme="dark"] .project-detail-v2 .btn-danger,
@@ -11048,19 +11142,6 @@ tbody tr * {
 [data-theme="dark"] .side-pane-body .task-row .btn-danger:hover {
   color: var(--color-danger) !important;
 }
-[data-theme="dark"] .modal-message-wrapper.type-danger .modal-text {
-  color: var(--color-text);
-}
-[data-theme="dark"] .modal-message-wrapper.type-danger .modal-btn-sure {
-  background: var(--color-danger);
-  color: var(--color-bg);
-  border-color: var(--color-danger);
-}
-[data-theme="dark"] .modal-message-wrapper.type-danger .modal-btn-sure:hover {
-  background: var(--color-danger-text);
-  border-color: var(--color-danger-text);
-}
-[data-theme="dark"] .modal-text { color: var(--color-text); }
 
 /* Month/Date picker header: light primary bg needs dark text */
 [data-theme="dark"] .mdp-header,
