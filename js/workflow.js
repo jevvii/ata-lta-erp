@@ -2158,11 +2158,11 @@ const Workflow = {
       const tr = el('tr');
       const tdTitle = el('td');
       const titleWrapper = el('div', { style: 'display: flex; align-items: center; gap: 8px;' });
-      titleWrapper.appendChild(el('div', { text: wr.title, style: 'font-weight: 600; color: #1e293b;' }));
+      titleWrapper.appendChild(el('div', { text: wr.title, style: 'font-weight: 600; color: var(--color-text);' }));
       if (wr.isPendingApproval) {
         titleWrapper.appendChild(el('span', {
           text: 'Awaiting Approval',
-          style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: #fffbeb; color: #d97706; font-weight: 600; border: 1px solid #fef3c7;'
+          style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning);'
         }));
       }
       tdTitle.appendChild(titleWrapper);
@@ -2178,7 +2178,7 @@ const Workflow = {
       if (wr.isPendingApproval) {
         statusTd.appendChild(el('span', {
           text: 'Awaiting Approval',
-          style: 'background: #fef3c7; color: #d97706; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px;'
+          style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px;'
         }));
       } else {
         statusTd.appendChild(this.statusBadge(wr.status));
@@ -2280,7 +2280,7 @@ const Workflow = {
       if (st === 'Draft' && Auth.can('workflow:edit')) {
         const addCard = el('div', {
           class: 'board-card-v2 add-wr-card',
-          style: 'border: 1px dashed #94a3b8; background: rgba(148, 163, 184, 0.02); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: #94a3b8; margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
+          style: 'border: 1px dashed var(--color-text-muted); background: transparent; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
         });
         addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request';
         addCard.addEventListener('click', () => {
@@ -2348,7 +2348,7 @@ const Workflow = {
         } else if (transition && transition.missing && transition.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
           const blockerBadge = el('span', {
             html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + transition.missing.length + ' pending',
-            style: 'margin-left:8px;font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;color:#f59e0b;background:rgba(245,158,11,0.1);padding:2px 6px;cursor:help;'
+            style: 'margin-left:8px;font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;color:var(--color-warning);background:rgba(251, 191, 36, 0.12);padding:2px 6px;cursor:help;'
           });
           blockerBadge.title = transition.missing.join('\n');
           topRow.appendChild(blockerBadge);
@@ -2370,14 +2370,14 @@ const Workflow = {
           const pendingBadge = el('span', {
             text: 'Awaiting Approval',
             class: 'badge-warning',
-            style: 'margin-left: 28px; font-size: 10px; border-radius: 4px; display: inline-block; padding: 2px 6px; background: #fef3c7; color: #d97706; font-weight: 600; margin-top: 2px;'
+            style: 'margin-left: 28px; font-size: 10px; border-radius: 4px; display: inline-block; padding: 2px 6px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; margin-top: 2px;'
           });
           card.appendChild(pendingBadge);
 
           // Banner inside the card
           const statusNote = el('div', {
             text: 'Status Note: Staged for Approval',
-            style: 'margin: 6px 0 6px 28px; font-size: 11px; font-weight: 500; color: #d97706; background: #fffbeb; border-left: 3px solid #f59e0b; padding: 4px 8px; border-radius: 2px;'
+            style: 'margin: 6px 0 6px 28px; font-size: 11px; font-weight: 500; color: var(--color-warning); background: var(--color-bg-muted); border-left: 3px solid var(--color-warning); padding: 4px 8px; border-radius: 2px;'
           });
           card.appendChild(statusNote);
         }
@@ -2443,7 +2443,7 @@ const Workflow = {
       if (wr.isPendingApproval) {
         titleDiv.appendChild(el('span', {
           text: 'Awaiting Approval',
-          style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: #fffbeb; color: #d97706; font-weight: 600; border: 1px solid #fef3c7; margin-left: 8px; vertical-align: middle;'
+          style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning); margin-left: 8px; vertical-align: middle;'
         }));
       }
       textCol.appendChild(titleDiv);
@@ -2461,7 +2461,7 @@ const Workflow = {
       if (wr.isPendingApproval) {
         row.appendChild(el('span', {
           text: 'Awaiting Approval',
-          style: 'background: #fef3c7; color: #d97706; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; align-self: center;'
+          style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; align-self: center;'
         }));
       } else {
         row.appendChild(this.statusBadge(wr.status));
@@ -2473,7 +2473,7 @@ const Workflow = {
           if (ts && ts.canTransition && ts.nextPhase) {
             const readyBadge = el('span', {
               html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Ready to route',
-              style: 'color:#10b981;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(16,185,129,0.08);border-radius:10px;font-weight:500;cursor:pointer;'
+              style: 'color:var(--color-success);font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(52, 211, 153, 0.12);border-radius:10px;font-weight:500;cursor:pointer;'
             });
             readyBadge.addEventListener('click', (e) => {
               e.stopPropagation();
@@ -2483,7 +2483,7 @@ const Workflow = {
           } else if (ts && ts.missing && ts.missing.length > 0) {
             const blockerChip = el('span', {
               html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' pending',
-              style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,158,11,0.08);border-radius:10px;cursor:help;font-weight:500;'
+              style: 'color:var(--color-warning);font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(251, 191, 36, 0.12);border-radius:10px;cursor:help;font-weight:500;'
             });
             blockerChip.title = ts.missing.join('\n');
             row.appendChild(blockerChip);

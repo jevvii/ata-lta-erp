@@ -683,7 +683,7 @@ const Users = {
       const submitter = DB.getById('users', item.submittedBy);
       const card = el('div', {
         class: 'board-card-v2 hover-card',
-        style: 'background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; cursor: pointer; display: flex; flex-direction: column; transition: all 0.2s ease;'
+        style: 'border-radius: 8px; padding: 16px; margin-bottom: 12px; cursor: pointer; display: flex; flex-direction: column; transition: all 0.2s ease;'
       });
       card.addEventListener('click', () => {
         if (item.type === 'disbursement') {
@@ -700,27 +700,27 @@ const Users = {
       
       card.appendChild(el('h4', {
         text: item.title,
-        style: 'font-size: 0.875rem; font-weight: 600; color: #1e293b; margin: 0 0 4px; line-height: 1.3;'
+        style: 'font-size: 0.875rem; font-weight: 600; color: var(--color-text); margin: 0 0 4px; line-height: 1.3;'
       }));
-      
+
       card.appendChild(el('p', {
         text: item.subtitle,
-        style: 'font-size: 0.75rem; color: #64748b; margin: 0 0 10px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 32px;'
+        style: 'font-size: 0.75rem; color: var(--color-text-muted); margin: 0 0 10px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 32px;'
       }));
-      
-      card.appendChild(el('div', { style: 'height: 1px; background: #f1f5f9; margin-bottom: 10px;' }));
-      
+
+      card.appendChild(el('div', { style: 'height: 1px; background: var(--color-border); margin-bottom: 10px;' }));
+
       const bottomRow = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-top: auto;' });
       const infoLeft = el('div', { style: 'display: flex; flex-direction: column;' });
       if (item.amount !== null && item.amount !== undefined) {
         infoLeft.appendChild(el('span', {
           text: formatPHP(item.amount),
-          style: 'font-size: 0.875rem; font-weight: 700; color: #0f172a;'
+          style: 'font-size: 0.875rem; font-weight: 700; color: var(--color-text);'
         }));
       }
       infoLeft.appendChild(el('span', {
         text: `By: ${submitter ? submitter.name : 'System'}`,
-        style: 'font-size: 10px; color: #64748b;'
+        style: 'font-size: 10px; color: var(--color-text-muted);'
       }));
       bottomRow.appendChild(infoLeft);
       
@@ -779,8 +779,8 @@ const Users = {
       
       // Title / Description
       const tdTitle = el('td');
-      tdTitle.appendChild(el('div', { text: item.title, style: 'font-weight: 600; color: #1e293b;' }));
-      tdTitle.appendChild(el('div', { text: item.subtitle, style: 'font-size: 0.75rem; color: #64748b; margin-top: 2px;' }));
+      tdTitle.appendChild(el('div', { text: item.title, style: 'font-weight: 600; color: var(--color-text);' }));
+      tdTitle.appendChild(el('div', { text: item.subtitle, style: 'font-size: 0.75rem; color: var(--color-text-muted); margin-top: 2px;' }));
       tr.appendChild(tdTitle);
       
       // Amount
@@ -957,8 +957,8 @@ const Users = {
     const wrapper = el('div', { style: 'max-width: 800px; margin: 0 auto;' });
     
     // Header
-    const header = el('div', { class: 'form-header-bar', style: 'border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px;' });
-    header.appendChild(el('h2', { text: 'Review Pending Change Request', style: 'margin: 0; font-size: 1.25rem; font-weight: 600; color: #1e3a8a;' }));
+    const header = el('div', { class: 'form-header-bar', style: 'border-bottom: 1px solid var(--color-border); padding-bottom: 16px; margin-bottom: 24px;' });
+    header.appendChild(el('h2', { text: 'Review Pending Change Request', style: 'margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--color-primary);' }));
     
     const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
     backBtn.addEventListener('click', () => {
@@ -971,13 +971,14 @@ const Users = {
     // Meta Card
     const submitter = DB.getById('users', pc.submittedBy);
     const metaCard = el('div', {
-      style: 'background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;'
+      class: 'card',
+      style: 'border-radius: 8px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;'
     });
-    
+
     const addMeta = (label, val) => {
       const g = el('div');
-      g.appendChild(el('div', { text: label, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 4px;' }));
-      g.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 500; color: #0f172a;' }));
+      g.appendChild(el('div', { text: label, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px;' }));
+      g.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 500; color: var(--color-text);' }));
       metaCard.appendChild(g);
     };
 
@@ -995,17 +996,17 @@ const Users = {
       const wr = proposed && proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
 
       const invoiceReviewSection = el('div', { class: 'form-section', style: 'margin-bottom: 24px;' });
-      invoiceReviewSection.appendChild(el('h3', { text: '📄 Invoice / Billing Details', style: 'font-size: 1rem; font-weight: 600; color: #1e3a8a; margin-bottom: 12px;' }));
+      invoiceReviewSection.appendChild(el('h3', { text: '📄 Invoice / Billing Details', style: 'font-size: 1rem; font-weight: 600; color: var(--color-primary); margin-bottom: 12px;' }));
 
-      const invoiceCard = el('div', { class: 'card', style: 'border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; background: #f8fafc;' });
+      const invoiceCard = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
 
       // Meta Grid
       const grid = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px;' });
 
       const addGridField = (lbl, val) => {
         const field = el('div');
-        field.appendChild(el('div', { text: lbl, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 4px;' }));
-        field.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 600; color: #1e293b;' }));
+        field.appendChild(el('div', { text: lbl, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px;' }));
+        field.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 600; color: var(--color-text);' }));
         grid.appendChild(field);
       };
 
@@ -1020,8 +1021,8 @@ const Users = {
 
       // Line Items Sub-table
       if (proposed && Array.isArray(proposed.lineItems) && proposed.lineItems.length > 0) {
-        invoiceCard.appendChild(el('div', { text: 'Line Items', style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 8px; margin-top: 12px;' }));
-        const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: white; border: 1px solid #e2e8f0; border-radius: 6px;' });
+        invoiceCard.appendChild(el('div', { text: 'Line Items', style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 8px; margin-top: 12px;' }));
+        const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px;' });
         const liThead = el('thead');
         const liThr = el('tr');
         ['Type', 'Description', 'Amount'].forEach(h => liThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 8px;' })));
@@ -1046,9 +1047,9 @@ const Users = {
 
     // Diff / Change Details Section
     const diffSection = el('div', { class: 'form-section', style: 'margin-bottom: 24px;' });
-    diffSection.appendChild(el('h3', { text: 'Change Comparison', style: 'font-size: 1rem; font-weight: 600; color: #1e293b; margin-bottom: 12px;' }));
-    
-    const diffContainer = el('div', { class: 'card', style: 'border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; background: white;' });
+    diffSection.appendChild(el('h3', { text: 'Change Comparison', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
+
+    const diffContainer = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
     
     // Custom diff tables rendering for beautiful layout
     const { current, proposed, diffs, isNew } = PendingChanges.buildDiff(pc);
@@ -1061,7 +1062,7 @@ const Users = {
       const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
       const diffThead = el('thead');
       const diffThr = el('tr');
-      ['Field', 'Proposed Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: #f8fafc; border-bottom: 2px solid #e2e8f0; font-size: 0.8125rem;' })));
+      ['Field', 'Proposed Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: var(--color-bg-muted); border-bottom: 2px solid var(--color-border); font-size: 0.8125rem;' })));
       diffThead.appendChild(diffThr);
       diffTable.appendChild(diffThead);
       
@@ -1090,8 +1091,8 @@ const Users = {
           } catch(e) {}
         }
         
-        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600; font-size: 0.8125rem; color: #334155;' }));
-        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600; font-size: 0.8125rem; color: #16a34a; background: #f0fdf4;' }));
+        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-text);' }));
+        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-success); background: rgba(52, 211, 153, 0.12);' }));
         diffTbody.appendChild(tr);
       });
       diffTable.appendChild(diffTbody);
@@ -1102,8 +1103,8 @@ const Users = {
     wrapper.appendChild(diffSection);
 
     // Actions Footer
-    const actions = el('div', { 
-      style: 'display: flex; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 24px;' 
+    const actions = el('div', {
+      style: 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'
     });
 
     if (canApprove) {

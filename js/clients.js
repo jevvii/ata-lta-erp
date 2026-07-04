@@ -728,7 +728,7 @@ const Clients = {
       panel.appendChild(header);
 
       // Accordion Content
-      const content = el('div', { class: 'accordion-content', style: 'padding: 16px; background: #fafafa;' });
+      const content = el('div', { class: 'accordion-content', style: 'padding: 16px; background: var(--color-bg-muted);' });
 
       // Client info block
       const infoBlock = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; font-size: 0.875rem;' }, [
@@ -743,7 +743,7 @@ const Clients = {
       const wrs = DB.getWhere('workRequests', wr => wr.clientId === c.id);
       
       // Work Requests Sub-section
-      content.appendChild(el('h4', { text: 'Cancelled Work Requests', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: #374151;' }));
+      content.appendChild(el('h4', { text: 'Cancelled Work Requests', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: var(--color-text);' }));
       if (wrs.length === 0) {
         content.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
       } else {
@@ -775,7 +775,7 @@ const Clients = {
       const docs = DB.getWhere('documents', d => wrIds.includes(d.workRequestId) && (d.status === 'Archived' || d.archived === true));
 
       // Documents Sub-section
-      content.appendChild(el('h4', { text: 'Archived Documents', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: #374151;' }));
+      content.appendChild(el('h4', { text: 'Archived Documents', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: var(--color-text);' }));
       if (docs.length === 0) {
         content.appendChild(el('p', { text: 'No archived documents found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
       } else {

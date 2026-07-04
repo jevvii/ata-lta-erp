@@ -232,15 +232,15 @@ const Billing = {
     if (Auth.can('billing:edit')) {
       const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'billing');
       if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #ffc107;border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:#e65100;margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
+        const banner = el('div', { class: 'pending-requests-banner', style: 'background:var(--color-bg-muted);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
+        const bannerTitle = el('div', { style: 'font-weight:600;color:var(--color-text);margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
         bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Invoice Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
         banner.appendChild(bannerTitle);
         pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid #ffe082;' });
+          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid var(--color-border);' });
           const client = DB.getById('clients', req.clientId);
           const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:#333;' });
+          const info = el('span', { style: 'font-size:0.875rem;color:var(--color-text);' });
           info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
           row.appendChild(info);
           const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
@@ -471,15 +471,15 @@ const Billing = {
       if (inv.workRequestId) {
         const wr = DB.getById('workRequests', inv.workRequestId);
         if (wr) {
-          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #64748b; margin-top: 4px;' });
+          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: var(--color-text-muted); margin-top: 4px;' });
           wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 500;' }));
           if (inv.linkedTaskId) {
             const task = DB.getById('tasks', inv.linkedTaskId);
             if (task) {
-              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: #8c9ba5; font-style: italic;' }));
+              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: var(--color-text-muted); font-style: italic;' }));
             }
           } else {
-            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: #8c9ba5; font-style: italic;' }));
+            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: var(--color-text-muted); font-style: italic;' }));
           }
           tdInvoice.appendChild(wrWrap);
         }
@@ -550,7 +550,7 @@ const Billing = {
       if (st === 'Draft') {
         const addCard = el('div', {
           class: 'board-card-v2 add-billing-card',
-          style: 'border: 1px dashed #94a3b8; background: rgba(148, 163, 184, 0.02); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: #94a3b8; margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
+          style: 'border: 1px dashed var(--color-text-muted); background: transparent; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer;'
         });
         addCard.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Billing';
         addCard.addEventListener('click', () => {
@@ -586,21 +586,21 @@ const Billing = {
         card.appendChild(titleRow);
 
         // Client info
-        card.appendChild(el('div', { text: client?.name || '—', style: 'font-size:0.875rem;color:#64748b;margin-bottom:8px;' }));
+        card.appendChild(el('div', { text: client?.name || '—', style: 'font-size:0.875rem;color:var(--color-text-muted);margin-bottom:8px;' }));
 
         // Linked WR/Task info
         if (inv.workRequestId) {
           const wr = DB.getById('workRequests', inv.workRequestId);
           if (wr) {
-            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #1e40af; margin-bottom: 12px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
+            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: var(--color-primary); margin-bottom: 12px; background: var(--color-primary-light); border: 1px solid var(--color-primary-alpha); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
             wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 600;' }));
             if (inv.linkedTaskId) {
               const task = DB.getById('tasks', inv.linkedTaskId);
               if (task) {
-                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: #475569;' }));
+                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: var(--color-text-muted);' }));
               }
             } else {
-              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: #475569;' }));
+              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: var(--color-text-muted);' }));
             }
             card.appendChild(wrWrap);
           }
@@ -617,16 +617,16 @@ const Billing = {
         metaRow.appendChild(metaLeft);
 
         const financials = el('div', { style: 'text-align:right;' });
-        financials.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(inv.total), style: 'font-weight:700;color:#1e293b;' }));
+        financials.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
         if (balance > 0 && balance < inv.total) {
-          financials.appendChild(el('div', { text: `Bal: ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:#ef4444;font-weight:600;' }));
+          financials.appendChild(el('div', { text: `Bal: ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
         }
         metaRow.appendChild(financials);
         card.appendChild(metaRow);
 
         // Card actions for Draft invoices (only users with billing:edit)
         if (inv.status === 'Draft' && Auth.can('billing:edit')) {
-          const cardActions = el('div', { style: 'display:flex; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0;' });
+          const cardActions = el('div', { style: 'display:flex; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--color-border);' });
           const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
           editBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1236,7 +1236,7 @@ const Billing = {
     if (inv.status === 'Draft' && inv.rejectionReason) {
       const rejBanner = el('div', {
         class: 'alert-banner alert-danger',
-        style: 'background: #fef2f2; border: 1px solid #fee2e2; color: #b91c1c; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-danger); color: var(--color-danger); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
       });
       rejBanner.appendChild(el('span', { html: '❌' }));
       rejBanner.appendChild(el('span', { html: `<strong>Rejection Reason:</strong> ${inv.rejectionReason}` }));
@@ -1246,7 +1246,7 @@ const Billing = {
     if (inv.status === 'Pending') {
       const banner = el('div', {
         class: 'alert-banner alert-warning',
-        style: 'background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); color: var(--color-warning); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
       });
       banner.appendChild(el('span', { html: '⚠️' }));
       banner.appendChild(el('span', { text: 'This invoice is pending administrative approval and cannot be printed, sent, or have payments recorded until approved.' }));

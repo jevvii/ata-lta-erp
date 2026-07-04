@@ -329,15 +329,15 @@ const Disbursement = {
     if (Auth.can('disbursement:create')) {
       const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'disbursement');
       if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #ffc107;border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:#e65100;margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
+        const banner = el('div', { class: 'pending-requests-banner', style: 'background:var(--color-bg-muted);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
+        const bannerTitle = el('div', { style: 'font-weight:600;color:var(--color-text);margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
         bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Disbursement Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
         banner.appendChild(bannerTitle);
         pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid #ffe082;' });
+          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid var(--color-border);' });
           const client = DB.getById('clients', req.clientId);
           const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:#333;' });
+          const info = el('span', { style: 'font-size:0.875rem;color:var(--color-text);' });
           info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
           row.appendChild(info);
           const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
@@ -352,9 +352,9 @@ const Disbursement = {
     // "Pending for Release" Section for Handlers
     const pendingForRelease = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Approved' && d.paymentHandledBy === Auth.user.id);
     if (pendingForRelease.length > 0) {
-      const pfrSection = el('div', { class: 'form-section', style: 'background: #fff7ed; border: 1px solid #ffedd5; padding: var(--spacing-md); border-radius: 12px; margin-bottom: var(--spacing-lg);' });
-      pfrSection.appendChild(el('h3', { text: '⚠️ Pending for Release', style: 'color: #c2410c; margin-top: 0;' }));
-      pfrSection.appendChild(el('p', { text: 'The following disbursements have been approved by Admin and are waiting for your final authorization and fund release.', style: 'font-size: 0.875rem; color: #9a3412; margin-bottom: var(--spacing-md);' }));
+      const pfrSection = el('div', { class: 'form-section', style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); padding: var(--spacing-md); border-radius: 12px; margin-bottom: var(--spacing-lg);' });
+      pfrSection.appendChild(el('h3', { text: '⚠️ Pending for Release', style: 'color: var(--color-warning); margin-top: 0;' }));
+      pfrSection.appendChild(el('p', { text: 'The following disbursements have been approved by Admin and are waiting for your final authorization and fund release.', style: 'font-size: 0.875rem; color: var(--color-text-muted); margin-bottom: var(--spacing-md);' }));
       
       const pfrTable = el('table', { class: 'task-table-v2' });
       pfrTable.appendChild(el('thead', {}, [
@@ -751,21 +751,21 @@ const Disbursement = {
 
         // Subtitle: Employee and Fund
         const source = this.getFundSource(d);
-        card.appendChild(el('div', { text: `${emp?.name || '—'} • ${source}`, style: 'font-size:0.875rem;color:#64748b;margin-bottom:8px;' }));
+        card.appendChild(el('div', { text: `${emp?.name || '—'} • ${source}`, style: 'font-size:0.875rem;color:var(--color-text-muted);margin-bottom:8px;' }));
 
         // Linked WR/Task info
         if (d.linkedWorkRequestId) {
           const wr = DB.getById('workRequests', d.linkedWorkRequestId);
           if (wr) {
-            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #1e40af; margin-bottom: 12px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
+            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: var(--color-primary); margin-bottom: 12px; background: var(--color-primary-light); border: 1px solid var(--color-primary-alpha); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
             wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 600;' }));
             if (d.linkedTaskId) {
               const task = DB.getById('tasks', d.linkedTaskId);
               if (task) {
-                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: #475569;' }));
+                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: var(--color-text-muted);' }));
               }
             } else {
-              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: #475569;' }));
+              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: var(--color-text-muted);' }));
             }
             card.appendChild(wrWrap);
           }
@@ -773,7 +773,7 @@ const Disbursement = {
 
         // Meta: Financials
         const metaRow = el('div', { class: 'card-v2-meta' });
-        metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(d.amount), style: 'font-weight:700;color:#1e293b;font-size:1.125rem;' }));
+        metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);font-size:1.125rem;' }));
         card.appendChild(metaRow);
 
         if (this.canEditDisbursement(d)) {

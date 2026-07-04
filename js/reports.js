@@ -390,7 +390,7 @@ const Reports = {
             style: 'display: flex; align-items: center; gap: 8px;' 
           }, [
             el('div', {
-              style: `width: 28px; height: 28px; border-radius: 50%; background-image: url('${avatarUrl}'); background-size: cover; background-position: center; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-shrink: 0;`
+              style: `width: 28px; height: 28px; border-radius: 50%; background-image: url('${avatarUrl}'); background-size: cover; background-position: center; border: 1.5px solid var(--color-surface); box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-shrink: 0;`
             }),
             el('span', { text: assignee.name, style: 'font-size: 0.75rem; font-weight: 500; color: var(--color-text);' })
           ]);
