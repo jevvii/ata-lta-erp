@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dark Mode Preview — ATA & LTA ERP</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: var(--spacing-lg);
+      padding: var(--spacing-lg);
+    }
+    .preview-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--spacing-lg);
+    }
+    .preview-card h2 {
+      margin-bottom: var(--spacing-md);
+      font-size: 1rem;
+      color: var(--color-text);
+    }
+    .preview-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--spacing-sm);
+      align-items: center;
+      margin-bottom: var(--spacing-md);
+    }
+    .color-swatch {
+      width: 80px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+  </style>
+</head>
+<body>
+  <div id="app-shell">
+    <header class="app-header">
+      <div class="header-brand"><span class="logo">ATA & LTA ERP</span></div>
+      <div class="header-actions">
+        <div class="entity-pill">
+          <select class="form-select pill-select"><option>ATA Accounting</option></select>
+          <span class="badge badge-ata">ATA</span>
+        </div>
+        <button class="btn btn-secondary btn-sm">Logout</button>
+      </div>
+    </header>
+    <div class="app-layout">
+      <nav class="sidebar">
+        <ul class="nav-list">
+          <li><a href="#"><span class="nav-link-label"><span class="nav-link-text">Dashboard</span></span></a></li>
+          <li><a href="#" class="active"><span class="nav-link-label"><span class="nav-link-text">Operations <span class="nav-badge">3</span></span></span></a></li>
+          <li><a href="#"><span class="nav-link-label"><span class="nav-link-text">Billing</span></span></a></li>
+        </ul>
+      </nav>
+      <main class="content">
+        <h1>Dark Mode Component Preview</h1>
+        <div class="preview-grid">
+          <div class="preview-card">
+            <h2>Color Tokens</h2>
+            <div class="preview-row">
+              <div class="color-swatch" style="background: var(--color-bg)">--bg</div>
+              <div class="color-swatch" style="background: var(--color-surface)">--surface</div>
+              <div class="color-swatch" style="background: var(--color-bg-muted)">--muted</div>
+              <div class="color-swatch" style="background: var(--color-border)">--border</div>
+            </div>
+            <div class="preview-row">
+              <div class="color-swatch" style="background: var(--color-primary); color: #191919">--primary</div>
+              <div class="color-swatch" style="background: var(--color-primary-dark); color: #191919">--primary-dark</div>
+              <div class="color-swatch" style="background: var(--color-primary-light)">--primary-light</div>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <h2>Buttons</h2>
+            <div class="preview-row">
+              <button class="btn btn-primary">Primary</button>
+              <button class="btn btn-secondary">Secondary</button>
+              <button class="btn btn-ghost">Ghost</button>
+              <button class="btn btn-link">Link</button>
+            </div>
+            <div class="preview-row">
+              <button class="btn btn-success">Success</button>
+              <button class="btn btn-warning">Warning</button>
+              <button class="btn btn-danger">Danger</button>
+              <button class="btn btn-primary" disabled>Disabled</button>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <h2>Badges</h2>
+            <div class="preview-row">
+              <span class="badge badge-success">Success</span>
+              <span class="badge badge-danger">Danger</span>
+              <span class="badge badge-warning">Warning</span>
+              <span class="badge badge-info">Info</span>
+            </div>
+            <div class="preview-row">
+              <span class="badge badge-ata">ATA</span>
+              <span class="badge badge-lta">LTA</span>
+              <span class="badge badge-recurring">Recurring</span>
+              <span class="badge badge-draft">Draft</span>
+              <span class="badge badge-preprocessing">Preprocessing</span>
+            </div>
+            <div class="preview-row">
+              <span class="badge badge-processing">Processing</span>
+              <span class="badge badge-billing">Billing</span>
+              <span class="badge badge-disbursement">Disbursement</span>
+              <span class="badge badge-neutral">Neutral</span>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <h2>Lifecycle Badges</h2>
+            <div class="preview-row">
+              <span class="lifecycle-badge lifecycle-collected">Collected</span>
+              <span class="lifecycle-badge lifecycle-with_documentations">Docs</span>
+              <span class="lifecycle-badge lifecycle-scanned">Scanned</span>
+              <span class="lifecycle-badge lifecycle-in_envelope">Envelope</span>
+              <span class="lifecycle-badge lifecycle-stored">Stored</span>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <h2>Form Elements</h2>
+            <div class="form-group">
+              <label>Text input</label>
+              <input type="text" placeholder="Type here…" value="Sample value">
+            </div>
+            <div class="form-group">
+              <label>Select</label>
+              <select class="form-select"><option>Option one</option><option>Option two</option></select>
+            </div>
+            <div class="form-group">
+              <label>Textarea</label>
+              <textarea rows="2">Sample textarea content</textarea>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <h2>Table</h2>
+            <table class="report-table">
+              <thead><tr><th>Name</th><th>Role</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>Admin</td><td>Manager</td><td><span class="badge badge-success">Active</span></td></tr>
+                <tr><td>Staff</td><td>Accounting</td><td><span class="badge badge-info">Pending</span></td></tr>
+                <tr><td>Ops</td><td>Operations</td><td><span class="badge badge-warning">Review</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="preview-card">
+            <h2>Board Card V2</h2>
+            <div class="board-card-v2">
+              <div class="card-v2-top"><span class="card-v2-category">Tax Filing</span><span class="card-v2-date">Jul 4</span></div>
+              <div class="card-v2-title-row"><span class="card-v2-title">Quarterly VAT return</span></div>
+              <div class="card-v2-meta"><span class="card-v2-meta-text">ATA · Due today</span></div>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <h2>Stage Dots</h2>
+            <div class="preview-row">
+              <span class="stage-dot" style="border-color: var(--color-primary); background: var(--color-primary); color: #fff">1</span>
+              <span class="stage-dot" style="border-color: var(--color-success); background: var(--color-success); color: #fff">✓</span>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <h2>Co-assignee Chips</h2>
+            <div class="co-assignee-chips">
+              <span class="co-assignee-chip">J. Doe <span class="co-assignee-chip-remove">×</span></span>
+              <span class="co-assignee-chip">A. Smith <span class="co-assignee-chip-remove">×</span></span>
+            </div>
+          </div>
+
+          <div class="preview-card" style="grid-column: 1 / -1;">
+            <h2>Error Modal (Dark Mode)</h2>
+            <div style="display: flex; gap: var(--spacing-lg); flex-wrap: wrap; align-items: flex-start;">
+              <div class="modal" style="max-width: 420px; position: relative; box-shadow: var(--shadow-float);">
+                <div class="modal-header">
+                  <h3 class="modal-title">Permission Denied</h3>
+                  <button class="btn btn-secondary btn-sm">✕</button>
+                </div>
+                <div class="modal-body">
+                  <div class="modal-message-wrapper type-danger">
+                    <div class="modal-icon-v2">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    </div>
+                    <p class="modal-text">Only Admin can route work request phases.</p>
+                    <div class="modal-footer">
+                      <button class="btn btn-primary modal-btn-sure">OK</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="project-detail-v2" style="padding: var(--spacing-md); border: 1px solid var(--color-border); border-radius: var(--radius-md);">
+                <h3 style="margin-bottom: var(--spacing-sm); font-size: 0.875rem;">Redesign view cancel button</h3>
+                <button class="btn btn-danger btn-sm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  Cancel Request
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-card" style="grid-column: 1 / -1;">
+            <h2>Empty States v2</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--spacing-lg);">
+              <div class="empty-state-v2 zero-state">
+                <div class="empty-state-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                </div>
+                <div class="empty-state-title">No tasks yet</div>
+                <div class="empty-state-body">Add the first task to begin tracking work for this request.</div>
+                <div class="empty-state-actions"><button class="btn btn-primary btn-sm">+ Add Task</button></div>
+              </div>
+
+              <div class="empty-state-v2 filtered-empty">
+                <div class="empty-state-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                </div>
+                <div class="empty-state-title">No tasks match your filters</div>
+                <div class="empty-state-body">Active filters: Missing logs. Clear them to see all 12 tasks.</div>
+                <div class="empty-state-actions"><button class="btn btn-primary btn-sm">Clear filters</button></div>
+              </div>
+
+              <div class="financial-card" style="padding: var(--spacing-lg);">
+                <h4 style="margin: 0 0 16px; font-size: 14px; font-weight: 600;">📄 Invoices / Billings</h4>
+                <div class="empty-state-v2 card-empty">
+                  <div class="empty-state-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                  </div>
+                  <div class="empty-state-title">No linked invoices</div>
+                  <div class="empty-state-body">Billings linked to this work request will appear here.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -6,8 +6,60 @@
 const App = {
   currentModule: null,
 
+  /**
+   * Theme management: manual toggle with OS preference fallback.
+   * Persists the user's choice in localStorage so it survives reloads.
+   */
+  initTheme() {
+    if (this._themeInited) return;
+    this._themeInited = true;
+
+    const apply = () => {
+      const stored = localStorage.getItem('erp_theme');
+      let theme = stored;
+      if (!theme && window.matchMedia) {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      this.applyTheme(theme || 'light');
+    };
+
+    apply();
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (!localStorage.getItem('erp_theme')) apply();
+      });
+    }
+  },
+
+  applyTheme(theme) {
+    const isDark = theme === 'dark';
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    const moon = document.getElementById('theme-icon-moon');
+    const sun = document.getElementById('theme-icon-sun');
+    if (moon && sun) {
+      moon.classList.toggle('hidden', isDark);
+      sun.classList.toggle('hidden', !isDark);
+    }
+  },
+
+  toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('erp_theme', next);
+    this.applyTheme(next);
+  },
+
+  setupThemeToggle() {
+    if (this._themeToggleWired) return;
+    this._themeToggleWired = true;
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) btn.addEventListener('click', () => this.toggleTheme());
+  },
+
   init() {
     if (!Auth.restoreSession()) return;
+    this.initTheme();
+    this.setupThemeToggle();
     this.renderShell();
     this.setupRouting();
     this.setupNavigation();
@@ -423,17 +475,27 @@ const App = {
     // When there's no sub-path, only reset to 'list' if the current view is a URL-driven
     // view (detail/form) — this preserves internal module views like 'templates', 'archive',
     // 'aging', 'trash', 'report', 'templateForm' that buttons set before calling handleRoute().
+    //
+    // Note on full-page form routes:
+    // #module/form/new and #module/form/:id are now implemented for operations, billing,
+    // disbursement, transmittal, clients, and retainer templates. These routes render the
+    // form inline in the main content area (PaneMode.FULL_PAGE behavior) and set the module
+    // editing state so that module.render() can display the form directly.
     if (baseHash === '#operations') {
       if (pathParts[1] === 'detail' && pathParts[2]) {
         Workflow.view = 'detail';
         Workflow.detailWrId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Workflow.view = 'form';
-        Workflow.editingId = pathParts[2] || null;
-      } else if (!Workflow.view || Workflow.view === 'detail' || Workflow.view === 'form') {
+        Workflow.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else if (pathParts[1] === 'templateForm') {
+        Workflow.view = 'templateForm';
+        Workflow.templateEditingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else if (!Workflow.view || Workflow.view === 'detail' || Workflow.view === 'form' || Workflow.view === 'templateForm') {
         Workflow.view = 'list';
         Workflow.detailWrId = null;
         Workflow.editingId = null;
+        Workflow.templateEditingId = null;
       }
     } else if (baseHash === '#billing') {
       if (pathParts[1] === 'detail' && pathParts[2]) {
@@ -441,7 +503,7 @@ const App = {
         Billing.detailId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Billing.view = 'form';
-        Billing.detailId = pathParts[2] || null;
+        Billing.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (!Billing.view || Billing.view === 'detail' || Billing.view === 'form') {
         Billing.view = 'list';
         Billing.detailId = null;
@@ -452,7 +514,7 @@ const App = {
         Disbursement.detailId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Disbursement.view = 'form';
-        Disbursement.detailId = pathParts[2] || null;
+        Disbursement.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (!Disbursement.view || Disbursement.view === 'detail' || Disbursement.view === 'form') {
         Disbursement.view = 'list';
         Disbursement.detailId = null;
@@ -463,7 +525,7 @@ const App = {
         Transmittal.detailId = pathParts[2];
       } else if (pathParts[1] === 'form') {
         Transmittal.view = 'form';
-        Transmittal.detailId = pathParts[2] || null;
+        Transmittal.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
       } else if (!Transmittal.view || Transmittal.view === 'detail' || Transmittal.view === 'form') {
         Transmittal.view = 'list';
         Transmittal.detailId = null;
@@ -611,6 +673,9 @@ const App = {
 
 // Login form wiring
 document.addEventListener('DOMContentLoaded', () => {
+  App.initTheme();
+  App.setupThemeToggle();
+
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
     loginForm.addEventListener('submit', (e) => {
@@ -648,16 +713,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.classList.remove('loading-active');
   }
 
-  // Handle fading out of loading screen if active
-  if (document.documentElement.classList.contains('loading-active') && loadingScreen) {
-    setTimeout(() => {
-      loadingScreen.style.transition = 'opacity 0.2s ease-in-out';
-      loadingScreen.style.opacity = '0';
+  // Handle fading out of loading screen if active, or ensure it is hidden
+  if (loadingScreen) {
+    if (document.documentElement.classList.contains('loading-active')) {
+      loadingScreen.classList.remove('hidden');
       setTimeout(() => {
-        document.documentElement.classList.remove('loading-active');
-        loadingScreen.style.transition = '';
-      }, 200);
-    }, 450); // Keep it visible for 450ms for a smooth syncing transition feel
-    sessionStorage.removeItem('is_syncing');
+        loadingScreen.style.transition = 'opacity 0.2s ease-in-out';
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => {
+          document.documentElement.classList.remove('loading-active');
+          loadingScreen.classList.add('hidden');
+          loadingScreen.style.transition = '';
+          loadingScreen.style.opacity = '';
+        }, 200);
+      }, 450); // Keep it visible for 450ms for a smooth syncing transition feel
+      sessionStorage.removeItem('is_syncing');
+    } else {
+      loadingScreen.classList.add('hidden');
+    }
   }
 });

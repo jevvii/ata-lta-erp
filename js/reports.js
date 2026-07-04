@@ -345,74 +345,70 @@ const Reports = {
   },
 
   renderTaskBoard(tasks) {
-    if (tasks.length === 0) return el('p', { class: 'empty-state', text: 'No tasks found.' });
-    
+    if (tasks.length === 0) {
+      return renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        title: 'No tasks found',
+        body: 'Adjust your filters to include tasks in this report.'
+      });
+    }
+
     const statuses = ['Draft', 'Assigned', 'In Progress', 'For Review', 'Completed', 'Cancelled'];
     const statusColors = { 'Draft': '#94a3b8', 'Assigned': '#3b82f6', 'In Progress': '#f59e0b', 'For Review': '#a855f7', 'Completed': '#10b981', 'Cancelled': '#ef4444' };
     const wrs = DB.getAll('workRequests');
     const clients = DB.getAll('clients');
+    let taskNumber = 1;
 
-    const board = el('div', { class: 'board-v2' });
-    statuses.forEach(status => {
-      const statusTasks = tasks.filter(t => t.status === status);
-      const colColor = statusColors[status] || '#cbd5e1';
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
-
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(status));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(statusTasks.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-      if (statusTasks.length === 0) {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No tasks' }));
-      }
-      statusTasks.forEach(t => {
+    return KanbanBoard.render({
+      items: tasks,
+      columns: statuses.map(status => ({
+        key: status,
+        label: status,
+        targetStatus: status,
+        color: statusColors[status] || '#cbd5e1',
+        emptyState: { variant: 'compact', title: 'No tasks', body: '' }
+      })),
+      renderCard(t) {
         const wr = wrs.find(w => w.id === t.workRequestId);
         const client = wr ? clients.find(c => c.id === wr.clientId) : null;
         const assignee = t.assigneeName
           ? { name: t.assigneeName }
           : DB.getById('users', t.assigneeId || t.assignedTo);
+        const comp = getTaskChecklistCompletion(t);
 
-        const card = el('div', { class: 'board-card-v2' });
-        card.appendChild(el('div', { class: 'board-card-title-v2', text: t.title }));
-        if (client) card.appendChild(el('div', { class: 'board-card-client-v2', text: client.name }));
-        
-        const meta = el('div', { class: 'board-card-meta-v2', style: 'display: flex; flex-direction: column; gap: 8px;' });
-        if (assignee) {
-          const avatarUrl = assignee.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(assignee.name)}&background=2563eb&color=fff`;
-          const avatarDiv = el('div', { 
-            class: 'assignee-badge-v2', 
-            style: 'display: flex; align-items: center; gap: 8px;' 
-          }, [
-            el('div', {
-              style: `width: 28px; height: 28px; border-radius: 50%; background-image: url('${avatarUrl}'); background-size: cover; background-position: center; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-shrink: 0;`
-            }),
-            el('span', { text: assignee.name, style: 'font-size: 0.75rem; font-weight: 500; color: var(--color-text);' })
-          ]);
-          meta.appendChild(avatarDiv);
-        }
-        if (t.dueDate) {
-          meta.appendChild(el('div', { 
-            class: 'due-date-v2', 
-            style: 'font-size: 0.7rem; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px;' 
-          }, [
-            el('span', { text: '📅' }),
-            el('span', { text: formatDate(t.dueDate) })
-          ]));
-        }
-        card.appendChild(meta);
-        
-        cardContainer.appendChild(card);
-      });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+        const priorityConfig = {
+          'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
+          'Priority': { label: 'High', cls: 'card-v2-priority-high' },
+          'High': { label: 'High', cls: 'card-v2-priority-high' },
+          'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
+          'Low': { label: 'Low', cls: 'card-v2-priority-low' }
+        }[t.priority] || { label: t.priority || 'Normal', cls: 'card-v2-priority-normal' };
+
+        const avatars = assignee ? [{
+          name: assignee.name,
+          avatarUrl: assignee.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(assignee.name)}&background=2563eb&color=fff`
+        }] : [];
+
+        const counts = [];
+        if (comp.total > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${comp.percent}%` });
+
+        return buildCompactBoardCard({
+          key: 'TSK-' + taskNumber++,
+          progress: comp.percent,
+          statusColor: statusColors[t.status] || '#cbd5e1',
+          title: t.title,
+          description: client?.name || '',
+          date: t.dueDate ? formatDate(t.dueDate) : '',
+          priority: priorityConfig.label,
+          priorityClass: priorityConfig.cls,
+          avatars,
+          counts,
+          onClick: () => { /* reports board is read-only summary */ }
+        });
+      },
+      drag: { enabled: false }
     });
-    return board;
   },
 
   renderTaskList(tasks) {
