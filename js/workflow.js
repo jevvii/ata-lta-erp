@@ -1008,7 +1008,7 @@ const Workflow = {
       });
 
       const record = {
-        id: generateId('inv'),
+        id: generateSequentialId('inv', 'invoices'),
         invoiceNumber: data.invoiceNumber,
         clientId: data.clientId,
         workRequestId: data.workRequestId || null,
@@ -1201,7 +1201,7 @@ const Workflow = {
       const receiptFile = receiptInput?.files?.[0];
 
       const record = {
-        id: generateId('d'),
+        id: generateSequentialId('dis', 'disbursements'),
         category: data.category,
         description: desc,
         amount: amount,
@@ -2510,97 +2510,66 @@ const Workflow = {
           });
         }
 
-        const card = el('div', { class: 'board-card board-card-v2' });
-        card.style.borderLeftColor = colColor;
-        card.addEventListener('click', () => { location.hash = '#operations/detail/' + wr.id; });
-
+        const client = DB.getById('clients', wr.clientId);
         const transition = this.getPhaseTransitionStatus(wr.id);
+        const priorityConfig = {
+          'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
+          'Priority': { label: 'High', cls: 'card-v2-priority-high' },
+          'High': { label: 'High', cls: 'card-v2-priority-high' },
+          'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
+          'Low': { label: 'Low', cls: 'card-v2-priority-low' }
+        }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
 
-        // Top: Priority path and Due Date
-        const topRow = el('div', { class: 'card-v2-top' });
-        const categoryPath = el('span', { class: 'card-v2-category', text: `${wr.priority || 'Normal'} >` });
-        topRow.appendChild(categoryPath);
+        const descParts = [client?.name || '—'];
+        if (totalTasks > 0) descParts.push(`${progress}% complete`);
+        const description = descParts.join(' • ');
+
+        const counts = [];
+        if (allDocs > 0) counts.push({ icon: BoardCardIcons.attachment, value: allDocs });
+        if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
+
+        const card = buildCompactBoardCard({
+          key: formatItemKey(wr.id),
+          statusColor: colColor,
+          title: wr.title,
+          description,
+          date: wr.dueDate ? formatDate(wr.dueDate) : '',
+          priority: priorityConfig.label,
+          priorityClass: priorityConfig.cls,
+          avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
+          counts,
+          onClick: () => { location.hash = '#operations/detail/' + wr.id; }
+        });
+
+        const badges = [];
         if (transition && transition.canTransition) {
-          const readyBadge = el('span', { 
+          const readyBadge = el('span', {
             html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Ready to route',
-            class: 'badge-success btn-xs', 
-            style: 'margin-left:8px;font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;' 
+            class: 'badge badge-success btn-xs',
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;'
           });
           readyBadge.addEventListener('click', (e) => {
             e.stopPropagation();
             this.transitionWorkRequest(wr.id);
           });
-          topRow.appendChild(readyBadge);
+          badges.push(readyBadge);
         } else if (transition && transition.missing && transition.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
           const blockerBadge = el('span', {
             html: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + transition.missing.length + ' pending',
-            style: 'margin-left:8px;font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;color:var(--color-warning);background:rgba(251, 191, 36, 0.12);padding:2px 6px;cursor:help;'
+            class: 'badge badge-warn btn-xs',
+            style: 'font-size:10px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;cursor:help;'
           });
           blockerBadge.title = transition.missing.join('\n');
-          topRow.appendChild(blockerBadge);
+          badges.push(blockerBadge);
         }
-        if (wr.dueDate) {
-          topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(wr.dueDate) }));
-        }
-        card.appendChild(topRow);
-
-        // Middle: Title and Checkbox placeholder
-        const titleRow = el('div', { class: 'card-v2-title-row' });
-        const checkbox = el('div', { class: 'card-v2-checkbox' });
-        if (wr.status === 'Completed') checkbox.classList.add('checked');
-        titleRow.appendChild(checkbox);
-        titleRow.appendChild(el('div', { class: 'card-v2-title', text: wr.title }));
-        card.appendChild(titleRow);
-
         if (wr.isPendingApproval) {
-          const pendingBadge = el('span', {
-            text: 'Awaiting Approval',
-            class: 'badge-warning',
-            style: 'margin-left: 28px; font-size: 10px; border-radius: 4px; display: inline-block; padding: 2px 6px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; margin-top: 2px;'
-          });
-          card.appendChild(pendingBadge);
-
-          // Banner inside the card
-          const statusNote = el('div', {
-            text: 'Status Note: Staged for Approval',
-            style: 'margin: 6px 0 6px 28px; font-size: 11px; font-weight: 500; color: var(--color-warning); background: var(--color-bg-muted); border-left: 3px solid var(--color-warning); padding: 4px 8px; border-radius: 2px;'
-          });
-          card.appendChild(statusNote);
+          badges.push(el('span', { text: 'Awaiting Approval', class: 'badge badge-warning btn-xs', style: 'font-size:10px;border-radius:10px;' }));
         }
-
-        // Dynamic badges row on Board Card
-        const badgeRow = el('div', { style: 'display:flex; gap:6px; margin-top:6px; margin-bottom:8px; flex-wrap:wrap;' });
-        badgeRow.appendChild(this.getFinanceBadgeForWr(wr));
-        badgeRow.appendChild(this.getDocBadgeForWr(wr));
-        card.appendChild(badgeRow);
-
-        // Metadata: Progress, Doc count, Comment count, Avatars
-        const metaRow = el('div', { class: 'card-v2-meta' });
-        const metaLeft = el('div', { class: 'card-v2-meta-left' });
-        
-        if (totalTasks > 0) {
-          const progBar = el('div', { class: 'card-v2-progress' });
-          progBar.appendChild(el('div', { class: 'card-v2-progress-fill', style: `width: ${progress}%; background-color: ${colColor};` }));
-          metaLeft.appendChild(progBar);
-          metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${progress}%` }));
+        if (badges.length) {
+          const badgeRow = el('div', { class: 'card-v2-badges' });
+          badges.forEach(b => badgeRow.appendChild(b));
+          card.insertBefore(badgeRow, card.querySelector('.card-v2-footer'));
         }
-
-        if (allDocs > 0) {
-          metaLeft.appendChild(el('span', { class: 'card-v2-meta-icon', text: `📎 ${allDocs}` }));
-        }
-        if (allComments > 0) {
-          metaLeft.appendChild(el('span', { class: 'card-v2-meta-icon', text: `💬 ${allComments}` }));
-        }
-        metaRow.appendChild(metaLeft);
-
-        const avatars = el('div', { class: 'card-v2-avatars' });
-        assignees.slice(0, 3).forEach(u => {
-          const av = el('div', { class: 'avatar-xs' });
-          if (u.avatarUrl) av.style.backgroundImage = `url('${u.avatarUrl}')`;
-          avatars.appendChild(av);
-        });
-        metaRow.appendChild(avatars);
-        card.appendChild(metaRow);
 
         cardContainer.appendChild(card);
       });
@@ -4417,7 +4386,7 @@ const Workflow = {
       });
     }
 
-    const recordId = this.editingId || generateId('wr');
+    const recordId = this.editingId || generateSequentialId('wr', 'workRequests');
     const idMap = new Map();
     tasks.forEach(t => idMap.set(t.key, generateId('t')));
 
@@ -8954,7 +8923,7 @@ const Workflow = {
     const dueDate = new Date(now.getTime() + (template.schedule === 'quarterly' ? 90 : 30) * 86400000);
 
     const workRequest = {
-      id: generateId('wr'),
+      id: generateSequentialId('wr', 'workRequests'),
       title: `${template.name} (${titleSuffix})`,
       description: template.description || '',
       clientId: template.clientId,

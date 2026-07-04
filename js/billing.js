@@ -569,64 +569,46 @@ const Billing = {
         const balance = inv.total - paid;
         const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
 
-        const card = el('div', { class: 'board-card-v2' });
-        card.style.borderLeftColor = colColor;
-        card.addEventListener('click', () => { location.hash = '#billing/detail/' + inv.id; });
+        const statusPriorityClass = {
+          'Paid': 'card-v2-priority-low',
+          'Approved': 'card-v2-priority-low',
+          'Sent': 'card-v2-priority-normal',
+          'Partially Paid': 'card-v2-priority-medium',
+          'Pending': 'card-v2-priority-medium',
+          'Draft': 'card-v2-priority-normal',
+          'Overdue': 'card-v2-priority-urgent'
+        }[inv.status] || 'card-v2-priority-normal';
 
-        // Top: Info path and Issue Date
-        const topRow = el('div', { class: 'card-v2-top' });
-        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${inv.status} >` }));
-        if (inv.fromTemplate) topRow.appendChild(this.recurringBadge(inv));
-        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(inv.issueDate) }));
-        card.appendChild(topRow);
-
-        // Title Row
-        const titleRow = el('div', { class: 'card-v2-title-row' });
-        titleRow.appendChild(el('div', { class: 'card-v2-title', text: inv.invoiceNumber }));
-        card.appendChild(titleRow);
-
-        // Client info
-        card.appendChild(el('div', { text: client?.name || '—', style: 'font-size:0.875rem;color:var(--color-text-muted);margin-bottom:8px;' }));
-
-        // Linked WR/Task info
+        const descParts = [inv.invoiceNumber];
+        if (progress > 0) descParts.push(`${progress}% paid`);
         if (inv.workRequestId) {
           const wr = DB.getById('workRequests', inv.workRequestId);
-          if (wr) {
-            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: var(--color-primary); margin-bottom: 12px; background: var(--color-primary-light); border: 1px solid var(--color-primary-alpha); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
-            wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 600;' }));
-            if (inv.linkedTaskId) {
-              const task = DB.getById('tasks', inv.linkedTaskId);
-              if (task) {
-                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: var(--color-text-muted);' }));
-              }
-            } else {
-              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: var(--color-text-muted);' }));
-            }
-            card.appendChild(wrWrap);
-          }
+          if (wr) descParts.push(wr.title);
         }
+        if (inv.fromTemplate) descParts.push('Recurring');
+        const description = descParts.join(' • ');
 
-        // Meta: Progress and Financials
-        const metaRow = el('div', { class: 'card-v2-meta' });
-        const metaLeft = el('div', { class: 'card-v2-meta-left' });
-        
-        const progBar = el('div', { class: 'card-v2-progress' });
-        progBar.appendChild(el('div', { class: 'card-v2-progress-fill', style: `width: ${progress}%; background-color: ${colColor};` }));
-        metaLeft.appendChild(progBar);
-        metaLeft.appendChild(el('span', { class: 'card-v2-meta-text', text: `${progress}%` }));
-        metaRow.appendChild(metaLeft);
+        const card = buildCompactBoardCard({
+          key: formatItemKey(inv.id),
+          statusColor: colColor,
+          title: client?.name || '—',
+          description,
+          date: inv.issueDate ? formatDate(inv.issueDate) : '',
+          priority: inv.status,
+          priorityClass: statusPriorityClass,
+          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+        });
 
-        const financials = el('div', { style: 'text-align:right;' });
-        financials.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
+        // Total / balance on the right side of the footer
+        const footerRight = card.querySelector('.card-v2-footer-right');
         if (balance > 0 && balance < inv.total) {
-          financials.appendChild(el('div', { text: `Bal: ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
+          footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
         }
-        metaRow.appendChild(financials);
-        card.appendChild(metaRow);
+        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
 
-        // Card actions for Draft invoices (only users with billing:edit)
+        // Draft actions
         if (inv.status === 'Draft' && Auth.can('billing:edit')) {
-          const cardActions = el('div', { style: 'display:flex; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--color-border);' });
+          const cardActions = el('div', { style: 'display:flex; gap:6px; padding-top:6px; border-top:1px solid var(--color-border);' });
           const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
           editBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -991,7 +973,7 @@ const Billing = {
     }
 
     if (isNew) {
-      record.id = generateId('inv');
+      record.id = generateSequentialId('inv', 'invoices');
       record.createdAt = new Date().toISOString();
       record.updatedAt = record.createdAt;
     } else {
@@ -2652,7 +2634,7 @@ const Billing = {
     const entity = Auth.activeEntity;
     const now = new Date();
     const inv = {
-      id: generateId('inv'),
+      id: generateSequentialId('inv', 'invoices'),
       clientId: t.clientId,
       entity: entity,
       invoiceNumber: this.nextInvoiceNumber(entity),

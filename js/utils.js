@@ -45,6 +45,38 @@ function generateId(prefix) {
   return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
 }
 
+/**
+ * Generate a sequential, zero-padded ID for a given table/prefix.
+ * Falls back to a random ID if the table is not available.
+ */
+function generateSequentialId(prefix, table) {
+  if (typeof DB === 'undefined' || !DB.getAll) {
+    return generateId(prefix);
+  }
+  const all = DB.getAll(table);
+  const re = new RegExp('^' + prefix + '-(\\d+)$');
+  let max = 0;
+  all.forEach(r => {
+    const m = String(r.id || '').match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
+  });
+  return prefix + '-' + String(max + 1).padStart(4, '0');
+}
+
+/**
+ * Turn a stored ID such as `wr-0001` or `dis-0102` into a display key
+ * with an uppercase module prefix: `WR-0001`, `DIS-0102`.
+ */
+function formatItemKey(id) {
+  if (!id) return '';
+  const [prefix, ...rest] = String(id).split('-');
+  if (!prefix) return String(id);
+  return prefix.toUpperCase() + (rest.length ? '-' + rest.join('-') : '');
+}
+
 function showFieldError(field, message) {
   // If the field is inside a datepicker/timepicker wrapper, target the form-group parent instead
   let container = field.parentElement;
@@ -100,6 +132,120 @@ function parseHTML(html) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   return doc.body.firstChild || document.createTextNode('');
+}
+
+
+/**
+ * Compact board-card icons used across Operations, Billing, Disbursement,
+ * and Transmittal boards to match the Jira-style reference card.
+ */
+const BoardCardIcons = {
+  link: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1.8 1.8"/><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1.8-1.8"/></svg>',
+  calendar: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  signal: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="14"/><line x1="10" y1="20" x2="10" y2="10"/><line x1="14" y1="20" x2="14" y2="6"/><line x1="18" y1="20" x2="18" y2="2"/></svg>',
+  comment: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 014 11.5a8.5 8.5 0 018.5-8.5 8.38 8.38 0 013.8.9L21 11.5z"/></svg>',
+  attachment: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
+  more: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>'
+};
+
+/**
+ * Build a compact, Jira-style board card.
+ *
+ * @param {Object} opts
+ * @param {string} opts.key - Item key shown next to the link icon (e.g. WR-0001).
+ * @param {string} [opts.statusColor] - Color for the status dot and left border.
+ * @param {string} opts.title - Primary card title.
+ * @param {string} [opts.description] - Secondary detail text.
+ * @param {string} [opts.date] - Date shown with a calendar icon.
+ * @param {string} [opts.priority] - Priority/status label shown with signal bars.
+ * @param {string} [opts.priorityClass] - Extra CSS class for priority color (e.g. card-v2-priority-high).
+ * @param {Array<{icon:string, value:any}>} [opts.counts] - Footer counts (e.g. comments, attachments).
+ * @param {Array<{name?:string, avatarUrl?:string}>} [opts.avatars] - Footer avatars.
+ * @param {Function} [opts.onClick] - Card click handler.
+ * @param {Function} [opts.moreOptions] - Optional "..." button click handler.
+ * @returns {HTMLElement}
+ */
+function buildCompactBoardCard(opts) {
+  const card = el('div', { class: 'board-card-v2 compact' });
+  if (opts.statusColor) card.style.borderLeftColor = opts.statusColor;
+
+  // Header: key + status dot + more menu
+  const header = el('div', { class: 'card-v2-header' });
+  const keyGroup = el('div', { class: 'card-v2-key-group' });
+  keyGroup.appendChild(el('span', { class: 'card-v2-key-icon', html: BoardCardIcons.link }));
+  keyGroup.appendChild(el('span', { class: 'card-v2-key', text: opts.key || '' }));
+  if (opts.statusColor) {
+    keyGroup.appendChild(el('span', { class: 'card-v2-status-dot', style: 'background:' + opts.statusColor + ';' }));
+  }
+  header.appendChild(keyGroup);
+
+  const moreBtn = el('button', {
+    class: 'card-v2-menu',
+    html: BoardCardIcons.more,
+    type: 'button',
+    'aria-label': 'More options'
+  });
+  moreBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (typeof opts.moreOptions === 'function') opts.moreOptions(e);
+  });
+  header.appendChild(moreBtn);
+  card.appendChild(header);
+
+  // Body
+  const body = el('div', { class: 'card-v2-body' });
+  if (opts.title) body.appendChild(el('div', { class: 'card-v2-title', text: opts.title }));
+  if (opts.description) body.appendChild(el('div', { class: 'card-v2-desc', text: opts.description }));
+  card.appendChild(body);
+
+  // Footer
+  const footer = el('div', { class: 'card-v2-footer' });
+  const footerLeft = el('div', { class: 'card-v2-footer-left' });
+  if (opts.date) {
+    footerLeft.appendChild(el('div', { class: 'card-v2-footer-item', html: BoardCardIcons.calendar + ' ' + escapeHtml(opts.date) }));
+  }
+  if (opts.priority) {
+    const priorityEl = el('div', { class: 'card-v2-priority ' + (opts.priorityClass || '') });
+    priorityEl.innerHTML = BoardCardIcons.signal + ' ' + escapeHtml(opts.priority);
+    footerLeft.appendChild(priorityEl);
+  }
+  footer.appendChild(footerLeft);
+
+  const footerRight = el('div', { class: 'card-v2-footer-right' });
+  if (opts.avatars && opts.avatars.length) {
+    const avWrap = el('div', { class: 'card-v2-avatars' });
+    opts.avatars.slice(0, 3).forEach(u => {
+      const av = el('div', { class: 'avatar-xs', title: u.name || '' });
+      if (u.avatarUrl) {
+        av.style.backgroundImage = "url('" + u.avatarUrl + "')";
+      } else {
+        av.textContent = (u.name || '?').slice(0, 1).toUpperCase();
+        av.style.background = 'var(--color-bg-muted)';
+        av.style.color = 'var(--color-text)';
+        av.style.display = 'flex';
+        av.style.alignItems = 'center';
+        av.style.justifyContent = 'center';
+        av.style.fontSize = '10px';
+        av.style.fontWeight = '700';
+      }
+      avWrap.appendChild(av);
+    });
+    footerRight.appendChild(avWrap);
+  }
+  if (opts.counts && opts.counts.length) {
+    opts.counts.forEach(c => {
+      if (!c.value) return;
+      footerRight.appendChild(el('div', { class: 'card-v2-count', html: c.icon + ' ' + String(c.value) }));
+    });
+  }
+  footer.appendChild(footerRight);
+  card.appendChild(footer);
+
+  if (typeof opts.onClick === 'function') {
+    card.addEventListener('click', opts.onClick);
+  }
+
+  return card;
 }
 
 

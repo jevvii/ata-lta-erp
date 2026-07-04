@@ -732,52 +732,49 @@ const Disbursement = {
 
       colItems.forEach(d => {
         const emp = DB.getById('users', this.getEmployeeId(d));
-        const card = el('div', { class: 'board-card-v2' });
-        card.style.borderLeftColor = colColor;
-        card.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-
-        // Top: Status path and Date
-        const topRow = el('div', { class: 'card-v2-top' });
-        const displayStatus = d.status;
-        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${displayStatus} >` }));
-        if (d.fromTemplate) topRow.appendChild(this.recurringBadge(d));
-        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(d.submittedAt) }));
-        card.appendChild(topRow);
-
-        // Title Row
-        const titleRow = el('div', { class: 'card-v2-title-row' });
-        titleRow.appendChild(el('div', { class: 'card-v2-title', text: d.category }));
-        card.appendChild(titleRow);
-
-        // Subtitle: Employee and Fund
         const source = this.getFundSource(d);
-        card.appendChild(el('div', { text: `${emp?.name || '—'} • ${source}`, style: 'font-size:0.875rem;color:var(--color-text-muted);margin-bottom:8px;' }));
 
-        // Linked WR/Task info
+        const statusPriorityClass = {
+          'Draft': 'card-v2-priority-normal',
+          'Pending': 'card-v2-priority-medium',
+          'Approved': 'card-v2-priority-medium',
+          'Release Pending Approval': 'card-v2-priority-medium',
+          'Released': 'card-v2-priority-low',
+          'Rejected': 'card-v2-priority-urgent'
+        }[d.status] || 'card-v2-priority-normal';
+
+        const descParts = [`${emp?.name || '—'} • ${source}`];
         if (d.linkedWorkRequestId) {
           const wr = DB.getById('workRequests', d.linkedWorkRequestId);
           if (wr) {
-            const wrWrap = el('div', { style: 'font-size: 0.725rem; color: var(--color-primary); margin-bottom: 12px; background: var(--color-primary-light); border: 1px solid var(--color-primary-alpha); border-radius: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; word-break: break-word;' });
-            wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 600;' }));
+            let linked = wr.title;
             if (d.linkedTaskId) {
               const task = DB.getById('tasks', d.linkedTaskId);
-              if (task) {
-                wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'font-style: italic; color: var(--color-text-muted);' }));
-              }
-            } else {
-              wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'font-style: italic; color: var(--color-text-muted);' }));
+              if (task) linked += ` (Task: ${task.title})`;
             }
-            card.appendChild(wrWrap);
+            descParts.push(linked);
           }
         }
+        if (d.fromTemplate) descParts.push('Recurring');
+        const description = descParts.join(' • ');
 
-        // Meta: Financials
-        const metaRow = el('div', { class: 'card-v2-meta' });
-        metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);font-size:1.125rem;' }));
-        card.appendChild(metaRow);
+        const card = buildCompactBoardCard({
+          key: formatItemKey(d.id),
+          statusColor: colColor,
+          title: d.category,
+          description,
+          date: d.submittedAt ? formatDate(d.submittedAt) : '',
+          priority: d.status,
+          priorityClass: statusPriorityClass,
+          onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
+        });
+
+        // Amount on the right side of the footer
+        const footerRight = card.querySelector('.card-v2-footer-right');
+        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);' }));
 
         if (this.canEditDisbursement(d)) {
-          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;margin-top:8px;' });
+          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;padding-top:6px;' });
           const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
           editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(d.id); });
           cardActions.appendChild(editBtn);
@@ -1032,7 +1029,7 @@ const Disbursement = {
         record.paymentDetails = old.paymentDetails || { method: '', reference: '', bank: '', date: '', processedBy: '' };
       }
     } else {
-      record.id = generateId('d');
+      record.id = generateSequentialId('dis', 'disbursements');
       record.createdAt = new Date().toISOString();
     }
 
@@ -2219,7 +2216,7 @@ const Disbursement = {
 
   generateFromTemplate(template) {
     const record = {
-      id: generateId('d'),
+      id: generateSequentialId('dis', 'disbursements'),
       category: template.category,
       description: template.description || template.name,
       amount: template.amount,

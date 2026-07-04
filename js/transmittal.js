@@ -531,36 +531,32 @@ const Transmittal = {
       colItems.forEach(t => {
         const clientName = this.getClientName(t.clientId);
         const itemCount = (t.items || []).length;
-
-        const card = el('div', { class: 'board-card-v2' });
-        card.style.borderLeftColor = colColor;
-        card.addEventListener('click', () => { location.hash = '#transmittal/detail/' + t.id; });
-
-        // Top: Status path and Date
-        const topRow = el('div', { class: 'card-v2-top' });
-        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${t.status} >` }));
         const date = t.sentAt || t.createdAt;
-        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(date) }));
-        card.appendChild(topRow);
 
-        // Title Row
-        const titleRow = el('div', { class: 'card-v2-title-row' });
-        titleRow.appendChild(el('div', { class: 'card-v2-title', text: t.trackingNumber }));
-        card.appendChild(titleRow);
+        const statusPriorityClass = {
+          'Draft': 'card-v2-priority-normal',
+          'Sent': 'card-v2-priority-medium',
+          'Acknowledged': 'card-v2-priority-low'
+        }[t.status] || 'card-v2-priority-normal';
 
-        // Subtitle: Client and Item Count
-        card.appendChild(el('div', { text: `${clientName} • ${itemCount} items`, style: 'font-size:0.875rem;color:var(--color-text-muted);margin-bottom:12px;' }));
-
-        // Meta: Details
-        const metaRow = el('div', { class: 'card-v2-meta' });
+        const descParts = [`${itemCount} item${itemCount === 1 ? '' : 's'}`];
         const wr = DB.getById('workRequests', t.workRequestId);
-        if (wr) {
-          metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: wr.title, style: 'font-weight:600;color:var(--color-text);font-size:0.75rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }));
-        }
-        card.appendChild(metaRow);
+        if (wr) descParts.push(wr.title);
+        const description = descParts.join(' • ');
+
+        const card = buildCompactBoardCard({
+          key: t.trackingNumber,
+          statusColor: colColor,
+          title: clientName,
+          description,
+          date: date ? formatDate(date) : '',
+          priority: t.status,
+          priorityClass: statusPriorityClass,
+          onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+        });
 
         if (this.canEditTransmittal(t)) {
-          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;margin-top:8px;' });
+          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;padding-top:6px;' });
           const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
           editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
           cardActions.appendChild(editBtn);
