@@ -2136,6 +2136,7 @@ const Workflow = {
           }
         }
       }
+      tr.appendChild(tdAct);
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
