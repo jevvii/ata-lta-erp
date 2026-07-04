@@ -390,6 +390,7 @@ const Clients = {
     });
 
     container.appendChild(form);
+    return container;
   },
 
   addContactDetailRow(container, data, idx) {
