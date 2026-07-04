@@ -2525,13 +2525,17 @@ const Workflow = {
     let autoScrollContainer = null;
     let autoScrollDir = 0;
     let autoScrollRaf = null;
-    const SCROLL_MARGIN = 60;
-    const SCROLL_SPEED = 14;
+    let autoScrollDist = Infinity;
+    const SCROLL_MARGIN = 80;
+    const SCROLL_SPEED = 20;
+    const SCROLL_MAX_SPEED = 55;
 
     function beginDragAutoScroll() {
       if (autoScrollRaf) return;
       const step = () => {
         if (!autoScrollDir) { autoScrollRaf = null; return; }
+        const intensity = Math.min(1, Math.max(0, (SCROLL_MARGIN - autoScrollDist) / SCROLL_MARGIN));
+        const speed = Math.max(SCROLL_SPEED, Math.round(SCROLL_SPEED + (SCROLL_MAX_SPEED - SCROLL_SPEED) * intensity));
         const el = autoScrollContainer;
         if (el) {
           const style = getComputedStyle(el);
@@ -2539,12 +2543,12 @@ const Workflow = {
           const scrollable = (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') &&
             el.scrollHeight > el.clientHeight + 1;
           if (scrollable) {
-            el.scrollTop += autoScrollDir * SCROLL_SPEED;
+            el.scrollTop += autoScrollDir * speed;
             autoScrollRaf = requestAnimationFrame(step);
             return;
           }
         }
-        window.scrollBy(0, autoScrollDir * SCROLL_SPEED);
+        window.scrollBy(0, autoScrollDir * speed);
         autoScrollRaf = requestAnimationFrame(step);
       };
       autoScrollRaf = requestAnimationFrame(step);
@@ -2553,26 +2557,26 @@ const Workflow = {
     function updateDragAutoScroll(clientY, container) {
       autoScrollContainer = container || null;
       const rect = container?.getBoundingClientRect();
-      const style = container ? getComputedStyle(container) : null;
-      const overflowY = style ? style.overflowY : '';
-      const containerScrollable = container &&
-        (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') &&
-        container.scrollHeight > container.clientHeight + 1;
       let dir = 0;
-      if (containerScrollable && rect) {
-        if (clientY - rect.top < SCROLL_MARGIN) dir = -1;
-        else if (rect.bottom - clientY < SCROLL_MARGIN) dir = 1;
+      let dist = Infinity;
+      if (rect) {
+        const topDist = clientY - rect.top;
+        const bottomDist = rect.bottom - clientY;
+        if (topDist < SCROLL_MARGIN) { dir = -1; dist = topDist; }
+        else if (bottomDist < SCROLL_MARGIN) { dir = 1; dist = bottomDist; }
       }
       if (!dir) {
-        if (clientY < SCROLL_MARGIN) dir = -1;
-        else if (clientY > window.innerHeight - SCROLL_MARGIN) dir = 1;
+        if (clientY < SCROLL_MARGIN) { dir = -1; dist = clientY; }
+        else if (clientY > window.innerHeight - SCROLL_MARGIN) { dir = 1; dist = window.innerHeight - clientY; }
       }
       autoScrollDir = dir;
+      autoScrollDist = dist;
       if (dir && !autoScrollRaf) beginDragAutoScroll();
     }
 
     function endDragAutoScroll() {
       autoScrollDir = 0;
+      autoScrollDist = Infinity;
       autoScrollContainer = null;
       if (autoScrollRaf) { cancelAnimationFrame(autoScrollRaf); autoScrollRaf = null; }
     }
@@ -2607,23 +2611,28 @@ const Workflow = {
     function updatePlaceholder(container, y) {
       const draggedId = dragSrcWrId;
       const cards = Array.from(container.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)'));
-      let target = null;
-      let after = false;
+      const placeholder = getDragPlaceholder();
+
+      if (cards.length === 0) {
+        const addCard = container.querySelector('.board-card-v2.add-wr-card');
+        if (addCard) container.insertBefore(placeholder, addCard);
+        else container.appendChild(placeholder);
+        return;
+      }
+
+      let targetCard = null;
       for (const card of cards) {
         if (card.dataset.wrId === draggedId) continue;
         const rect = card.getBoundingClientRect();
         const mid = rect.top + rect.height / 2;
-        if (y < mid) { target = card; after = false; break; }
-        target = card;
-        after = true;
-      }
-      const placeholder = getDragPlaceholder();
-      if (target) {
-        if (after) {
-          container.insertBefore(placeholder, target.nextSibling);
-        } else {
-          container.insertBefore(placeholder, target);
+        if (y < mid) {
+          targetCard = card;
+          break;
         }
+      }
+
+      if (targetCard) {
+        container.insertBefore(placeholder, targetCard);
       } else {
         const addCard = container.querySelector('.board-card-v2.add-wr-card');
         if (addCard) container.insertBefore(placeholder, addCard);
@@ -2637,36 +2646,43 @@ const Workflow = {
 
     function computeDropBoardOrder(cardContainer, draggedId) {
       const cards = Array.from(cardContainer.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)'));
+      if (cards.length === 0) {
+        return 1000;
+      }
+
       const placeholder = cardContainer.querySelector('.board-card-v2.drag-placeholder');
       let targetIndex = cards.length;
+
       if (placeholder) {
-        const children = Array.from(cardContainer.children);
-        let counted = 0;
-        let passedPlaceholder = false;
-        for (const child of children) {
-          if (child === placeholder) { passedPlaceholder = true; continue; }
-          if (child.classList.contains('board-card-v2') &&
-              !child.classList.contains('dragging') &&
-              !child.classList.contains('add-wr-card')) {
-            if (!passedPlaceholder) counted++;
+        let index = 0;
+        for (const card of cards) {
+          if (placeholder.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            targetIndex = index;
+            break;
           }
+          index++;
         }
-        targetIndex = counted;
       }
-      const targetIds = cards.map(c => c.dataset.wrId).filter(id => id !== draggedId);
-      const beforeId = targetIds[targetIndex - 1];
-      const afterId = targetIds[targetIndex];
-      const before = beforeId ? DB.getById('workRequests', beforeId) : null;
-      const after = afterId ? DB.getById('workRequests', afterId) : null;
-      const beforeOrder = before?.boardOrder;
-      const afterOrder = after?.boardOrder;
-      if (typeof beforeOrder === 'number' && typeof afterOrder === 'number') {
-        return (beforeOrder + afterOrder) / 2;
+
+      if (targetIndex === 0) {
+        const firstWr = DB.getById('workRequests', cards[0].dataset.wrId);
+        const firstOrder = typeof firstWr?.boardOrder === 'number' ? firstWr.boardOrder : 1000;
+        return firstOrder / 2;
       }
-      if (typeof beforeOrder === 'number') return beforeOrder + 1000;
-      if (typeof afterOrder === 'number') return afterOrder - 1000;
-      const maxOrder = Math.max(0, ...cards.map(c => DB.getById('workRequests', c.dataset.wrId)?.boardOrder || 0));
-      return maxOrder + 1000;
+
+      if (targetIndex >= cards.length) {
+        const lastWr = DB.getById('workRequests', cards[cards.length - 1].dataset.wrId);
+        const lastOrder = typeof lastWr?.boardOrder === 'number' ? lastWr.boardOrder : (cards.length * 1000);
+        return lastOrder + 1000;
+      }
+
+      const beforeWr = DB.getById('workRequests', cards[targetIndex - 1].dataset.wrId);
+      const afterWr = DB.getById('workRequests', cards[targetIndex].dataset.wrId);
+
+      const beforeOrder = typeof beforeWr?.boardOrder === 'number' ? beforeWr.boardOrder : (targetIndex * 1000);
+      const afterOrder = typeof afterWr?.boardOrder === 'number' ? afterWr.boardOrder : ((targetIndex + 1) * 1000);
+
+      return (beforeOrder + afterOrder) / 2;
     }
 
     function handleDragOver(e) {
@@ -2679,16 +2695,7 @@ const Workflow = {
         col.classList.add('drag-over');
       }
       if (cardContainer) {
-        // Show placeholder even when empty (no cards in target column).
-        const cards = cardContainer.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)');
-        const placeholder = getDragPlaceholder();
-        if (cards.length === 0) {
-          const addCard = cardContainer.querySelector('.board-card-v2.add-wr-card');
-          if (addCard) cardContainer.insertBefore(placeholder, addCard);
-          else cardContainer.appendChild(placeholder);
-        } else {
-          updatePlaceholder(cardContainer, e.clientY);
-        }
+        updatePlaceholder(cardContainer, e.clientY);
         updateDragAutoScroll(e.clientY, cardContainer);
       }
     }
@@ -2704,6 +2711,7 @@ const Workflow = {
 
     function handleDrop(e) {
       e.preventDefault();
+      e.stopPropagation();
       endDragAutoScroll();
       const cardContainer = getTargetContainer(e.currentTarget);
       const col = cardContainer?.closest('.board-column-v2');
@@ -2722,8 +2730,6 @@ const Workflow = {
       }
 
       const applyMove = () => {
-        const placeholder = document.querySelector('.board-card-v2.drag-placeholder');
-        const draggedCard = document.querySelector(`.board-card-v2.compact.dragging`);
         const newBoardOrder = computeDropBoardOrder(cardContainer, wrId);
         const changes = { boardOrder: newBoardOrder };
         if (isPhaseChange) {
@@ -2731,14 +2737,8 @@ const Workflow = {
           changes.updatedAt = new Date().toISOString();
         }
         DB.update('workRequests', wrId, changes);
-        if (placeholder && draggedCard) {
-          placeholder.parentElement.insertBefore(draggedCard, placeholder.nextSibling);
-          draggedCard.classList.remove('dragging');
-          placeholder.remove();
-        }
-        if (isPhaseChange) {
-          App.handleRoute();
-        }
+        clearDragIndicators();
+        App.handleRoute();
       };
 
       if (!isPhaseChange) {
@@ -2760,20 +2760,32 @@ const Workflow = {
       this.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
     }
 
+    function ensureColumnBoardOrders(colWrs) {
+      colWrs.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+      });
+      colWrs.forEach((wr, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (wr.boardOrder !== newOrder) {
+          wr.boardOrder = newOrder;
+          DB.update('workRequests', wr.id, { boardOrder: newOrder });
+        }
+      });
+      return colWrs;
+    }
+
     let cardNumber = 1;
 
     boardPhases.forEach(phase => {
       const col = el('div', { class: 'board-column-v2', 'data-target-status': phase.targetStatus });
       col.style.setProperty('--column-phase-color', phase.color);
 
-      const colWrs = wrs
-        .filter(wr => phase.statuses.includes(wr.status))
-        .sort((a, b) => {
-          const oa = a.boardOrder || 0;
-          const ob = b.boardOrder || 0;
-          if (oa !== ob) return oa - ob;
-          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-        });
+      const colWrs = ensureColumnBoardOrders(wrs.filter(wr => phase.statuses.includes(wr.status)));
 
       const header = el('div', { class: 'board-column-header-v2' });
       const titleWrap = el('div', { class: 'board-column-title' });
