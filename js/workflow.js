@@ -2522,6 +2522,60 @@ const Workflow = {
     }
 
     let dragSrcWrId = null;
+    let autoScrollContainer = null;
+    let autoScrollDir = 0;
+    let autoScrollRaf = null;
+    const SCROLL_MARGIN = 60;
+    const SCROLL_SPEED = 14;
+
+    function beginDragAutoScroll() {
+      if (autoScrollRaf) return;
+      const step = () => {
+        if (!autoScrollDir) { autoScrollRaf = null; return; }
+        const el = autoScrollContainer;
+        if (el) {
+          const style = getComputedStyle(el);
+          const overflowY = style.overflowY;
+          const scrollable = (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') &&
+            el.scrollHeight > el.clientHeight + 1;
+          if (scrollable) {
+            el.scrollTop += autoScrollDir * SCROLL_SPEED;
+            autoScrollRaf = requestAnimationFrame(step);
+            return;
+          }
+        }
+        window.scrollBy(0, autoScrollDir * SCROLL_SPEED);
+        autoScrollRaf = requestAnimationFrame(step);
+      };
+      autoScrollRaf = requestAnimationFrame(step);
+    }
+
+    function updateDragAutoScroll(clientY, container) {
+      autoScrollContainer = container || null;
+      const rect = container?.getBoundingClientRect();
+      const style = container ? getComputedStyle(container) : null;
+      const overflowY = style ? style.overflowY : '';
+      const containerScrollable = container &&
+        (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') &&
+        container.scrollHeight > container.clientHeight + 1;
+      let dir = 0;
+      if (containerScrollable && rect) {
+        if (clientY - rect.top < SCROLL_MARGIN) dir = -1;
+        else if (rect.bottom - clientY < SCROLL_MARGIN) dir = 1;
+      }
+      if (!dir) {
+        if (clientY < SCROLL_MARGIN) dir = -1;
+        else if (clientY > window.innerHeight - SCROLL_MARGIN) dir = 1;
+      }
+      autoScrollDir = dir;
+      if (dir && !autoScrollRaf) beginDragAutoScroll();
+    }
+
+    function endDragAutoScroll() {
+      autoScrollDir = 0;
+      autoScrollContainer = null;
+      if (autoScrollRaf) { cancelAnimationFrame(autoScrollRaf); autoScrollRaf = null; }
+    }
 
     function handleDragStart(e) {
       dragSrcWrId = this.dataset.wrId;
@@ -2534,6 +2588,7 @@ const Workflow = {
       this.classList.remove('dragging');
       clearDragIndicators();
       dragSrcWrId = null;
+      endDragAutoScroll();
     }
 
     function clearDragIndicators() {
@@ -2580,6 +2635,40 @@ const Workflow = {
       return target.closest('.board-cards-scroll') || target.closest('.board-column-v2')?.querySelector('.board-cards-scroll');
     }
 
+    function computeDropBoardOrder(cardContainer, draggedId) {
+      const cards = Array.from(cardContainer.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)'));
+      const placeholder = cardContainer.querySelector('.board-card-v2.drag-placeholder');
+      let targetIndex = cards.length;
+      if (placeholder) {
+        const children = Array.from(cardContainer.children);
+        let counted = 0;
+        let passedPlaceholder = false;
+        for (const child of children) {
+          if (child === placeholder) { passedPlaceholder = true; continue; }
+          if (child.classList.contains('board-card-v2') &&
+              !child.classList.contains('dragging') &&
+              !child.classList.contains('add-wr-card')) {
+            if (!passedPlaceholder) counted++;
+          }
+        }
+        targetIndex = counted;
+      }
+      const targetIds = cards.map(c => c.dataset.wrId).filter(id => id !== draggedId);
+      const beforeId = targetIds[targetIndex - 1];
+      const afterId = targetIds[targetIndex];
+      const before = beforeId ? DB.getById('workRequests', beforeId) : null;
+      const after = afterId ? DB.getById('workRequests', afterId) : null;
+      const beforeOrder = before?.boardOrder;
+      const afterOrder = after?.boardOrder;
+      if (typeof beforeOrder === 'number' && typeof afterOrder === 'number') {
+        return (beforeOrder + afterOrder) / 2;
+      }
+      if (typeof beforeOrder === 'number') return beforeOrder + 1000;
+      if (typeof afterOrder === 'number') return afterOrder - 1000;
+      const maxOrder = Math.max(0, ...cards.map(c => DB.getById('workRequests', c.dataset.wrId)?.boardOrder || 0));
+      return maxOrder + 1000;
+    }
+
     function handleDragOver(e) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
@@ -2600,6 +2689,7 @@ const Workflow = {
         } else {
           updatePlaceholder(cardContainer, e.clientY);
         }
+        updateDragAutoScroll(e.clientY, cardContainer);
       }
     }
 
@@ -2614,6 +2704,7 @@ const Workflow = {
 
     function handleDrop(e) {
       e.preventDefault();
+      endDragAutoScroll();
       const cardContainer = getTargetContainer(e.currentTarget);
       const col = cardContainer?.closest('.board-column-v2');
       if (!col) return;
@@ -2623,9 +2714,35 @@ const Workflow = {
       if (!wrId || !targetStatus) return;
       const wr = DB.getById('workRequests', wrId);
       if (!wr) return;
-      if (wr.status === targetStatus) return;
-      if (!canApprove) {
+
+      const isPhaseChange = wr.status !== targetStatus;
+      if (isPhaseChange && !canApprove) {
         this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
+        return;
+      }
+
+      const applyMove = () => {
+        const placeholder = document.querySelector('.board-card-v2.drag-placeholder');
+        const draggedCard = document.querySelector(`.board-card-v2.compact.dragging`);
+        const newBoardOrder = computeDropBoardOrder(cardContainer, wrId);
+        const changes = { boardOrder: newBoardOrder };
+        if (isPhaseChange) {
+          changes.status = targetStatus;
+          changes.updatedAt = new Date().toISOString();
+        }
+        DB.update('workRequests', wrId, changes);
+        if (placeholder && draggedCard) {
+          placeholder.parentElement.insertBefore(draggedCard, placeholder.nextSibling);
+          draggedCard.classList.remove('dragging');
+          placeholder.remove();
+        }
+        if (isPhaseChange) {
+          App.handleRoute();
+        }
+      };
+
+      if (!isPhaseChange) {
+        applyMove();
         return;
       }
 
@@ -2640,18 +2757,7 @@ const Workflow = {
         return;
       }
 
-      this.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, () => {
-        // Move the dragged card DOM to the placeholder position for instant visual feedback
-        const placeholder = document.querySelector('.board-card-v2.drag-placeholder');
-        const draggedCard = document.querySelector(`.board-card-v2.compact.dragging`);
-        if (placeholder && draggedCard) {
-          placeholder.parentElement.insertBefore(draggedCard, placeholder.nextSibling);
-          draggedCard.classList.remove('dragging');
-          placeholder.remove();
-        }
-        DB.update('workRequests', wrId, { status: targetStatus, updatedAt: new Date().toISOString() });
-        App.handleRoute();
-      }, 'success');
+      this.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
     }
 
     let cardNumber = 1;
@@ -2660,7 +2766,14 @@ const Workflow = {
       const col = el('div', { class: 'board-column-v2', 'data-target-status': phase.targetStatus });
       col.style.setProperty('--column-phase-color', phase.color);
 
-      const colWrs = wrs.filter(wr => phase.statuses.includes(wr.status));
+      const colWrs = wrs
+        .filter(wr => phase.statuses.includes(wr.status))
+        .sort((a, b) => {
+          const oa = a.boardOrder || 0;
+          const ob = b.boardOrder || 0;
+          if (oa !== ob) return oa - ob;
+          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+        });
 
       const header = el('div', { class: 'board-column-header-v2' });
       const titleWrap = el('div', { class: 'board-column-title' });
@@ -4659,6 +4772,11 @@ const Workflow = {
 
     if (!this.editingId) {
       record.requestedBy = Auth.user.id;
+      const maxOrder = Math.max(0, ...DB.getAll('workRequests').map(r => r.boardOrder || 0));
+      record.boardOrder = maxOrder + 1000;
+    } else {
+      const existingWr = DB.getById('workRequests', this.editingId);
+      record.boardOrder = existingWr?.boardOrder ?? 0;
     }
 
     // Collect tasks from rows
@@ -9248,6 +9366,7 @@ const Workflow = {
     const titleSuffix = now.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
     const dueDate = new Date(now.getTime() + (template.schedule === 'quarterly' ? 90 : 30) * 86400000);
 
+    const maxOrder = Math.max(0, ...DB.getAll('workRequests').map(r => r.boardOrder || 0));
     const workRequest = {
       id: generateSequentialId('wr', 'workRequests'),
       title: `${template.name} (${titleSuffix})`,
@@ -9258,7 +9377,8 @@ const Workflow = {
       entity: template.entity,
       status: 'Draft',
       createdAt: nowIso,
-      updatedAt: nowIso
+      updatedAt: nowIso,
+      boardOrder: maxOrder + 1000
     };
     DB.insert('workRequests', workRequest);
 

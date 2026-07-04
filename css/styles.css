@@ -2935,10 +2935,11 @@ tbody tr:hover {
   text-overflow: ellipsis;
 }
 
-/* 3. Description */
+/* 3. Description (client name) */
 .board-card-v2.compact .card-v2-desc {
   font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  font-weight: 600;
+  color: var(--color-text);
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2946,8 +2947,10 @@ tbody tr:hover {
   overflow: hidden;
 }
 
+/* 3b. Additional detail (work-request description) */
 .board-card-v2.compact .card-v2-detail {
   font-size: 0.75rem;
+  font-style: italic;
   color: var(--color-text-muted);
   line-height: 1.4;
   display: -webkit-box;

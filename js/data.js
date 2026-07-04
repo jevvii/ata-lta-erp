@@ -1625,7 +1625,7 @@ const seedData = {
 // ============================================================
 
 const DB = {
-  SCHEMA_VERSION: 13,
+  SCHEMA_VERSION: 14,
   _pendingWrIdsCache: null,
 
   init() {
@@ -1641,10 +1641,12 @@ const DB = {
         if (oldVersion < 11) this.migrateV10ToV11();
         if (oldVersion < 12) this.migrateV11ToV12();
         if (oldVersion < 13) this.migrateV12ToV13();
+        if (oldVersion < 14) this.migrateV13ToV14();
       } else if (oldVersion === 0) {
         this.resetToSeed();
       }
     }
+    this.ensureWorkRequestBoardOrder();
   },
 
   migrateV2ToV3() {
@@ -1828,6 +1830,34 @@ const DB = {
       this.save('operationsRequests', []);
     }
     localStorage.setItem('erp_schema_version', '13');
+  },
+
+  migrateV13ToV14() {
+    this.ensureWorkRequestBoardOrder();
+    localStorage.setItem('erp_schema_version', '14');
+  },
+
+  ensureWorkRequestBoardOrder() {
+    const wrs = this.getAll('workRequests');
+    const hasMissing = wrs.some(wr => typeof wr.boardOrder !== 'number');
+    if (!hasMissing) return;
+    const sorted = [...wrs].sort((a, b) => {
+      const ta = new Date(a.createdAt || 0).getTime();
+      const tb = new Date(b.createdAt || 0).getTime();
+      if (ta !== tb) return ta - tb;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    const orderById = new Map();
+    sorted.forEach((wr, i) => { orderById.set(wr.id, (i + 1) * 1000); });
+    const updated = wrs.map(wr => {
+      const clean = { ...wr };
+      delete clean.isPendingApproval;
+      if (typeof clean.boardOrder !== 'number') {
+        clean.boardOrder = orderById.get(wr.id);
+      }
+      return clean;
+    });
+    this.save('workRequests', updated);
   },
 
   getAll(table) {
