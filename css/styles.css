@@ -2624,13 +2624,19 @@ tbody tr:hover {
 }
 
 .board-column-dot {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--column-phase-color);
+}
+
+.board-column-dot svg {
+  width: 14px;
+  height: 14px;
 }
 
 .board-column-count {
@@ -3049,6 +3055,16 @@ tbody tr:hover {
   top: calc(100% + 4px);
 }
 
+.board-card-v2.compact .action-menu-list.edge-left {
+  right: auto;
+  left: -6px;
+}
+
+.board-card-v2.compact .action-menu-list.edge-right {
+  right: -6px;
+  left: auto;
+}
+
 .board-card-v2.compact .action-menu-list .action-menu-item {
   padding: var(--space-2) var(--space-3);
   font-size: 0.75rem;
@@ -3226,6 +3242,19 @@ tbody tr:hover {
 .board-column-v2.drag-over .board-cards-scroll {
   background: color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 96%);
   border-radius: 0 0 var(--radius-md, 12px) var(--radius-md, 12px);
+}
+
+.board-card-v2.drag-placeholder {
+  height: 2px;
+  min-height: 2px;
+  padding: 0;
+  margin: 8px 0;
+  border: none;
+  border-radius: 1px;
+  background: var(--color-primary);
+  box-shadow: none;
+  pointer-events: none;
+  opacity: 1;
 }
 
 .board-column-v2.collapsed {

@@ -2478,10 +2478,13 @@ const Workflow = {
     }
 
     function statusIconSvg(phase) {
+      const color = escapeHtml(phase.color);
       if (phase.icon === 'check') {
-        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${phase.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        // Moon-phase check icon: crescent-like circle with a check inside.
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="20 6 9 17 4 12"/></svg>`;
       }
-      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="${phase.color}"><circle cx="12" cy="12" r="6"/></svg>`;
+      // Moon-phase crescent icon.
+      return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 1 0 0 18 7 7 0 0 1 0-18z" fill="${color}"/></svg>`;
     }
 
     let dragSrcWrId = null;
@@ -2495,8 +2498,47 @@ const Workflow = {
 
     function handleDragEnd(e) {
       this.classList.remove('dragging');
-      document.querySelectorAll('.board-column-v2.drag-over').forEach(c => c.classList.remove('drag-over'));
+      clearDragIndicators();
       dragSrcWrId = null;
+    }
+
+    function clearDragIndicators() {
+      document.querySelectorAll('.board-column-v2.drag-over').forEach(c => c.classList.remove('drag-over'));
+      document.querySelectorAll('.board-card-v2.drag-placeholder').forEach(p => p.remove());
+    }
+
+    function getDragPlaceholder() {
+      let placeholder = document.querySelector('.board-card-v2.drag-placeholder');
+      if (!placeholder) {
+        placeholder = el('div', { class: 'board-card-v2 compact drag-placeholder' });
+      }
+      return placeholder;
+    }
+
+    function updatePlaceholder(container, y) {
+      const cards = Array.from(container.querySelectorAll('.board-card-v2.compact:not(.dragging):not(.drag-placeholder):not(.add-wr-card)'));
+      let target = null;
+      let after = false;
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        if (y < mid) { target = card; after = false; break; }
+        target = card;
+        after = true;
+      }
+      const placeholder = getDragPlaceholder();
+      if (target) {
+        if (after) {
+          container.insertBefore(placeholder, target.nextSibling);
+        } else {
+          container.insertBefore(placeholder, target);
+        }
+      } else {
+        // Append before add-wr-card if present, otherwise at end
+        const addCard = container.querySelector('.board-card-v2.add-wr-card');
+        if (addCard) container.insertBefore(placeholder, addCard);
+        else container.appendChild(placeholder);
+      }
     }
 
     function handleDragOver(e) {
@@ -2504,8 +2546,11 @@ const Workflow = {
       e.dataTransfer.dropEffect = 'move';
       const col = this.closest('.board-column-v2');
       if (col && !col.classList.contains('drag-over')) {
-        document.querySelectorAll('.board-column-v2.drag-over').forEach(c => c.classList.remove('drag-over'));
+        clearDragIndicators();
         col.classList.add('drag-over');
+      }
+      if (e.currentTarget.classList.contains('board-cards-scroll')) {
+        updatePlaceholder(e.currentTarget, e.clientY);
       }
     }
 
@@ -2513,6 +2558,7 @@ const Workflow = {
       const col = this.closest('.board-column-v2');
       if (col && !col.contains(e.relatedTarget)) {
         col.classList.remove('drag-over');
+        document.querySelectorAll('.board-card-v2.drag-placeholder').forEach(p => p.remove());
       }
     }
 
@@ -2569,45 +2615,6 @@ const Workflow = {
         actionsWrap.appendChild(addBtn);
       }
 
-      // Header three-dots menu.
-      const menuBtn = el('button', {
-        class: 'board-column-menu',
-        type: 'button',
-        'aria-label': 'Column options',
-        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>'
-      });
-      const colMenu = el('div', { class: 'action-menu-list hidden' });
-
-      if (phase.key === 'new' && canEdit) {
-        const addMenuItem = el('button', {
-          class: 'action-menu-item',
-          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Work Request'
-        });
-        addMenuItem.addEventListener('click', (e) => {
-          e.stopPropagation();
-          colMenu.classList.remove('open'); colMenu.classList.add('hidden');
-          openNewWrForm.call(this);
-        });
-        colMenu.appendChild(addMenuItem);
-      }
-
-      const collapseItem = el('button', {
-        class: 'action-menu-item',
-        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg> Collapse column'
-      });
-      collapseItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        colMenu.classList.remove('open'); colMenu.classList.add('hidden');
-        col.classList.toggle('collapsed');
-      });
-      colMenu.appendChild(collapseItem);
-
-      menuBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleMenu(colMenu);
-      });
-      actionsWrap.appendChild(menuBtn);
-      actionsWrap.appendChild(colMenu);
       header.appendChild(actionsWrap);
       col.appendChild(header);
 
@@ -2661,7 +2668,9 @@ const Workflow = {
           'Low': { label: 'Low', cls: 'card-v2-priority-low' }
         }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
 
-        const description = client?.name || '—';
+        // Card description: prefer WR description, fall back to client name.
+        const wrDescription = (wr.description || '').trim();
+        const description = wrDescription || client?.name || '';
 
         const allChecklistItems = tasks.flatMap(t => t.checklist || []);
         const documentItems = allChecklistItems.filter(c => c.category === 'document');
