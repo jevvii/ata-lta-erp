@@ -4757,13 +4757,13 @@ const Workflow = {
     // Routing dependency checklist — shows blockers + actionable hints
     if (ts && !ts.canTransition && ts.missing && ts.missing.length > 0 && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
       const blockWrapper = el('div', { class: 'routing-block blocked' });
-      const depPanel = el('div', { style: 'width: 100%;' });
-      depPanel.appendChild(el('div', {
+      const title = el('div', {
         html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> <strong>Routing blocked</strong> — Resolve these to route to ' + (ts.nextPhase || 'next phase') + ':',
         class: 'routing-title',
         style: 'color:var(--fg);'
-      }));
-      const depList = el('ul', { class: 'routing-list', style: 'color:var(--muted);' });
+      });
+      blockWrapper.appendChild(title);
+      const depList = el('ul', { class: 'routing-list', style: 'color:var(--muted); width:100%; margin-top:8px;' });
       ts.missing.forEach(m => {
         const li = el('li');
         li.appendChild(el('span', { text: m, style: 'font-weight:600;' }));
@@ -4788,36 +4788,31 @@ const Workflow = {
         }
         depList.appendChild(li);
       });
-      depPanel.appendChild(depList);
-      blockWrapper.appendChild(depPanel);
+      blockWrapper.appendChild(depList);
       lifecycleCard.appendChild(blockWrapper);
     } else if (ts && ts.canTransition && ts.nextPhase && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
       const readyWrapper = el('div', { class: 'routing-block ready' });
-      const readyPanel = el('div', { style: 'width: 100%;' });
-      readyPanel.appendChild(el('div', {
+      readyWrapper.appendChild(el('div', {
         html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> <strong>Ready to route</strong> — All requirements met. Click "Route to ' + ts.nextPhase + '" above to proceed.',
         class: 'routing-title'
       }));
-      readyWrapper.appendChild(readyPanel);
       lifecycleCard.appendChild(readyWrapper);
     }
 
     if (wr.isPendingApproval) {
       const pendingWrapper = el('div', { class: 'routing-block blocked' });
-      const msgPanel = el('div', { style: 'width: 100%;' });
-      msgPanel.appendChild(el('div', {
+      pendingWrapper.appendChild(el('div', {
         html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> This work request is pending approval. Actions are disabled until it\'s approved.',
         class: 'routing-title',
         style: 'color:#d97706;'
       }));
-      pendingWrapper.appendChild(msgPanel);
       lifecycleCard.appendChild(pendingWrapper);
     }
 
     container.appendChild(lifecycleCard);
 
     // Task List (Grouped div redesign)
-    const listWrapper = el('div', { class: 'task-list', id: 'taskList' });
+    const listWrapper = el('div', { class: 'task-list task-list-no-card', id: 'taskList' });
     
     // Default Sorting: Priority > Due Date > Completed at bottom
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -5617,10 +5612,10 @@ const Workflow = {
       }
 
       if (this.taskViewMode === 'list') {
-        const list = el('div', { class: 'list-view operations-list-view', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-2);' });
+        const list = el('div', { class: 'list-view task-list-no-card operations-list-view', style: 'margin-top: 16px; display: flex; flex-direction: column; gap: var(--space-2);' });
         
         filteredTasks.forEach(t => {
-          const row = el('div', { class: 'list-item', style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
+          const row = el('div', { class: 'list-item task-list-row-flat', style: 'cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);' });
           
           if (window.SidePaneInstance && window.SidePaneInstance.isOpen() && window.SidePaneInstance.recordId === t.id) {
             row.classList.add('side-pane-active');
