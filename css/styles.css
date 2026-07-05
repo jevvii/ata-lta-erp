@@ -2391,7 +2391,7 @@ tbody tr:hover {
 }
 
 .filters-bar .form-select,
-.filters-bar input:not([type="checkbox"]) {
+.filters-bar input:not([type="checkbox"]):not(.jira-filter-search):not(.jira-filter-date-input) {
   min-width: 120px;
   height: 34px;
   min-height: 34px !important;
