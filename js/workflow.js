@@ -2267,7 +2267,7 @@ const Workflow = {
         dateWrap.appendChild(dateInput);
         list.appendChild(dateWrap);
 
-        if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
+        if (!dateInput.dataset.mdpAttached && typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
           setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
         }
       }
@@ -2390,7 +2390,7 @@ const Workflow = {
         e.stopPropagation();
         if (getActiveFilterCount() === 0) return;
         Object.keys(activeFilters).forEach(cat => activeFilters[cat].clear());
-        saveCurrentFilters();
+        App.clearSavedFilters('operations');
         updateFilterUI();
         refresh();
         updateToolbar();
@@ -2465,7 +2465,6 @@ const Workflow = {
     clearFiltersBtn.addEventListener('click', () => {
       Object.keys(activeFilters).forEach(cat => activeFilters[cat].clear());
       App.clearSavedFilters('operations');
-      saveCurrentFilters();
       updateFilterUI();
       refresh();
       updateToolbar();
