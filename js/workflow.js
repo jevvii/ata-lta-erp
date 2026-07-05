@@ -2200,60 +2200,89 @@ const Workflow = {
       const searchInput = filterDropdown.querySelector('.jira-filter-search');
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-      if (selectedCategory === 'dueDate') {
-        const customDateWrap = el('div', { class: 'jira-filter-datepicker-wrap' });
-        customDateWrap.appendChild(el('label', { class: 'jira-filter-datepicker-label', text: 'Select specific date' }));
+      let visibleCount = 0;
+      const allOptions = options.slice();
 
+      if (selectedCategory === 'dueDate') {
         let activeCustomDate = '';
         activeFilters.dueDate.forEach(val => {
           if (val.startsWith('DATE:')) activeCustomDate = val.slice(5);
         });
 
-        const dateInput = el('input', {
-          type: 'date',
-          class: 'jira-filter-date-input',
-          value: activeCustomDate
-        });
-
-        dateInput.addEventListener('change', (e) => {
-          e.stopPropagation();
-          const val = dateInput.value;
-          Array.from(activeFilters.dueDate).forEach(v => {
-            if (v.startsWith('DATE:')) activeFilters.dueDate.delete(v);
+        if (activeCustomDate) {
+          const formatted = typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.formatDisplay === 'function' ? MaterialDatePicker.formatDisplay(activeCustomDate) : activeCustomDate;
+          allOptions.push({
+            value: `DATE:${activeCustomDate}`,
+            label: `Specific: ${formatted || activeCustomDate}`,
+            isCustomDate: true
           });
-          if (val) {
-            activeFilters.dueDate.add(`DATE:${val}`);
-          }
-          saveCurrentFilters();
-          updateFilterUI();
-          refresh();
-          updateToolbar();
-        });
-
-        customDateWrap.appendChild(dateInput);
-        list.appendChild(customDateWrap);
-
-        if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
-          setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
+        } else {
+          allOptions.push({
+            value: '__SELECT_DATE__',
+            label: 'Select date',
+            isDatePickerTrigger: true
+          });
         }
-      }
-
-      let visibleCount = 0;
-      const allOptions = options.slice();
-      if (selectedCategory === 'dueDate') {
-        activeFilters.dueDate.forEach(val => {
-          if (val.startsWith('DATE:')) {
-            const rawDate = val.slice(5);
-            const formatted = typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.formatDisplay === 'function' ? MaterialDatePicker.formatDisplay(rawDate) : rawDate;
-            allOptions.unshift({ value: val, label: `Specific: ${formatted || rawDate}` });
-          }
-        });
       }
 
       if (allOptions.length === 0) {
         list.appendChild(el('div', { class: 'jira-filter-values-empty', text: 'No results' }));
       } else {
         allOptions.forEach(opt => {
+          if (opt.isDatePickerTrigger) {
+            const isVisible = !query || 'select date'.includes(query);
+            if (isVisible) visibleCount++;
+
+            const row = el('button', {
+              type: 'button',
+              class: 'jira-filter-value-item jira-filter-datepicker-trigger' + (isVisible ? '' : ' hidden')
+            });
+            const checkbox = el('input', { type: 'checkbox' });
+            checkbox.checked = false;
+            checkbox.addEventListener('click', (e) => e.stopPropagation());
+
+            const label = el('span', { text: opt.label });
+
+            const dateInput = el('input', { type: 'date', style: 'display:none;' });
+            dateInput.addEventListener('change', (e) => {
+              e.stopPropagation();
+              const val = dateInput.value;
+              Array.from(activeFilters.dueDate).forEach(v => {
+                if (v.startsWith('DATE:')) activeFilters.dueDate.delete(v);
+              });
+              if (val) {
+                activeFilters.dueDate.add(`DATE:${val}`);
+              }
+              saveCurrentFilters();
+              updateFilterUI();
+              refresh();
+              updateToolbar();
+            });
+
+            row.appendChild(checkbox);
+            row.appendChild(label);
+            row.appendChild(dateInput);
+
+            if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
+              setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
+            }
+
+            row.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const mdpWrapper = dateInput.closest('.mdp-wrapper');
+              if (mdpWrapper) {
+                mdpWrapper.click();
+              } else if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.openPicker === 'function') {
+                MaterialDatePicker.openPicker(dateInput, dateInput._mdpDisplay || dateInput);
+              } else {
+                dateInput.click();
+              }
+            });
+
+            list.appendChild(row);
+            return;
+          }
+
           const isChecked = activeFilters[selectedCategory].has(opt.value);
           const isVisible = !query || opt.label.toLowerCase().includes(query);
           if (isVisible) visibleCount++;
@@ -2272,7 +2301,9 @@ const Workflow = {
 
           row.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (activeFilters[selectedCategory].has(opt.value)) {
+            if (opt.isCustomDate) {
+              activeFilters.dueDate.delete(opt.value);
+            } else if (activeFilters[selectedCategory].has(opt.value)) {
               activeFilters[selectedCategory].delete(opt.value);
             } else {
               activeFilters[selectedCategory].add(opt.value);
@@ -2488,7 +2519,14 @@ const Workflow = {
     if (!this._jiraToolbarClickListener) {
       this._jiraToolbarClickListener = true;
       document.addEventListener('click', (e) => {
-        if (!e.target.closest('.jira-group-wrap') && !e.target.closest('.jira-filter-wrap')) {
+        if (
+          !e.target.closest('.jira-group-wrap') &&
+          !e.target.closest('.jira-filter-wrap') &&
+          !e.target.closest('.mdp-overlay') &&
+          !e.target.closest('.mdp-dialog') &&
+          !e.target.closest('.mdp-wrapper') &&
+          !e.target.closest('.mdp-container')
+        ) {
           document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
         }
       });

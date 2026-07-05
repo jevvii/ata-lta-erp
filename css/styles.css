@@ -12299,8 +12299,9 @@ html.loading-active #loading-screen:not(.hidden) {
   display: flex;
   flex-direction: column;
   width: 450px;
-  min-height: 360px;
-  max-height: 480px;
+  height: 280px;
+  min-height: 280px;
+  max-height: 280px;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.18), 0 8px 16px -6px rgba(0, 0, 0, 0.08);
