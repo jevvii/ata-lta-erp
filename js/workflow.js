@@ -114,6 +114,22 @@ const Workflow = {
     return this.isCompleted(itemOrTask) ? 'is-completed' : '';
   },
 
+  getWorkRequestAssigneeNames(r) {
+    const names = new Set();
+    const assignedUser = r.assignedTo ? DB.getById('users', r.assignedTo) : null;
+    if (assignedUser?.name) names.add(assignedUser.name);
+    const tasks = (this._tempTaskMap || buildTaskMap())[r.id] || [];
+    tasks.forEach(t => {
+      if (t.assigneeId) {
+        const u = DB.getById('users', t.assigneeId);
+        if (u?.name) names.add(u.name);
+      }
+      if (t.assigneeName) names.add(t.assigneeName);
+      (t.coAssignees || []).forEach(n => { if (n) names.add(n); });
+    });
+    return names;
+  },
+
   cleanup() {
     if (this._jiraToolbarKeydownListener) {
       document.removeEventListener('keydown', this._jiraToolbarKeydownListener);
@@ -123,7 +139,10 @@ const Workflow = {
       document.removeEventListener('click', this._jiraToolbarClickListener);
       this._jiraToolbarClickListener = null;
     }
-    document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+    const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
+    if (operationsContainer) {
+      operationsContainer.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+    }
   },
 
   standardTaskTemplates: [
@@ -2097,29 +2116,13 @@ const Workflow = {
       });
     };
 
-    const getWorkRequestAssigneeNames = (r) => {
-      const names = new Set();
-      const assignedUser = r.assignedTo ? DB.getById('users', r.assignedTo) : null;
-      if (assignedUser?.name) names.add(assignedUser.name);
-      const tasks = (this._tempTaskMap || buildTaskMap())[r.id] || [];
-      tasks.forEach(t => {
-        if (t.assigneeId) {
-          const u = DB.getById('users', t.assigneeId);
-          if (u?.name) names.add(u.name);
-        }
-        if (t.assigneeName) names.add(t.assigneeName);
-        (t.coAssignees || []).forEach(n => { if (n) names.add(n); });
-      });
-      return names;
-    };
-
     const applyFilters = (wrs) => {
       let result = wrs.slice();
 
       if (activeFilters.assignee.size > 0) {
         const hasUnassigned = activeFilters.assignee.has('__UNASSIGNED__');
         result = result.filter(r => {
-          const names = getWorkRequestAssigneeNames(r);
+          const names = this.getWorkRequestAssigneeNames(r);
           if (names.size === 0) return hasUnassigned;
           return Array.from(names).some(name => activeFilters.assignee.has(name));
         });
@@ -2492,7 +2495,8 @@ const Workflow = {
           const isFilterSearch = document.activeElement?.classList?.contains('jira-filter-search');
           if (isInput && !isFilterSearch) return;
 
-          const activeFilterWrap = document.querySelector('.jira-filter-wrap');
+          const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
+          const activeFilterWrap = operationsContainer ? operationsContainer.querySelector('.jira-filter-wrap') : null;
           if (activeFilterWrap) {
             e.preventDefault();
             const trigger = activeFilterWrap.querySelector('.jira-filter-trigger');
@@ -2509,15 +2513,16 @@ const Workflow = {
         // If the target element was detached during click handling (e.g. datepicker OK/close or re-rendered list item), do NOT treat as outside click
         if (!e.target || !e.target.isConnected) return;
 
+        const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
+        if (!operationsContainer) return;
         if (
-          !e.target.closest('.jira-group-wrap') &&
-          !e.target.closest('.jira-filter-wrap') &&
+          !e.target.closest('.operations-list-page, .operations-tab-page') &&
           !e.target.closest('.mdp-overlay') &&
           !e.target.closest('.mdp-dialog') &&
           !e.target.closest('.mdp-wrapper') &&
           !e.target.closest('.mdp-container')
         ) {
-          document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+          operationsContainer.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
         }
       };
       document.addEventListener('click', this._jiraToolbarClickListener);
@@ -3044,7 +3049,7 @@ const Workflow = {
       // Grouped board: columns are group values, sections are phases.
       const getGroupName = (wr) => {
         if (groupBy === 'assignee') {
-          const names = getWorkRequestAssigneeNames(wr);
+          const names = this.getWorkRequestAssigneeNames(wr);
           if (names.size === 0) return 'Unassigned';
           return Array.from(names).sort().join(', ');
         }
