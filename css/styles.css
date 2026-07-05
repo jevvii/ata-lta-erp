@@ -12298,9 +12298,12 @@ html.loading-active #loading-screen:not(.hidden) {
 .jira-filter-dropdown {
   display: flex;
   flex-direction: column;
-  width: 440px;
-  min-height: 340px;
-  max-height: 460px;
+  width: 450px;
+  min-height: 360px;
+  max-height: 480px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.18), 0 8px 16px -6px rgba(0, 0, 0, 0.08);
 }
 
 .jira-filter-body {
@@ -12311,19 +12314,19 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-filter-categories {
-  width: 150px;
+  width: 160px;
   flex-shrink: 0;
   background: var(--color-bg, #f8fafc);
   border-right: 1px solid var(--color-border, #e2e8f0);
   display: flex;
   flex-direction: column;
-  padding: 6px 0 0 0;
+  padding: 8px 6px 0 6px;
 }
 
 .jira-filter-categories-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   padding: 0;
   flex: 1;
   min-height: 0;
@@ -12335,13 +12338,13 @@ html.loading-active #loading-screen:not(.hidden) {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: none;
   border-left: 3px solid transparent;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--color-text, #1f2937);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
@@ -12353,8 +12356,9 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-filter-category.active {
-  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 92%);
+  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 90%);
   border-left-color: var(--color-primary, #2563eb);
+  border-radius: 4px 6px 6px 4px;
   color: var(--color-primary, #2563eb);
   font-weight: 600;
 }
@@ -12363,13 +12367,13 @@ html.loading-active #loading-screen:not(.hidden) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 999px;
   background: var(--color-border, #e2e8f0);
   color: var(--color-text-muted, #6b7280);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 
@@ -12379,12 +12383,12 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-filter-categories-footer {
-  height: 40px;
-  min-height: 40px;
+  height: 42px;
+  min-height: 42px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 14px;
   border-top: 1px solid var(--color-border, #e2e8f0);
   margin-top: auto;
 }
@@ -12393,7 +12397,7 @@ html.loading-active #loading-screen:not(.hidden) {
   background: transparent;
   border: none;
   color: var(--color-text-muted, #6b7280);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   padding: 0;
@@ -12418,13 +12422,13 @@ html.loading-active #loading-screen:not(.hidden) {
 
 .jira-filter-values-header {
   position: relative;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--color-border, #e2e8f0);
 }
 
 .jira-filter-values-header .jira-filter-search-icon {
   position: absolute;
-  left: 20px;
+  left: 24px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--color-text-muted, #94a3b8);
@@ -12436,13 +12440,13 @@ html.loading-active #loading-screen:not(.hidden) {
 
 .jira-filter-values-header .jira-filter-search {
   width: 100%;
-  height: 30px;
-  padding: 0 10px 0 30px;
+  height: 34px;
+  padding: 0 12px 0 34px;
   border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: 6px;
   background: var(--color-bg, #f8fafc);
   color: var(--color-text, #1f2937);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-family: inherit;
 }
 
@@ -12460,17 +12464,18 @@ html.loading-active #loading-screen:not(.hidden) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 6px;
 }
 
 .jira-filter-datepicker-wrap {
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-border, #e2e8f0);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   background: color-mix(in oklab, var(--color-bg, #f8fafc), transparent 40%);
+  border-radius: 6px;
 }
 
 .jira-filter-datepicker-label {
@@ -12486,21 +12491,22 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-filter-datepicker-wrap .mdp-display {
-  font-size: 0.75rem;
-  height: 28px;
+  font-size: 0.8125rem;
+  height: 32px;
   padding: 0 10px 0 30px;
 }
 
 .jira-filter-value-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--color-text, #1f2937);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   text-align: left;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -12511,31 +12517,31 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-filter-value-item input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   accent-color: var(--color-primary, #2563eb);
   flex-shrink: 0;
   cursor: pointer;
 }
 
 .jira-filter-values-empty {
-  padding: 20px 12px;
+  padding: 24px 14px;
   text-align: center;
   color: var(--color-text-muted, #6b7280);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .jira-filter-values-footer {
-  height: 40px;
-  min-height: 40px;
+  height: 42px;
+  min-height: 42px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 14px;
   border-top: 1px solid var(--color-border, #e2e8f0);
   color: var(--color-text-muted, #6b7280);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   margin-top: auto;
 }
 
@@ -12543,7 +12549,7 @@ html.loading-active #loading-screen:not(.hidden) {
   background: transparent;
   border: none;
   color: var(--color-text-muted, #6b7280);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   padding: 0;
@@ -12560,13 +12566,18 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-filter-global-footer {
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 6px 12px;
+  padding: 0 14px;
   border-top: 1px solid var(--color-border, #e2e8f0);
   background: var(--color-bg, #f8fafc);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted, #64748b);
+}
   color: var(--color-text-muted, #64748b);
 }
   color: var(--color-text-muted, #64748b);
