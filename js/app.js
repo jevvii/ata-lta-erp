@@ -610,6 +610,21 @@ const App = {
     try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
   },
 
+  saveGroupBy(module, groupBy) {
+    const key = `erp_group_${module}`;
+    try { sessionStorage.setItem(key, groupBy); } catch (e) { /* ignore */ }
+  },
+
+  restoreGroupBy(module) {
+    const key = `erp_group_${module}`;
+    try { return sessionStorage.getItem(key) || ''; } catch (e) { return ''; }
+  },
+
+  clearGroupBy(module) {
+    const key = `erp_group_${module}`;
+    try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
+  },
+
   updateStickyOffsets() {
     const activeModule = this.currentModule;
     if (!activeModule) return;

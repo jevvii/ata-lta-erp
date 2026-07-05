@@ -445,6 +445,7 @@ const KanbanBoard = {
     }
 
     // Build columns.
+    let cardCounter = 0;
     columns.forEach(column => {
       const col = el('div', { class: 'board-column-v2', 'data-target-status': column.targetStatus || column.key });
       if (column.color) col.style.setProperty('--column-phase-color', column.color);
@@ -468,7 +469,10 @@ const KanbanBoard = {
       dotEl.innerHTML = buildColumnStatusIcon(column);
       titleWrap.appendChild(dotEl);
       titleWrap.appendChild(el('span', { class: 'board-column-label', text: column.label }));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colItems.length) }));
+      const columnTotal = Array.isArray(column.sections)
+        ? column.sections.reduce((sum, s) => sum + (s.items?.length || 0), 0)
+        : colItems.length;
+      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(columnTotal) }));
       header.appendChild(titleWrap);
 
       const actionsWrap = el('div', { class: 'board-column-actions' });
@@ -503,37 +507,17 @@ const KanbanBoard = {
         col.addEventListener('drop', handleDrop);
       }
 
-      // Optional add-card placeholder at the top of the column.
-      if (column.addCard) {
-        const addCard = el('div', {
-          class: 'board-card-v2 add-card',
-          style: column.addCard.style || 'background: transparent; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: 12px;'
-        });
-        addCard.innerHTML = (column.addCard.icon || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>') + ' ' + escapeHtml(column.addCard.label || 'Add');
-        addCard.addEventListener('click', () => column.addCard.onClick(column));
-        cardContainer.appendChild(addCard);
-      }
-
-      // Empty state inside column when appropriate.
-      const showEmpty = column.emptyState !== false && colItems.length === 0;
-      if (showEmpty) {
-        const emptyCfg = typeof column.emptyState === 'function'
-          ? column.emptyState(column)
-          : (column.emptyState || { variant: 'compact', title: `No ${column.label.toLowerCase()}`, body: '' });
-        cardContainer.appendChild(renderEmptyStateV2(emptyCfg));
-      }
-
-      // Cards
-      colItems.forEach((item, idx) => {
+      // Helper to build and append a single card.
+      const renderCardItem = (item, sectionColumn) => {
         const card = typeof renderCard === 'function'
-          ? renderCard(item, column, idx)
-          : this.buildDefaultCard(item, column, idx);
+          ? renderCard(item, sectionColumn || column, cardCounter++)
+          : this.buildDefaultCard(item, sectionColumn || column, cardCounter++);
         if (!card) return;
         card.dataset.itemId = item.id;
 
         let hasCardMenu = false;
         if (cardMenuItems && typeof cardMenuItems === 'function') {
-          const items = cardMenuItems(item, column);
+          const items = cardMenuItems(item, sectionColumn || column);
           if (items && items.length > 0) {
             this.attachCardMenu(card, items);
             hasCardMenu = true;
@@ -546,7 +530,7 @@ const KanbanBoard = {
           if (moreWrap) moreWrap.style.display = 'none';
         }
 
-        if (dragConfig.enabled && typeof dragConfig.canDrag === 'function' && dragConfig.canDrag(item, column)) {
+        if (dragConfig.enabled && typeof dragConfig.canDrag === 'function' && dragConfig.canDrag(item, sectionColumn || column)) {
           card.draggable = true;
           card.style.cursor = 'grab';
           card.addEventListener('dragstart', handleDragStart);
@@ -554,7 +538,78 @@ const KanbanBoard = {
         }
 
         cardContainer.appendChild(card);
-      });
+      };
+
+      if (Array.isArray(column.sections) && column.sections.length > 0) {
+        // Grouped column layout: each section has its own sticky phase header.
+        col.classList.add('grouped');
+        let hasAnyCard = false;
+
+        column.sections.forEach((section, sectionIdx) => {
+          const sectionColumn = { ...column, sectionKey: section.key, label: section.label || column.label };
+          const secItems = section.items || [];
+          if (secItems.length === 0 && column.emptyState !== false) return;
+
+          hasAnyCard = hasAnyCard || secItems.length > 0;
+          const sectionEl = el('div', { class: 'board-phase-section' });
+          if (section.color) sectionEl.style.setProperty('--column-phase-color', section.color);
+
+          const phaseHeader = el('div', { class: 'board-phase-header' });
+          const phaseTitle = el('div', { class: 'board-phase-label' });
+          const dotEl = el('span', { class: 'board-column-dot' });
+          if (section.icon) {
+            dotEl.innerHTML = typeof section.icon === 'function' ? section.icon(section.color || column.color) : section.icon;
+          } else {
+            dotEl.innerHTML = buildColumnStatusIcon({ key: section.key, color: section.color || column.color, icon: section.icon || 'phase' });
+          }
+          phaseTitle.appendChild(dotEl);
+          phaseTitle.appendChild(el('span', { text: section.label || section.key }));
+          phaseHeader.appendChild(phaseTitle);
+          phaseHeader.appendChild(el('span', { class: 'board-phase-count', text: String(secItems.length) }));
+          sectionEl.appendChild(phaseHeader);
+
+          if (secItems.length === 0) {
+            const emptyCfg = typeof column.emptyState === 'function'
+              ? column.emptyState(sectionColumn)
+              : (column.emptyState || { variant: 'compact', title: `No ${(section.label || section.key).toLowerCase()}`, body: '' });
+            sectionEl.appendChild(renderEmptyStateV2(emptyCfg));
+          } else {
+            secItems.forEach(item => renderCardItem(item, sectionColumn));
+          }
+
+          cardContainer.appendChild(sectionEl);
+        });
+
+        if (!hasAnyCard && column.emptyState !== false) {
+          const emptyCfg = typeof column.emptyState === 'function'
+            ? column.emptyState(column)
+            : (column.emptyState || { variant: 'compact', title: `No ${column.label.toLowerCase()}`, body: '' });
+          cardContainer.appendChild(renderEmptyStateV2(emptyCfg));
+        }
+      } else {
+        // Optional add-card placeholder at the top of the column.
+        if (column.addCard) {
+          const addCard = el('div', {
+            class: 'board-card-v2 add-card',
+            style: column.addCard.style || 'background: transparent; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-sm, 12px); cursor: pointer; border-radius: 12px;'
+          });
+          addCard.innerHTML = (column.addCard.icon || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>') + ' ' + escapeHtml(column.addCard.label || 'Add');
+          addCard.addEventListener('click', () => column.addCard.onClick(column));
+          cardContainer.appendChild(addCard);
+        }
+
+        // Empty state inside column when appropriate.
+        const showEmpty = column.emptyState !== false && colItems.length === 0;
+        if (showEmpty) {
+          const emptyCfg = typeof column.emptyState === 'function'
+            ? column.emptyState(column)
+            : (column.emptyState || { variant: 'compact', title: `No ${column.label.toLowerCase()}`, body: '' });
+          cardContainer.appendChild(renderEmptyStateV2(emptyCfg));
+        }
+
+        // Cards
+        colItems.forEach(item => renderCardItem(item, column));
+      }
 
       col.appendChild(cardContainer);
       board.appendChild(col);

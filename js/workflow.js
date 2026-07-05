@@ -2085,22 +2085,29 @@ const Workflow = {
       });
     };
 
+    const getWorkRequestAssigneeNames = (r) => {
+      const names = new Set();
+      const assignedUser = r.assignedTo ? DB.getById('users', r.assignedTo) : null;
+      if (assignedUser?.name) names.add(assignedUser.name);
+      const tasks = (this._tempTaskMap || buildTaskMap())[r.id] || [];
+      tasks.forEach(t => {
+        if (t.assigneeId) {
+          const u = DB.getById('users', t.assigneeId);
+          if (u?.name) names.add(u.name);
+        }
+        if (t.assigneeName) names.add(t.assigneeName);
+        (t.coAssignees || []).forEach(n => { if (n) names.add(n); });
+      });
+      return names;
+    };
+
     const applyFilters = (wrs) => {
       let result = wrs.slice();
 
       if (activeFilters.assignee.size > 0) {
         const hasUnassigned = activeFilters.assignee.has('__UNASSIGNED__');
         result = result.filter(r => {
-          const assignedUser = r.assignedTo ? DB.getById('users', r.assignedTo) : null;
-          const names = new Set();
-          if (assignedUser?.name) names.add(assignedUser.name);
-          DB.getWhere('tasks', t => t.workRequestId === r.id).forEach(t => {
-            if (t.assigneeId) {
-              const u = DB.getById('users', t.assigneeId);
-              if (u?.name) names.add(u.name);
-            }
-            if (t.assigneeName) names.add(t.assigneeName);
-          });
+          const names = getWorkRequestAssigneeNames(r);
           if (names.size === 0) return hasUnassigned;
           return Array.from(names).some(name => activeFilters.assignee.has(name));
         });
@@ -2486,8 +2493,7 @@ const Workflow = {
 
     // Close dropdowns when clicking outside (setup once)
     if (!this._jiraToolbarClickListener) {
-      this._jiraToolbarClickListener = true;
-      document.addEventListener('click', (e) => {
+      this._jiraToolbarClickListener = (e) => {
         // If the target element was detached during click handling (e.g. datepicker OK/close or re-rendered list item), do NOT treat as outside click
         if (!e.target || !e.target.isConnected) return;
 
@@ -2501,7 +2507,8 @@ const Workflow = {
         ) {
           document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
         }
-      });
+      };
+      document.addEventListener('click', this._jiraToolbarClickListener);
     }
 
     const contentContainer = el('div');
@@ -2554,7 +2561,11 @@ const Workflow = {
         return matchesEntity && r.status !== 'Cancelled';
       });
       const savedFilters = App.restoreFilters('operations');
-      const savedHasFilters = savedFilters && Object.values(savedFilters).some(v => Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '');
+      const filterKeys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate'];
+      const savedHasFilters = savedFilters && filterKeys.some(key => {
+        const v = savedFilters[key];
+        return Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '';
+      });
       hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
@@ -2718,7 +2729,11 @@ const Workflow = {
         return matchesEntity && r.status !== 'Cancelled';
       });
       const savedFilters = App.restoreFilters('operations');
-      const savedHasFilters = savedFilters && Object.values(savedFilters).some(v => Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '');
+      const filterKeys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate'];
+      const savedHasFilters = savedFilters && filterKeys.some(key => {
+        const v = savedFilters[key];
+        return Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '';
+      });
       hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
@@ -3017,8 +3032,9 @@ const Workflow = {
       // Grouped board: columns are group values, sections are phases.
       const getGroupName = (wr) => {
         if (groupBy === 'assignee') {
-          const user = wr.assignedTo ? DB.getById('users', wr.assignedTo) : null;
-          return user?.name || 'Unassigned';
+          const names = getWorkRequestAssigneeNames(wr);
+          if (names.size === 0) return 'Unassigned';
+          return Array.from(names).sort().join(', ');
         }
         if (groupBy === 'client') {
           const client = DB.getById('clients', wr.clientId);
@@ -3079,7 +3095,11 @@ const Workflow = {
         return matchesEntity && r.status !== 'Cancelled';
       });
       const savedFilters = App.restoreFilters('operations');
-      const savedHasFilters = savedFilters && Object.values(savedFilters).some(v => Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '');
+      const filterKeys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate'];
+      const savedHasFilters = savedFilters && filterKeys.some(key => {
+        const v = savedFilters[key];
+        return Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '';
+      });
       hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 

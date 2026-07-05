@@ -12578,10 +12578,6 @@ html.loading-active #loading-screen:not(.hidden) {
   font-size: 0.8125rem;
   color: var(--color-text-muted, #64748b);
 }
-  color: var(--color-text-muted, #64748b);
-}
-  color: var(--color-text-muted, #64748b);
-}
 
 .jira-filter-shortcut-hint {
   display: flex;
