@@ -611,6 +611,15 @@ const App = {
     } catch (e) { return null; }
   },
 
+  hasSavedFilters(module, keys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate']) {
+    const saved = this.restoreFilters(module);
+    if (!saved) return false;
+    return keys.some(key => {
+      const v = saved[key];
+      return Array.isArray(v) ? v.length > 0 : Boolean(v && String(v).trim());
+    });
+  },
+
   clearSavedFilters(module) {
     const key = `erp_filters_${module}`;
     try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }

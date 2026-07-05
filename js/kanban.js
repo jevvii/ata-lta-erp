@@ -530,11 +530,14 @@ const KanbanBoard = {
           if (moreWrap) moreWrap.style.display = 'none';
         }
 
-        if (dragConfig.enabled && typeof dragConfig.canDrag === 'function' && dragConfig.canDrag(item, sectionColumn || column)) {
-          card.draggable = true;
-          card.style.cursor = 'grab';
-          card.addEventListener('dragstart', handleDragStart);
-          card.addEventListener('dragend', handleDragEnd);
+        if (dragConfig.enabled) {
+          const canDragItem = typeof dragConfig.canDrag === 'function' ? dragConfig.canDrag(item, sectionColumn || column) : true;
+          if (canDragItem) {
+            card.draggable = true;
+            card.style.cursor = 'grab';
+            card.addEventListener('dragstart', handleDragStart);
+            card.addEventListener('dragend', handleDragEnd);
+          }
         }
 
         cardContainer.appendChild(card);
@@ -557,9 +560,12 @@ const KanbanBoard = {
           const phaseHeader = el('div', { class: 'board-phase-header' });
           const phaseTitle = el('div', { class: 'board-phase-label' });
           const dotEl = el('span', { class: 'board-column-dot' });
-          const iconHtml = section.icon
+          const rawIconHtml = section.icon
             ? (typeof section.icon === 'function' ? section.icon(section.color || column.color) : section.icon)
             : buildColumnStatusIcon({ key: section.key, color: section.color || column.color, icon: section.icon || 'phase' });
+          const iconHtml = (typeof rawIconHtml === 'string' && rawIconHtml.trim().startsWith('<svg') && !rawIconHtml.includes('<script'))
+            ? rawIconHtml
+            : buildColumnStatusIcon({ key: section.key, color: section.color || column.color, icon: 'phase' });
           // Sanitize icon SVG to avoid XSS from column/section config.
           dotEl.textContent = '';
           const iconFragment = document.createRange().createContextualFragment(iconHtml);

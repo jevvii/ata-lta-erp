@@ -2579,12 +2579,7 @@ const Workflow = {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
         return matchesEntity && r.status !== 'Cancelled';
       });
-      const savedFilters = App.restoreFilters('operations');
-      const filterKeys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate'];
-      const savedHasFilters = savedFilters && filterKeys.some(key => {
-        const v = savedFilters[key];
-        return Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '';
-      });
+      const savedHasFilters = App.hasSavedFilters('operations');
       hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
@@ -2747,12 +2742,7 @@ const Workflow = {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
         return matchesEntity && r.status !== 'Cancelled';
       });
-      const savedFilters = App.restoreFilters('operations');
-      const filterKeys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate'];
-      const savedHasFilters = savedFilters && filterKeys.some(key => {
-        const v = savedFilters[key];
-        return Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '';
-      });
+      const savedHasFilters = App.hasSavedFilters('operations');
       hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
@@ -3113,12 +3103,7 @@ const Workflow = {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
         return matchesEntity && r.status !== 'Cancelled';
       });
-      const savedFilters = App.restoreFilters('operations');
-      const filterKeys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate'];
-      const savedHasFilters = savedFilters && filterKeys.some(key => {
-        const v = savedFilters[key];
-        return Array.isArray(v) ? v.length > 0 : v && String(v).trim() !== '';
-      });
+      const savedHasFilters = App.hasSavedFilters('operations');
       hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
