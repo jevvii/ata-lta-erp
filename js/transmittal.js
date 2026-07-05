@@ -549,11 +549,10 @@ const Transmittal = {
           label: st,
           targetStatus: st,
           color: statusColors[st] || '#cbd5e1',
-          emptyState: st === 'Draft' && canCreate ? false : { variant: 'compact', title: 'No transmittals', body: '' }
+          emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
         };
         if (st === 'Draft' && canCreate) {
           col.addButton = { label: 'Add Transmittal', onClick: () => self.showForm() };
-          col.addCard = { label: 'Add Transmittal', onClick: () => self.showForm() };
         }
         return col;
       }),

@@ -561,13 +561,11 @@ const Billing = {
           key: st,
           label: st,
           targetStatus: st,
-          color: statusColors[st] || '#cbd5e1'
+          color: statusColors[st] || '#cbd5e1',
+          emptyState: { variant: 'compact', title: 'No invoices', body: '' }
         };
         if (st === 'Draft' && canEdit) {
           col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
-          col.addCard = { label: 'Add Billing', onClick: () => self.showForm() };
-        } else if (st !== 'Draft') {
-          col.emptyState = { variant: 'compact', title: 'No invoices', body: '' };
         }
         return col;
       }),

@@ -755,11 +755,10 @@ const Disbursement = {
           targetStatus: st,
           color: statusColors[st] || '#cbd5e1',
           statuses: st === 'Pending' ? this.PENDING_APPROVAL_STATUSES : [st],
-          emptyState: st === 'Draft' && canCreate ? false : { variant: 'compact', title: 'No expenses', body: '' }
+          emptyState: { variant: 'compact', title: 'No expenses', body: '' }
         };
         if (st === 'Draft' && canCreate) {
           col.addButton = { label: 'Add Expense', onClick: () => self.showForm() };
-          col.addCard = { label: 'Add Expense', onClick: () => self.showForm() };
         }
         return col;
       }),

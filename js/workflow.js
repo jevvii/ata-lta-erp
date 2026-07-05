@@ -2452,16 +2452,10 @@ const Workflow = {
         const col = {
           ...phase,
           icon: 'phase',
-          emptyState: (isDraft && canEdit)
-            ? false
-            : { variant: 'compact', title: 'No work requests', body: '' }
+          emptyState: { variant: 'compact', title: 'No work requests', body: '' }
         };
         if (isDraft && canEdit) {
           col.addButton = { label: 'Add Work Request', onClick: openNewWrForm };
-          col.addCard = {
-            label: 'Add Work Request',
-            onClick: openNewWrForm
-          };
         }
         return col;
       }),

@@ -24,6 +24,7 @@
   --color-primary-alpha: rgba(37, 99, 235, 0.08);
   --color-danger: #ef4444;
   --color-success: #10b981;
+  --color-warning: #f59e0b;
   --font-sans: "Poppins", "Inter", system-ui, -apple-system, sans-serif;
   --transition-loading: 0.25s;
   --delay-loading: 0.25s;
