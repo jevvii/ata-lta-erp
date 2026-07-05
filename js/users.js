@@ -113,12 +113,16 @@ const Users = {
     if (!h1) return;
     this.clearNode(h1);
     
+    const canManageUsers = Auth.can('users:view');
+    
     if (this.pendingDetailId || subpage) {
-      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Admin' });
+      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: canManageUsers ? 'Admin' : 'My Submissions' });
       baseLink.addEventListener('click', () => {
         this.pendingDetailId = null;
         this.editingId = null;
-        this.showUserList();
+        if (canManageUsers) {
+          this.showUserList();
+        }
         App.handleRoute();
       });
       h1.appendChild(baseLink);
@@ -132,7 +136,7 @@ const Users = {
       }
       h1.appendChild(document.createTextNode(label));
     } else {
-      h1.appendChild(document.createTextNode('Admin'));
+      h1.appendChild(document.createTextNode(canManageUsers ? 'Admin' : 'My Submissions'));
     }
   },
 
