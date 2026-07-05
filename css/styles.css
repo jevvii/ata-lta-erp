@@ -12144,3 +12144,609 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Scrollbars */
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--color-border); }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Jira-style compact Operations toolbar ─────────────────────────────── */
+
+.jira-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+}
+
+.jira-toolbar .jira-group-trigger,
+.jira-toolbar .jira-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border, #dfdbe3);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #1f2937);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.jira-toolbar .jira-group-trigger:hover,
+.jira-toolbar .jira-filter-trigger:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-toolbar .jira-group-trigger svg,
+.jira-toolbar .jira-filter-trigger svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.jira-toolbar .jira-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.jira-toolbar .jira-clear-filters {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.jira-toolbar .jira-clear-filters:hover {
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-toolbar .view-mode-toggle {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.jira-toolbar .jira-group-wrap .jira-group-dropdown {
+  left: auto;
+  right: 0;
+}
+
+/* Jira dropdown shared shell */
+.jira-dropdown {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 520px;
+  max-width: calc(100vw - 32px);
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.jira-dropdown.hidden {
+  display: none;
+}
+
+/* Group dropdown (simple list) */
+.jira-group-dropdown {
+  min-width: 180px;
+}
+
+.jira-group-dropdown .jira-dropdown-body {
+  padding: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.jira-group-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--color-text, #1f2937);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.jira-group-option:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+}
+
+.jira-group-option.active {
+  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 92%);
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-group-option .checkmark {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary, #2563eb);
+}
+
+/* Filter dropdown two-pane layout */
+.jira-filter-dropdown {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  min-height: 340px;
+  max-height: 460px;
+}
+
+.jira-filter-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+.jira-filter-categories {
+  width: 150px;
+  flex-shrink: 0;
+  background: var(--color-bg, #f8fafc);
+  border-right: 1px solid var(--color-border, #e2e8f0);
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0 0 0;
+}
+
+.jira-filter-categories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.jira-filter-category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text, #1f2937);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.jira-filter-category:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+}
+
+.jira-filter-category.active {
+  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 92%);
+  border-left-color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #2563eb);
+  font-weight: 600;
+}
+
+.jira-filter-category .cat-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-border, #e2e8f0);
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+.jira-filter-category.active .cat-count {
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+}
+
+.jira-filter-categories-footer {
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  margin-top: auto;
+}
+
+.jira-filter-categories-footer .jira-filter-clear-all {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.jira-filter-categories-footer .jira-filter-clear-all:hover:not(.disabled) {
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-filter-categories-footer .jira-filter-clear-all.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.jira-filter-values {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.jira-filter-values-header {
+  position: relative;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.jira-filter-values-header .jira-filter-search-icon {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted, #94a3b8);
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jira-filter-values-header .jira-filter-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px 0 30px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-bg, #f8fafc);
+  color: var(--color-text, #1f2937);
+  font-size: 0.75rem;
+  font-family: inherit;
+}
+
+.jira-filter-values-header .jira-filter-search:focus-visible {
+  outline: none;
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary, #2563eb), transparent 88%);
+}
+
+[data-theme="dark"] .jira-filter-values-header .jira-filter-search-icon {
+  color: var(--color-text-muted);
+}
+
+.jira-filter-values-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.jira-filter-datepicker-wrap {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: color-mix(in oklab, var(--color-bg, #f8fafc), transparent 40%);
+}
+
+.jira-filter-datepicker-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted, #64748b);
+}
+
+.jira-filter-datepicker-wrap .mdp-wrapper {
+  width: 100%;
+}
+
+.jira-filter-datepicker-wrap .mdp-display {
+  font-size: 0.75rem;
+  height: 28px;
+  padding: 0 10px 0 30px;
+}
+
+.jira-filter-value-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text, #1f2937);
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.jira-filter-value-item:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+}
+
+.jira-filter-value-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-primary, #2563eb);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.jira-filter-values-empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.75rem;
+}
+
+.jira-filter-values-footer {
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.75rem;
+  margin-top: auto;
+}
+
+.jira-filter-values-footer .jira-filter-clear-cat {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.jira-filter-values-footer .jira-filter-clear-cat:hover:not(.disabled) {
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-filter-values-footer .jira-filter-clear-cat.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.jira-filter-global-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 12px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-bg, #f8fafc);
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #64748b);
+}
+  color: var(--color-text-muted, #64748b);
+}
+
+.jira-filter-shortcut-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted, #64748b);
+}
+
+.jira-filter-shortcut-hint kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text, #334155);
+  background-color: var(--color-bg-muted, #e2e8f0);
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure toolbar dropdown anchors are positioned correctly */
+.jira-toolbar .jira-group-wrap,
+.jira-toolbar .jira-filter-wrap {
+  position: relative;
+}
+
+/* Operations toolbar overrides */
+.operations-tab-page .toolbar-sticky-container:has(.jira-toolbar) {
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+/* ── Grouped board phase sections (Jira-style sticky headers) ──────────── */
+
+.operations-tab-page {
+  --board-column-header-top: calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + var(--operations-toolbar-height, 0px));
+}
+
+.board-phase-section {
+  margin-bottom: var(--space-3, 12px);
+}
+
+.board-phase-section:last-child {
+  margin-bottom: 0;
+}
+
+.board-phase-header {
+  position: sticky;
+  top: calc(var(--board-column-header-top, 0px) + var(--board-column-header-height, 56px));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-bg-light, #f1f5f9);
+  border-bottom: 1px solid var(--color-border, #cbd5e1);
+  border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: var(--color-text, #0f172a);
+}
+
+.board-phase-header::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--column-phase-color, transparent);
+  border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+}
+
+.board-phase-header .board-phase-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-phase-header .board-phase-count {
+  font-weight: 500;
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.75rem;
+}
+
+/* Make sure grouped columns do not independently scroll so sticky phase headers stack */
+.operations-tab-page .board-column-v2.grouped .board-cards-scroll {
+  overflow-y: visible;
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] .jira-toolbar .jira-group-trigger,
+[data-theme="dark"] .jira-toolbar .jira-filter-trigger {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-toolbar .jira-group-trigger:hover,
+[data-theme="dark"] .jira-toolbar .jira-filter-trigger:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .jira-toolbar .jira-filter-badge {
+  background: var(--color-primary);
+  color: #191919;
+}
+
+[data-theme="dark"] .jira-dropdown {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .jira-filter-categories,
+[data-theme="dark"] .jira-filter-categories-footer,
+[data-theme="dark"] .jira-filter-values-header,
+[data-theme="dark"] .jira-filter-values-footer,
+[data-theme="dark"] .jira-filter-global-footer {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .jira-filter-shortcut-hint kbd {
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .jira-filter-category,
+[data-theme="dark"] .jira-group-option,
+[data-theme="dark"] .jira-filter-value-item {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-filter-category:hover,
+[data-theme="dark"] .jira-group-option:hover,
+[data-theme="dark"] .jira-filter-value-item:hover {
+  background: var(--color-bg-hover);
+}
+
+[data-theme="dark"] .jira-filter-category.active,
+[data-theme="dark"] .jira-group-option.active {
+  background: color-mix(in oklab, var(--color-primary), transparent 85%);
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .jira-filter-values-header .jira-filter-search {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-filter-values-empty {
+  color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .jira-filter-category .cat-count {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .jira-filter-category.active .cat-count {
+  background: var(--color-primary);
+  color: #191919;
+}
+
+[data-theme="dark"] .board-phase-header {
+  background: var(--color-bg-light);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
