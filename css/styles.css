@@ -12729,10 +12729,14 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Sticky wrapper: holds the group title row and phase heading row as one sticky unit */
 .board-group-sticky-wrap {
   position: sticky;
-  top: var(--board-column-header-top, 0);
+  top: calc(var(--board-column-header-top, 0px) - var(--radius-md, 12px));
   z-index: 23;
   background: var(--color-surface, #ffffff);
   border-bottom: 1px solid var(--color-border, #e2e8f0);
+  border-top-left-radius: var(--radius-md, 12px);
+  border-top-right-radius: var(--radius-md, 12px);
+  overflow: hidden;
+  padding-top: var(--radius-md, 12px);
 }
 
 /* Group title row: full-width, sits inside the sticky wrapper */
@@ -12741,9 +12745,6 @@ html.loading-active #loading-screen:not(.hidden) {
   align-items: center;
   height: var(--board-group-title-height, 52px);
   padding: 0 12px;
-  border-top-left-radius: var(--radius-md, 12px);
-  border-top-right-radius: var(--radius-md, 12px);
-  overflow: hidden;
 }
 
 .board-group-title {
