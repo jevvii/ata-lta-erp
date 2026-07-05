@@ -1429,6 +1429,13 @@ tbody tr:hover {
   margin-bottom: 16px;
 }
 
+/* Jira toolbar variant should match other modules' board spacing when not grouped. */
+.operations-tab-page .toolbar-sticky-container:has(.jira-toolbar):not(.grouped-board-active),
+.operations-list-page .toolbar-sticky-container:has(.jira-toolbar):not(.grouped-board-active) {
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
 .operations-tab-page .toolbar-sticky-container .filters-bar,
 .operations-list-page .toolbar-sticky-container .filters-bar {
   position: static;
@@ -12639,6 +12646,15 @@ html.loading-active #loading-screen:not(.hidden) {
   margin-bottom: 12px;
 }
 
+/* For grouped boards, preserve the toolbar container's bottom padding while
+   removing the transparent bottom margin. The solid padding background bridges
+   the gap, and the first group section header sits flush against it. */
+.operations-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar),
+.operations-list-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 /* ── Grouped board phase sections (Jira-style sticky headers) ──────────── */
 
 .operations-tab-page,
@@ -12726,15 +12742,19 @@ html.loading-active #loading-screen:not(.hidden) {
   transform: rotate(-90deg);
 }
 
-/* Sticky wrapper: holds the group title row and phase heading row as one sticky unit */
+.board-group-section {
+  position: relative;
+}
+
+/* Sticky wrapper: holds the group title row and phase heading row as one sticky unit.
+   The top edge is deliberately square so it meets the sticky toolbar bottom without
+   leaving corner gaps; the section's own border-radius still rounds the outer corners. */
 .board-group-sticky-wrap {
   position: sticky;
   top: var(--board-column-header-top, 0);
   z-index: 23;
   background: var(--color-surface, #ffffff);
   border-bottom: 1px solid var(--color-border, #e2e8f0);
-  border-top-left-radius: var(--radius-md, 12px);
-  border-top-right-radius: var(--radius-md, 12px);
   overflow: hidden;
 }
 

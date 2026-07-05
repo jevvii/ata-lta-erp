@@ -140,6 +140,10 @@ const Workflow = {
       document.removeEventListener('click', this._jiraToolbarClickListener);
       this._jiraToolbarClickListener = null;
     }
+    if (this._syncHeaderTopResizeListener) {
+      window.removeEventListener('resize', this._syncHeaderTopResizeListener);
+      this._syncHeaderTopResizeListener = null;
+    }
     const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
     if (operationsContainer) {
       operationsContainer.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
@@ -2552,48 +2556,13 @@ const Workflow = {
     const contentContainer = el('div');
     wrapper.appendChild(contentContainer);
 
-    // Sticky group/phase headers must sit directly beneath the Jira toolbar. Because
-    // the toolbar height changes when filters wrap, compute the real offset and
-    // expose it to the grouped board headers via a CSS variable on the container.
-    const syncHeaderTop = () => {
-      if (!jiraToolbar || !stickyContainer) return;
-      const toolbarStyle = window.getComputedStyle(stickyContainer);
-      const marginTop = parseFloat(toolbarStyle.marginTop) || 0;
-      const paddingTop = parseFloat(toolbarStyle.paddingTop) || 0;
-      const paddingBottom = parseFloat(toolbarStyle.paddingBottom) || 0;
-      const marginBottom = parseFloat(toolbarStyle.marginBottom) || 0;
-      const toolbarHeight = jiraToolbar.offsetHeight || 40;
-      // Account for the full sticky container box (negative margin, paddings, margins)
-      // so grouped headers stick below the toolbar instead of being clipped by it.
-      const headerTopOffset = Math.max(0, -marginTop) + paddingTop + toolbarHeight + paddingBottom + marginBottom;
-      contentContainer.style.setProperty(
-        '--board-column-header-top',
-        'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + headerTopOffset + 'px)'
-      );
-    };
-    requestAnimationFrame(syncHeaderTop);
-    setTimeout(syncHeaderTop, 50);
-
-    if (!this._syncHeaderTopResizeListener) {
-      this._syncHeaderTopResizeListener = () => {
-        const page = document.querySelector('.operations-list-page, .operations-tab-page');
-        const toolbar = page?.querySelector('.jira-toolbar');
-        const board = page?.querySelector('.board-v2, .board-grouped-rows');
-        const container = board?.parentElement;
-        const toolbarContainer = toolbar?.closest('.toolbar-sticky-container');
-        if (toolbar && container && toolbarContainer) {
-          const toolbarStyle = window.getComputedStyle(toolbarContainer);
-          const marginTop = parseFloat(toolbarStyle.marginTop) || 0;
-          const paddingTop = parseFloat(toolbarStyle.paddingTop) || 0;
-          const paddingBottom = parseFloat(toolbarStyle.paddingBottom) || 0;
-          const marginBottom = parseFloat(toolbarStyle.marginBottom) || 0;
-          const toolbarHeight = toolbar.offsetHeight || 40;
-          const headerTopOffset = Math.max(0, -marginTop) + paddingTop + toolbarHeight + paddingBottom + marginBottom;
-          container.style.setProperty('--board-column-header-top', 'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + headerTopOffset + 'px)');
-        }
-      };
-      window.addEventListener('resize', this._syncHeaderTopResizeListener);
-    }
+    // Grouped/phase board headers share the same sticky top as the ungrouped
+    // column headers. Use the module CSS variables so the value stays in sync
+    // when the toolbar wraps or the grouped-board-active class changes.
+    contentContainer.style.setProperty(
+      '--board-column-header-top',
+      'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + var(--operations-toolbar-height, 0px))'
+    );
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
@@ -2623,8 +2592,12 @@ const Workflow = {
 
       const hasActiveFilters = getActiveFilterCount() > 0;
       if (viewMode === 'table') this.refreshTable(contentContainer, wrs, hasActiveFilters);
-      else if (viewMode === 'board') this.refreshBoard(contentContainer, wrs, groupBy);
+      else if (viewMode === 'board') this.refreshBoard(contentContainer, wrs, groupBy, stickyContainer);
       else this.refreshListCompact(contentContainer, wrs, hasActiveFilters);
+
+      // Re-measure sticky offsets after the next paint so toolbar height changes
+      // (grouped-board-active toggle, wrapping filters) are reflected.
+      requestAnimationFrame(() => this.updateStickyOffsets());
     };
 
     refresh();
@@ -2803,7 +2776,7 @@ const Workflow = {
     container.appendChild(table);
   },
 
-  refreshBoard(container, wrs, groupBy = 'none', hasActiveFilters = false) {
+  refreshBoard(container, wrs, groupBy = 'none', hasActiveFilters = false, toolbarContainer = null) {
     if (wrs.length === 0) {
       const entity = Auth.activeEntity;
       const allWrs = DB.getWhere('workRequests', r => {
@@ -3065,6 +3038,7 @@ const Workflow = {
     if (groupBy === 'none') {
       // Normalize per-column board orders so cards render consistently and gaps
       // from deleted/moved cards do not break drop midpoint calculations.
+      toolbarContainer?.classList.remove('grouped-board-active');
       const sortedWrs = [];
       boardPhases.forEach(phase => {
         const phaseWrs = wrs.filter(wr => phase.statuses.includes(wr.status));
@@ -3106,6 +3080,9 @@ const Workflow = {
         drag: dragConfig
       });
     } else {
+      // Grouped board: extend the toolbar background through its bottom margin
+      // so cards cannot be seen through the gap while scrolling.
+      toolbarContainer?.classList.add('grouped-board-active');
       // Grouped board: stacked swimlanes. Each group is a collapsible row with a
       // sticky header that shows the group title and the phase column headings;
       // deeper headers naturally replace earlier sticky ones as the user scrolls.
