@@ -317,7 +317,27 @@ const Disbursement = {
   // ============================================================
   renderList() {
     const entity = Auth.activeEntity;
-    const viewMode = App.getPreferredViewMode('disbursement');
+    let viewMode = App.getPreferredViewMode('disbursement');
+    let groupBy = App.restoreGroupBy('disbursement') || 'none';
+
+    const groupOptions = [
+      { key: 'none', label: 'None' },
+      { key: 'status', label: 'Status', getName: d => d.status || 'No Status' },
+      { key: 'employee', label: 'Employee', getName: d => {
+        const u = DB.getById('users', this.getEmployeeId(d));
+        return u?.name || 'Unassigned';
+      }},
+      { key: 'workRequest', label: 'Work Request', getName: d => {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        return wr?.title || 'No Work Request';
+      }},
+      { key: 'client', label: 'Client', getName: d => {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        const client = wr ? DB.getById('clients', wr.clientId) : null;
+        return client?.name || 'No Client';
+      }},
+      { key: 'fund', label: 'Fund', getName: d => this.getFundSource(d) || 'No Fund' }
+    ];
 
     const wrapper = el('div');
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
@@ -528,6 +548,13 @@ const Disbursement = {
         App.setPreferredViewMode('disbursement', newMode);
         saveCurrentFilters();
         refresh();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: (newGroupBy) => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('disbursement', groupBy);
+        refresh();
       }
     });
 
@@ -537,13 +564,13 @@ const Disbursement = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const refresh = () => this.refreshList(listContainer, activeFilters, viewMode);
+    const refresh = () => this.refreshList(listContainer, activeFilters, viewMode, groupBy, groupOptions, stickyContainer);
     refresh();
 
     return wrapper;
   },
 
-  refreshList(container, activeFilters, viewMode) {
+  refreshList(container, activeFilters, viewMode, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
     let items = DB.getWhere('disbursements', d => (entity === 'ALL' ? Auth.user.entities.includes(d.entity) : d.entity === entity));
@@ -600,7 +627,7 @@ const Disbursement = {
     }
     items.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
-    if (items.length === 0) {
+    if (items.length === 0 && (viewMode !== 'board' || groupBy === 'none')) {
       container.appendChild(el('p', { text: 'No expenses found.', class: 'empty-state' }));
       return;
     }
@@ -608,7 +635,7 @@ const Disbursement = {
     if (viewMode === 'table') {
       this.renderTableView(container, items);
     } else if (viewMode === 'board') {
-      this.renderBoardView(container, items);
+      this.renderBoardView(container, items, groupBy, groupOptions, toolbarContainer);
     } else {
       this.renderCompactListView(container, items);
     }
@@ -676,7 +703,8 @@ const Disbursement = {
     container.appendChild(table);
   },
 
-  renderBoardView(container, items) {
+  renderBoardView(container, items, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
+    toolbarContainer?.classList.remove('grouped-board-active');
     if (items.length === 0) {
       container.appendChild(renderEmptyStateV2({
         variant: 'zero-state',
@@ -729,124 +757,149 @@ const Disbursement = {
       });
     });
 
+    const makeColumns = () => statuses.map(st => {
+      const col = {
+        key: st,
+        label: st,
+        targetStatus: st,
+        color: statusColors[st] || '#cbd5e1',
+        statuses: st === 'Pending' ? self.PENDING_APPROVAL_STATUSES : [st],
+        emptyState: { variant: 'compact', title: 'No expenses', body: '' }
+      };
+      if (st === 'Draft' && canCreate) {
+        col.addButton = { label: 'Add Expense', onClick: () => self.showForm() };
+      }
+      return col;
+    });
+
     let cardNumber = 1;
+
+    const renderCard = (d) => {
+      const emp = DB.getById('users', self.getEmployeeId(d));
+      const source = self.getFundSource(d);
+
+      const statusPriorityClass = {
+        'Draft': 'card-v2-priority-normal',
+        'Pending': 'card-v2-priority-medium',
+        'Approved': 'card-v2-priority-medium',
+        'Release Pending Approval': 'card-v2-priority-medium',
+        'Released': 'card-v2-priority-low',
+        'Rejected': 'card-v2-priority-urgent'
+      }[d.status] || 'card-v2-priority-normal';
+
+      const progressMap = {
+        'Draft': 0,
+        'Pending': 25,
+        'Approved': 50,
+        'Release Pending Approval': 75,
+        'Released': 100,
+        'Rejected': 0
+      };
+      const progress = progressMap[d.status] || 0;
+
+      const descParts = [];
+      if (d.linkedWorkRequestId) {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        if (wr) {
+          let linked = wr.title;
+          if (d.linkedTaskId) {
+            const task = DB.getById('tasks', d.linkedTaskId);
+            if (task) linked += ` (Task: ${task.title})`;
+          }
+          descParts.push(linked);
+        }
+      }
+      if (d.fromTemplate) descParts.push('Recurring');
+
+      const card = buildCompactBoardCard({
+        key: 'DIS-' + cardNumber++,
+        progress,
+        statusColor: statusColors[d.status] || '#cbd5e1',
+        title: d.category,
+        description: `${emp?.name || '—'} • ${source}`,
+        detail: descParts.join(' • '),
+        date: d.submittedAt ? formatDate(d.submittedAt) : '',
+        priority: d.status,
+        priorityClass: statusPriorityClass,
+        onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
+      });
+
+      const footerRight = card.querySelector('.card-v2-footer-right');
+      footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);' }));
+      return card;
+    };
+
+    const cardMenuItems = (d) => {
+      const menu = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
+      }];
+      if (canEdit && d.status === 'Draft' && !d.pendingChangeId) {
+        menu.push({
+          label: 'Edit',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+          onClick: () => self.showForm(d.id)
+        });
+      }
+      if (canDelete && !d.pendingChangeId) {
+        menu.push({
+          label: 'Delete',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          onClick: () => Workflow.showConfirm('Delete Expense', 'Are you sure you want to permanently delete this disbursement? This cannot be undone.', () => {
+            if (d.linkedWorkRequestId) {
+              const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+              if (wr) {
+                const linkedIds = (wr.linkedDisbursementIds || []).filter(id => id !== d.id);
+                DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
+              }
+            }
+            DB.remove('disbursements', d.id);
+            App.handleRoute();
+            Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
+          }, 'danger')
+        });
+      }
+      if (canCreate && d.status === 'Draft' && !d.pendingChangeId) {
+        menu.push({
+          label: 'Submit Expense',
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+          onClick: () => Workflow.showConfirm('Submit Expense', 'Are you sure you want to submit this expense for approval?', () => {
+            DB.update('disbursements', d.id, { status: 'Submitted', submittedAt: new Date().toISOString() });
+            App.handleRoute();
+          }, 'success')
+        });
+      }
+      return menu;
+    };
+
+    if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
+      cardNumber = 1;
+      renderGroupedKanbanBoard({
+        container,
+        items,
+        columns: makeColumns(),
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        renderCard,
+        cardMenuItems,
+        storageKey: 'erp_disbursement_grouped_collapsed'
+      });
+      return;
+    }
+
+    cardNumber = 1;
 
     KanbanBoard.render({
       container,
       items,
-      columns: statuses.map(st => {
-        const col = {
-          key: st,
-          label: st,
-          targetStatus: st,
-          color: statusColors[st] || '#cbd5e1',
-          statuses: st === 'Pending' ? this.PENDING_APPROVAL_STATUSES : [st],
-          emptyState: { variant: 'compact', title: 'No expenses', body: '' }
-        };
-        if (st === 'Draft' && canCreate) {
-          col.addButton = { label: 'Add Expense', onClick: () => self.showForm() };
-        }
-        return col;
-      }),
-      renderCard(d) {
-        const emp = DB.getById('users', self.getEmployeeId(d));
-        const source = self.getFundSource(d);
-
-        const statusPriorityClass = {
-          'Draft': 'card-v2-priority-normal',
-          'Pending': 'card-v2-priority-medium',
-          'Approved': 'card-v2-priority-medium',
-          'Release Pending Approval': 'card-v2-priority-medium',
-          'Released': 'card-v2-priority-low',
-          'Rejected': 'card-v2-priority-urgent'
-        }[d.status] || 'card-v2-priority-normal';
-
-        const progressMap = {
-          'Draft': 0,
-          'Pending': 25,
-          'Approved': 50,
-          'Release Pending Approval': 75,
-          'Released': 100,
-          'Rejected': 0
-        };
-        const progress = progressMap[d.status] || 0;
-
-        const descParts = [];
-        if (d.linkedWorkRequestId) {
-          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-          if (wr) {
-            let linked = wr.title;
-            if (d.linkedTaskId) {
-              const task = DB.getById('tasks', d.linkedTaskId);
-              if (task) linked += ` (Task: ${task.title})`;
-            }
-            descParts.push(linked);
-          }
-        }
-        if (d.fromTemplate) descParts.push('Recurring');
-
-        const card = buildCompactBoardCard({
-          key: 'DIS-' + cardNumber++,
-          progress,
-          statusColor: statusColors[d.status] || '#cbd5e1',
-          title: d.category,
-          description: `${emp?.name || '—'} • ${source}`,
-          detail: descParts.join(' • '),
-          date: d.submittedAt ? formatDate(d.submittedAt) : '',
-          priority: d.status,
-          priorityClass: statusPriorityClass,
-          onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
-        });
-
-        const footerRight = card.querySelector('.card-v2-footer-right');
-        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);' }));
-        return card;
-      },
-      cardMenuItems(d) {
-        const menu = [{
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
-        }];
-        if (canEdit && d.status === 'Draft' && !d.pendingChangeId) {
-          menu.push({
-            label: 'Edit',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-            onClick: () => self.showForm(d.id)
-          });
-        }
-        if (canDelete && !d.pendingChangeId) {
-          menu.push({
-            label: 'Delete',
-            className: 'danger',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-            onClick: () => Workflow.showConfirm('Delete Expense', 'Are you sure you want to permanently delete this disbursement? This cannot be undone.', () => {
-              if (d.linkedWorkRequestId) {
-                const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-                if (wr) {
-                  const linkedIds = (wr.linkedDisbursementIds || []).filter(id => id !== d.id);
-                  DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
-                }
-              }
-              DB.remove('disbursements', d.id);
-              App.handleRoute();
-              Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
-            }, 'danger')
-          });
-        }
-        if (canCreate && d.status === 'Draft' && !d.pendingChangeId) {
-          menu.push({
-            label: 'Submit Expense',
-            className: 'primary',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
-            onClick: () => Workflow.showConfirm('Submit Expense', 'Are you sure you want to submit this expense for approval?', () => {
-              DB.update('disbursements', d.id, { status: 'Submitted', submittedAt: new Date().toISOString() });
-              App.handleRoute();
-            }, 'success')
-          });
-        }
-        return menu;
-      },
+      columns: makeColumns(),
+      renderCard,
+      cardMenuItems,
       drag: {
         enabled: true,
         canDrag: d => canEdit && !d.pendingChangeId,

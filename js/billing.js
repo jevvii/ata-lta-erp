@@ -340,6 +340,24 @@ const Billing = {
     };
 
     let viewMode = App.getPreferredViewMode('billing') || 'table';
+    let groupBy = App.restoreGroupBy('billing') || 'none';
+
+    const groupOptions = [
+      { key: 'none', label: 'None' },
+      { key: 'status', label: 'Status', getName: inv => inv.status || 'No Status' },
+      { key: 'client', label: 'Client', getName: inv => {
+        const client = DB.getById('clients', inv.clientId);
+        return client?.name || 'No Client';
+      }},
+      { key: 'employee', label: 'Employee', getName: inv => {
+        const creator = inv.createdBy ? DB.getById('users', inv.createdBy) : null;
+        return creator?.name || 'Unassigned';
+      }},
+      { key: 'workRequest', label: 'Work Request', getName: inv => {
+        const wr = DB.getById('workRequests', inv.workRequestId);
+        return wr?.title || 'No Work Request';
+      }}
+    ];
 
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'billing',
@@ -354,6 +372,13 @@ const Billing = {
         viewMode = newMode;
         App.setPreferredViewMode('billing', newMode);
         saveCurrentFilters();
+        refresh();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: (newGroupBy) => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('billing', groupBy);
         refresh();
       }
     });
@@ -430,7 +455,7 @@ const Billing = {
       }
 
       if (viewMode === 'table') this.refreshTable(contentContainer, invoices);
-      else if (viewMode === 'board') this.refreshBoard(contentContainer, invoices);
+      else if (viewMode === 'board') this.refreshBoard(contentContainer, invoices, groupBy, groupOptions, stickyContainer);
       else this.refreshListCompact(contentContainer, invoices);
     };
 
@@ -509,9 +534,10 @@ const Billing = {
     container.appendChild(table);
   },
 
-  refreshBoard(container, invoices) {
+  refreshBoard(container, invoices, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     const canEdit = Auth.can('billing:edit');
     const self = this;
+    toolbarContainer?.classList.remove('grouped-board-active');
     const statuses = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
     const statusColors = {
       'Draft': '#94a3b8',
@@ -543,88 +569,113 @@ const Billing = {
       });
     });
 
+    const makeColumns = () => statuses.map(st => {
+      const col = {
+        key: st,
+        label: st,
+        targetStatus: st,
+        color: statusColors[st] || '#cbd5e1',
+        emptyState: { variant: 'compact', title: 'No invoices', body: '' }
+      };
+      if (st === 'Draft' && canEdit) {
+        col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
+      }
+      return col;
+    });
+
     let cardNumber = 1;
+
+    const renderCard = (inv) => {
+      const client = DB.getById('clients', inv.clientId);
+      const paid = self.getPaidAmount(inv);
+      const balance = inv.total - paid;
+      const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
+
+      const statusPriorityClass = {
+        'Paid': 'card-v2-priority-low',
+        'Approved': 'card-v2-priority-low',
+        'Sent': 'card-v2-priority-normal',
+        'Partially Paid': 'card-v2-priority-medium',
+        'Pending': 'card-v2-priority-medium',
+        'Draft': 'card-v2-priority-normal',
+        'Overdue': 'card-v2-priority-urgent'
+      }[inv.status] || 'card-v2-priority-normal';
+
+      const descParts = [inv.invoiceNumber];
+      if (inv.workRequestId) {
+        const wr = DB.getById('workRequests', inv.workRequestId);
+        if (wr) descParts.push(wr.title);
+      }
+      if (inv.fromTemplate) descParts.push('Recurring');
+
+      const card = buildCompactBoardCard({
+        key: 'INV-' + cardNumber++,
+        progress,
+        statusColor: statusColors[inv.status] || '#cbd5e1',
+        title: inv.invoiceNumber,
+        description: client?.name || '—',
+        detail: descParts.slice(1).join(' • '),
+        date: inv.issueDate ? formatDate(inv.issueDate) : '',
+        priority: inv.status,
+        priorityClass: statusPriorityClass,
+        onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+      });
+
+      const footerRight = card.querySelector('.card-v2-footer-right');
+      if (balance > 0 && balance < inv.total) {
+        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
+      }
+      footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
+      return card;
+    };
+
+    const cardMenuItems = (inv) => {
+      const items = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+      }];
+      if (canEdit && inv.status === 'Draft' && !inv.pendingChangeId) {
+        items.push({
+          label: 'Edit',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+          onClick: () => self.showForm(inv.id)
+        });
+        items.push({
+          label: 'Trash',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          onClick: () => self.trashInvoice(inv.id)
+        });
+      }
+      return items;
+    };
+
+    if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
+      cardNumber = 1;
+      renderGroupedKanbanBoard({
+        container,
+        items: invoices,
+        columns: makeColumns(),
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        renderCard,
+        cardMenuItems,
+        storageKey: 'erp_billing_grouped_collapsed'
+      });
+      return;
+    }
+
+    cardNumber = 1;
 
     KanbanBoard.render({
       container,
       items: invoices,
-      columns: statuses.map(st => {
-        const col = {
-          key: st,
-          label: st,
-          targetStatus: st,
-          color: statusColors[st] || '#cbd5e1',
-          emptyState: { variant: 'compact', title: 'No invoices', body: '' }
-        };
-        if (st === 'Draft' && canEdit) {
-          col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
-        }
-        return col;
-      }),
-      renderCard(inv) {
-        const client = DB.getById('clients', inv.clientId);
-        const paid = self.getPaidAmount(inv);
-        const balance = inv.total - paid;
-        const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
-
-        const statusPriorityClass = {
-          'Paid': 'card-v2-priority-low',
-          'Approved': 'card-v2-priority-low',
-          'Sent': 'card-v2-priority-normal',
-          'Partially Paid': 'card-v2-priority-medium',
-          'Pending': 'card-v2-priority-medium',
-          'Draft': 'card-v2-priority-normal',
-          'Overdue': 'card-v2-priority-urgent'
-        }[inv.status] || 'card-v2-priority-normal';
-
-        const descParts = [inv.invoiceNumber];
-        if (inv.workRequestId) {
-          const wr = DB.getById('workRequests', inv.workRequestId);
-          if (wr) descParts.push(wr.title);
-        }
-        if (inv.fromTemplate) descParts.push('Recurring');
-
-        const card = buildCompactBoardCard({
-          key: 'INV-' + cardNumber++,
-          progress,
-          statusColor: statusColors[inv.status] || '#cbd5e1',
-          title: inv.invoiceNumber,
-          description: client?.name || '—',
-          detail: descParts.slice(1).join(' • '),
-          date: inv.issueDate ? formatDate(inv.issueDate) : '',
-          priority: inv.status,
-          priorityClass: statusPriorityClass,
-          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
-        });
-
-        const footerRight = card.querySelector('.card-v2-footer-right');
-        if (balance > 0 && balance < inv.total) {
-          footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
-        }
-        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
-        return card;
-      },
-      cardMenuItems(inv) {
-        const items = [{
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
-        }];
-        if (canEdit && inv.status === 'Draft' && !inv.pendingChangeId) {
-          items.push({
-            label: 'Edit',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-            onClick: () => self.showForm(inv.id)
-          });
-          items.push({
-            label: 'Trash',
-            className: 'danger',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-            onClick: () => self.trashInvoice(inv.id)
-          });
-        }
-        return items;
-      },
+      columns: makeColumns(),
+      renderCard,
+      cardMenuItems,
       drag: {
         enabled: true,
         canDrag: inv => canEdit && !inv.pendingChangeId,

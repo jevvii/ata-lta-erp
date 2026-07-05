@@ -1395,10 +1395,19 @@ tbody tr:hover {
   margin-bottom: 0;
 }
 
+.billing-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 .billing-tab-page .board-column-header-v2 {
   position: sticky;
   top: calc(var(--billing-title-bar-height, 48px) + var(--billing-tab-nav-height, 45px) + var(--billing-toolbar-height, 0px));
   z-index: 20;
+}
+
+.billing-tab-page {
+  --board-column-header-top: calc(var(--billing-title-bar-height, 48px) + var(--billing-tab-nav-height, 45px) + var(--billing-toolbar-height, 0px));
 }
 
 .operations-tab-page .board-v2,
@@ -1491,10 +1500,19 @@ tbody tr:hover {
   margin-bottom: 0;
 }
 
+.disbursement-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 .disbursement-tab-page .board-column-header-v2 {
   position: sticky;
   top: calc(var(--disbursement-title-bar-height, 48px) + var(--disbursement-tab-nav-height, 45px) + var(--disbursement-toolbar-height, 0px));
   z-index: 20;
+}
+
+.disbursement-tab-page {
+  --board-column-header-top: calc(var(--disbursement-title-bar-height, 48px) + var(--disbursement-tab-nav-height, 45px) + var(--disbursement-toolbar-height, 0px));
 }
 
 .transmittal-tab-page .board-v2 {
@@ -1532,10 +1550,69 @@ tbody tr:hover {
   margin-bottom: 0;
 }
 
+.transmittal-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 .transmittal-tab-page .board-column-header-v2 {
   position: sticky;
   top: calc(var(--transmittal-title-bar-height, 48px) + var(--transmittal-tab-nav-height, 45px) + var(--transmittal-toolbar-height, 0px));
   z-index: 20;
+}
+
+.transmittal-tab-page {
+  --board-column-header-top: calc(var(--transmittal-title-bar-height, 48px) + var(--transmittal-tab-nav-height, 45px) + var(--transmittal-toolbar-height, 0px));
+}
+
+.documents-tab-page .board-v2 {
+  overflow: visible;
+  min-height: calc(100vh - var(--documents-title-bar-height, 48px) - var(--documents-toolbar-height, 40px) - 80px);
+}
+
+.documents-tab-page .board-column-v2 {
+  max-height: none;
+}
+
+.documents-tab-page .board-cards-scroll {
+  overflow-y: visible;
+}
+
+.documents-tab-page .toolbar-sticky-container {
+  position: sticky;
+  top: calc(var(--documents-title-bar-height, 48px));
+  z-index: 24;
+  background: var(--color-bg, #f4f6fb);
+  padding-top: 8px;
+  padding-bottom: 12px;
+  margin-top: -8px;
+  margin-bottom: 16px;
+}
+
+.documents-tab-page .toolbar-sticky-container .filters-bar {
+  position: static;
+  margin-bottom: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.documents-tab-page .toolbar-sticky-container .view-mode-toggle {
+  margin-bottom: 0;
+}
+
+.documents-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
+.documents-tab-page .board-column-header-v2 {
+  position: sticky;
+  top: calc(var(--documents-title-bar-height, 48px) + var(--documents-toolbar-height, 0px));
+  z-index: 20;
+}
+
+.documents-tab-page {
+  --board-column-header-top: calc(var(--documents-title-bar-height, 48px) + var(--documents-toolbar-height, 0px));
 }
 
 .clients-tab-page .toolbar-sticky-container {

@@ -1924,4 +1924,206 @@ function createJiraFilterToolbar(config) {
   return container;
 }
 
+/**
+ * Render a Jira-style grouped (swimlane) board view.
+ * Mirrors the DOM produced by Workflow.refreshBoard() for grouped boards so
+ * any module that uses createJiraFilterToolbar() can opt into the same
+ * collapsible sticky swimlane layout without duplicating the markup.
+ *
+ * @param {Object} config
+ * @param {HTMLElement} config.container
+ * @param {Array} config.items
+ * @param {Array} config.columns - same column objects passed to KanbanBoard.render()
+ * @param {Function} [config.getColumnKey] - optional top-level column resolver
+ * @param {Function} config.renderCard - (item, column) => HTMLElement
+ * @param {Function} [config.cardMenuItems] - (item) => Array menu items
+ * @param {HTMLElement} [config.toolbarContainer] - receives grouped-board-active class
+ * @param {string} config.groupBy - active group key
+ * @param {Array} config.groupOptions - { key, label, getName(item), specialLast?, getGroupMeta(name)? }
+ * @param {string} [config.storageKey='erp_grouped_collapsed'] - sessionStorage key prefix
+ */
+function renderGroupedKanbanBoard(config = {}) {
+  const {
+    container,
+    items = [],
+    columns = [],
+    getColumnKey,
+    renderCard,
+    cardMenuItems,
+    toolbarContainer,
+    groupBy,
+    groupOptions = [],
+    storageKey = 'erp_grouped_collapsed'
+  } = config;
+
+  if (!container || !columns.length) return;
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  toolbarContainer?.classList.add('grouped-board-active');
+
+  if (items.length === 0) {
+    container.appendChild(renderEmptyStateV2({
+      variant: 'zero-state',
+      icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+      title: 'No items found',
+      body: ''
+    }));
+    return;
+  }
+
+  const groupOpt = groupOptions.find(o => o.key === groupBy);
+  if (!groupOpt || typeof groupOpt.getName !== 'function') return;
+
+  const belongsToColumn = (item, column) => {
+    if (typeof getColumnKey === 'function') return getColumnKey(item) === column.key;
+    if (Array.isArray(column.statuses)) return column.statuses.includes(item.status);
+    if (typeof column.filter === 'function') return column.filter(item);
+    return item.status === (column.targetStatus || column.key);
+  };
+
+  const groupMap = new Map();
+  items.forEach(item => {
+    const name = groupOpt.getName(item);
+    if (!groupMap.has(name)) groupMap.set(name, []);
+    groupMap.get(name).push(item);
+  });
+
+  const specialLast = groupOpt.specialLast || '';
+  const groupNames = Array.from(groupMap.keys()).sort((a, b) => {
+    if (a === specialLast) return 1;
+    if (b === specialLast) return -1;
+    return a.localeCompare(b);
+  });
+
+  const fullStorageKey = `${storageKey}_${location.hash.replace(/\//g, '_') || 'default'}`;
+  const getCollapsedSet = () => {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(fullStorageKey) || '[]');
+      return new Set(Array.isArray(raw) ? raw : []);
+    } catch (e) { return new Set(); }
+  };
+  const saveCollapsedSet = (set) => {
+    try { sessionStorage.setItem(fullStorageKey, JSON.stringify([...set])); } catch (e) { /* ignore */ }
+  };
+
+  const hashString = (str) => {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+    return h;
+  };
+  const avatarPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+  const groupColor = (str) => avatarPalette[Math.abs(hashString(str)) % avatarPalette.length];
+  const getInitials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('');
+
+  const groupedBoard = el('div', { class: 'board-grouped-rows' });
+
+  groupNames.forEach(name => {
+    const groupItems = groupMap.get(name);
+    const sectionKey = `group-${groupBy}-${name}`;
+    const collapsedSet = getCollapsedSet();
+    const isCollapsed = collapsedSet.has(sectionKey);
+
+    const section = el('div', { class: 'board-group-section' + (isCollapsed ? ' collapsed' : '') });
+    section.style.setProperty('--phase-count', String(columns.length));
+
+    const titleRow = el('div', { class: 'board-group-title-row' });
+    const titleCell = el('div', { class: 'board-group-title' });
+    const chevronBtn = el('button', {
+      type: 'button',
+      class: 'board-group-collapse',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    });
+    const avatar = el('div', { class: 'board-group-avatar' });
+
+    let displayName = name;
+    if (typeof groupOpt.getGroupMeta === 'function') {
+      const meta = groupOpt.getGroupMeta(name) || {};
+      displayName = meta.displayName || name;
+      if (meta.avatarUrl) {
+        avatar.style.backgroundImage = "url('" + meta.avatarUrl + "')";
+        avatar.style.backgroundSize = 'cover';
+      } else {
+        avatar.textContent = getInitials(displayName);
+      }
+      if (meta.color) avatar.style.backgroundColor = meta.color;
+    } else {
+      avatar.textContent = getInitials(displayName);
+    }
+    if (!avatar.style.backgroundColor) {
+      avatar.style.backgroundColor = groupColor(displayName);
+      avatar.style.color = '#fff';
+    }
+
+    const nameWrap = el('div', { class: 'board-group-name-wrap' });
+    const nameLine = el('div', { class: 'board-group-name' });
+    nameLine.appendChild(document.createTextNode(displayName + ' '));
+    nameLine.appendChild(el('span', {
+      class: 'board-group-count',
+      text: '(' + groupItems.length + ' item' + (groupItems.length === 1 ? '' : 's') + ')'
+    }));
+    nameWrap.appendChild(nameLine);
+
+    titleCell.appendChild(chevronBtn);
+    titleCell.appendChild(avatar);
+    titleCell.appendChild(nameWrap);
+    titleRow.appendChild(titleCell);
+
+    const toggleSection = () => {
+      const set = getCollapsedSet();
+      const currently = set.has(sectionKey);
+      if (currently) set.delete(sectionKey);
+      else set.add(sectionKey);
+      saveCollapsedSet(set);
+      section.classList.toggle('collapsed', !currently);
+    };
+    titleCell.addEventListener('click', toggleSection);
+    chevronBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSection(); });
+
+    const phaseRow = el('div', { class: 'board-group-phase-row' });
+    phaseRow.style.setProperty('--phase-count', String(columns.length));
+    columns.forEach(column => {
+      const count = groupItems.filter(item => belongsToColumn(item, column)).length;
+      const cell = el('div', { class: 'board-group-phase-header' });
+      cell.style.setProperty('--phase-color', column.color);
+      cell.appendChild(el('div', { class: 'phase-header-top' }));
+      const headerBody = el('div', { class: 'phase-header-body' });
+      headerBody.appendChild(el('span', { class: 'board-column-dot', html: buildColumnStatusIcon({ key: column.key, color: column.color, icon: column.icon || 'phase' }) }));
+      headerBody.appendChild(el('span', { class: 'phase-header-label', text: column.label.toUpperCase() }));
+      headerBody.appendChild(el('span', { class: 'phase-header-count', text: count + ' OF ' + groupItems.length }));
+      cell.appendChild(headerBody);
+      phaseRow.appendChild(cell);
+    });
+
+    const stickyWrap = el('div', { class: 'board-group-sticky-wrap' });
+    stickyWrap.appendChild(titleRow);
+    stickyWrap.appendChild(phaseRow);
+    section.appendChild(stickyWrap);
+
+    const body = el('div', { class: 'board-group-body' });
+    body.style.setProperty('--phase-count', String(columns.length));
+    columns.forEach(column => {
+      const col = el('div', { class: 'board-group-column', 'data-target-status': column.targetStatus || column.key });
+      col.style.setProperty('--column-phase-color', column.color);
+      const colItems = groupItems.filter(item => belongsToColumn(item, column));
+      if (colItems.length === 0) {
+        col.appendChild(renderEmptyStateV2({ variant: 'compact', title: 'No ' + column.label.toLowerCase(), body: '' }));
+      } else {
+        colItems.forEach(item => {
+          const card = renderCard(item, column);
+          const items = cardMenuItems ? cardMenuItems(item) : [];
+          if (items.length > 0 && typeof KanbanBoard !== 'undefined') {
+            KanbanBoard.attachCardMenu(card, items);
+          }
+          col.appendChild(card);
+        });
+      }
+      body.appendChild(col);
+    });
+    section.appendChild(body);
+    groupedBoard.appendChild(section);
+  });
+
+  container.appendChild(groupedBoard);
+}
+
 

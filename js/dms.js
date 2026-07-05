@@ -11,8 +11,9 @@ const DMS = {
   render() {
     this.listViewMode = App.getPreferredViewMode('documents');
 
-    const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Documents' }));
+    const container = el('div', { class: 'page documents-tab-page' });
+    const title = el('h1', { text: 'Documents', class: 'page-title-bar-v2' });
+    container.appendChild(title);
 
     if (this.view === 'list') container.appendChild(this.renderList());
     else if (this.view === 'form') container.appendChild(this.renderForm());
@@ -90,7 +91,7 @@ const DMS = {
         saveCurrentFilters();
         App.setPreferredViewMode('documents', mode);
         this.listViewMode = mode;
-        this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
+        this.refreshList(listContainer, activeFilters, groupBy);
       });
       viewToggle.appendChild(btn);
     });
@@ -109,10 +110,13 @@ const DMS = {
     }
 
     const wrapper = el('div');
-    wrapper.appendChild(actions);
+    const toolbarStickyWrap = el('div', { class: 'toolbar-sticky-container' });
+    toolbarStickyWrap.appendChild(actions);
+    wrapper.appendChild(toolbarStickyWrap);
 
     // Filters bar
     // Jira Filter Toolbar & Active Filters State
+    let groupBy = App.restoreGroupBy('documents') || 'none';
     const activeFilters = {
       workRequest: new Set(),
       client: new Set(),
@@ -175,6 +179,24 @@ const DMS = {
       date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
     };
 
+    const self = this;
+    const groupOptions = [
+      { key: 'workRequest', label: 'Work Request', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        return wr ? wr.title : 'No Work Request';
+      }},
+      { key: 'client', label: 'Client', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        const client = wr && DB.getById('clients', wr.clientId);
+        return client ? client.name : 'No Client';
+      }},
+      { key: 'employee', label: 'Uploader', getName: doc => {
+        const u = doc.uploader ? DB.getById('users', doc.uploader) : null;
+        return u ? u.name : 'No Uploader';
+      }},
+      { key: 'status', label: 'Lifecycle', getName: doc => self.lifecycleLabel(doc.documentLifecycle || 'collected') }
+    ];
+
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'documents',
       categories,
@@ -182,21 +204,29 @@ const DMS = {
       onFilterChange: () => {
         saveCurrentFilters();
         updateFilters();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: newGroupBy => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('documents', groupBy);
+        updateFilters();
       }
     });
 
-    wrapper.appendChild(toolbarContainer);
+    toolbarStickyWrap.appendChild(toolbarContainer);
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, activeFilters);
+    const updateFilters = () => this.refreshList(listContainer, activeFilters, groupBy, toolbarStickyWrap);
     updateFilters();
     return wrapper;
   },
 
-  refreshList(container, activeFilters) {
+  refreshList(container, activeFilters, groupBy = 'none', toolbarContainer = null) {
     while (container.firstChild) container.removeChild(container.firstChild);
+    toolbarContainer?.classList.remove('grouped-board-active');
     const entity = Auth.activeEntity;
 
     let docs = DB.getWhere('documents', d => {
@@ -254,7 +284,7 @@ const DMS = {
     if (this.listViewMode === 'table') {
       this.renderTableView(container, docs);
     } else if (this.listViewMode === 'board') {
-      this.renderBoardView(container, docs);
+      this.renderBoardView(container, docs, groupBy, toolbarContainer);
     } else {
       this.renderCompactListView(container, docs);
     }
@@ -314,7 +344,7 @@ const DMS = {
     container.appendChild(table);
   },
 
-  renderBoardView(container, docs) {
+  renderBoardView(container, docs, groupBy = 'none', toolbarContainer = null) {
     const states = ['collected', 'with_documentations', 'scanned', 'in_envelope', 'stored'];
     const stateColors = {
       'collected': '#94a3b8',
@@ -325,6 +355,87 @@ const DMS = {
     };
     const canEdit = Auth.can('dms:edit');
     const self = this;
+
+    const columns = states.map(state => ({
+      key: state,
+      label: self.lifecycleLabel(state),
+      targetStatus: state,
+      color: stateColors[state] || '#cbd5e1',
+      emptyState: { variant: 'compact', title: `No ${self.lifecycleLabel(state).toLowerCase()}`, body: '' }
+    }));
+
+    const groupOptions = [
+      { key: 'workRequest', label: 'Work Request', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        return wr ? wr.title : 'No Work Request';
+      }},
+      { key: 'client', label: 'Client', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        const client = wr && DB.getById('clients', wr.clientId);
+        return client ? client.name : 'No Client';
+      }},
+      { key: 'employee', label: 'Uploader', getName: doc => {
+        const u = doc.uploader ? DB.getById('users', doc.uploader) : null;
+        return u ? u.name : 'No Uploader';
+      }},
+      { key: 'status', label: 'Lifecycle', getName: doc => self.lifecycleLabel(doc.documentLifecycle || 'collected') }
+    ];
+
+    const renderCard = (doc) => {
+      const uploader = DB.getById('users', doc.uploader);
+      const badge = self.docTypeBadge(doc.document_type);
+      return buildCompactBoardCard({
+        key: 'DOC-' + (doc.id || ''),
+        title: doc.fileName,
+        description: uploader?.name || '—',
+        date: doc.uploadDate ? formatDate(doc.uploadDate) : '',
+        statusColor: stateColors[doc.documentLifecycle || 'collected'] || '#cbd5e1',
+        badges: [badge],
+        onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
+      });
+    };
+
+    const cardMenuItems = (doc) => {
+      const menu = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
+      }];
+      const nextState = self.lifecycleNext(doc.documentLifecycle || 'collected');
+      if (canEdit && nextState) {
+        menu.push({
+          label: `Move to ${self.lifecycleLabel(nextState)}`,
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+          onClick: () => {
+            const updates = { documentLifecycle: nextState };
+            if (nextState === 'with_documentations') updates.receivedByDocumentationAt = new Date().toISOString();
+            if (nextState === 'scanned') updates.scannedAt = new Date().toISOString();
+            if (nextState === 'in_envelope') updates.storedInEnvelopeAt = new Date().toISOString();
+            if (nextState === 'stored') updates.storedAt = new Date().toISOString();
+            DB.update('documents', doc.id, updates);
+            App.handleRoute();
+          }
+        });
+      }
+      return menu;
+    };
+
+    if (groupBy !== 'none') {
+      renderGroupedKanbanBoard({
+        container,
+        items: docs,
+        columns,
+        getColumnKey: doc => doc.documentLifecycle || 'collected',
+        renderCard,
+        cardMenuItems,
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        storageKey: 'erp_documents_grouped_collapsed'
+      });
+      return;
+    }
 
     // Normalize boardOrder within each lifecycle column.
     states.forEach(state => {
@@ -346,57 +457,13 @@ const DMS = {
       });
     });
 
-    let cardNumber = 1;
-
     KanbanBoard.render({
       container,
       items: docs,
       getColumnKey: doc => doc.documentLifecycle || 'collected',
-      columns: states.map(state => ({
-        key: state,
-        label: self.lifecycleLabel(state),
-        targetStatus: state,
-        color: stateColors[state] || '#cbd5e1',
-        emptyState: { variant: 'compact', title: `No ${self.lifecycleLabel(state).toLowerCase()}`, body: '' }
-      })),
-      renderCard(doc) {
-        const uploader = DB.getById('users', doc.uploader);
-        const badge = self.docTypeBadge(doc.document_type);
-        return buildCompactBoardCard({
-          key: 'DOC-' + cardNumber++,
-          title: doc.fileName,
-          description: uploader?.name || '—',
-          date: doc.uploadDate ? formatDate(doc.uploadDate) : '',
-          statusColor: stateColors[doc.documentLifecycle || 'collected'] || '#cbd5e1',
-          badges: [badge],
-          onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
-        });
-      },
-      cardMenuItems(doc) {
-        const menu = [{
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
-        }];
-        const nextState = self.lifecycleNext(doc.documentLifecycle || 'collected');
-        if (canEdit && nextState) {
-          menu.push({
-            label: `Move to ${self.lifecycleLabel(nextState)}`,
-            className: 'primary',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
-            onClick: () => {
-              const updates = { documentLifecycle: nextState };
-              if (nextState === 'with_documentations') updates.receivedByDocumentationAt = new Date().toISOString();
-              if (nextState === 'scanned') updates.scannedAt = new Date().toISOString();
-              if (nextState === 'in_envelope') updates.storedInEnvelopeAt = new Date().toISOString();
-              if (nextState === 'stored') updates.storedAt = new Date().toISOString();
-              DB.update('documents', doc.id, updates);
-              App.handleRoute();
-            }
-          });
-        }
-        return menu;
-      },
+      columns,
+      renderCard,
+      cardMenuItems,
       drag: {
         enabled: true,
         canDrag: () => canEdit,

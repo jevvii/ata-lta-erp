@@ -346,6 +346,19 @@ const Transmittal = {
       date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
     };
 
+    let groupBy = App.restoreGroupBy('transmittals') || 'none';
+    const groupOptions = [
+      { key: 'none', label: 'None' },
+      { key: 'status', label: 'Status', getName: t => t.status || 'No Status' },
+      { key: 'client', label: 'Client', getName: t => self.getClientName(t.clientId) },
+      { key: 'employee', label: 'Employee', getName: t => {
+        const creator = t.createdBy ? DB.getById('users', t.createdBy) : null;
+        const sender = t.sentBy ? DB.getById('users', t.sentBy) : null;
+        return creator?.name || sender?.name || 'Unassigned';
+      }},
+      { key: 'workRequest', label: 'Work Request', getName: t => self.getWorkRequestTitle(t.workRequestId) }
+    ];
+
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'transmittals',
       categories,
@@ -360,6 +373,13 @@ const Transmittal = {
         App.setPreferredViewMode('transmittals', newMode);
         saveCurrentFilters();
         updateFilters();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: (newGroupBy) => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('transmittals', groupBy);
+        updateFilters();
       }
     });
 
@@ -369,13 +389,13 @@ const Transmittal = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, activeFilters, this.listViewMode || 'table');
+    const updateFilters = () => this.refreshList(listContainer, activeFilters, this.listViewMode || 'table', groupBy, groupOptions, stickyContainer);
     updateFilters();
 
     return wrapper;
   },
 
-  refreshList(container, activeFilters, viewMode) {
+  refreshList(container, activeFilters, viewMode, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
 
@@ -427,7 +447,7 @@ const Transmittal = {
       return new Date(db) - new Date(da);
     });
 
-    if (items.length === 0) {
+    if (items.length === 0 && (this.listViewMode !== 'board' || groupBy === 'none')) {
       container.appendChild(el('p', { text: 'No transmittals found.', class: 'empty-state' }));
       return;
     }
@@ -435,7 +455,7 @@ const Transmittal = {
     if (this.listViewMode === 'table') {
       this.renderTableView(container, items);
     } else if (this.listViewMode === 'board') {
-      this.renderBoardView(container, items);
+      this.renderBoardView(container, items, groupBy, groupOptions, toolbarContainer);
     } else {
       this.renderCompactListView(container, items);
     }
@@ -475,7 +495,8 @@ const Transmittal = {
     container.appendChild(table);
   },
 
-  renderBoardView(container, items) {
+  renderBoardView(container, items, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
+    toolbarContainer?.classList.remove('grouped-board-active');
     if (items.length === 0) {
       container.appendChild(renderEmptyStateV2({
         variant: 'zero-state',
@@ -517,94 +538,119 @@ const Transmittal = {
       });
     });
 
+    const makeColumns = () => statuses.map(st => {
+      const col = {
+        key: st,
+        label: st,
+        targetStatus: st,
+        color: statusColors[st] || '#cbd5e1',
+        emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+      };
+      if (st === 'Draft' && canCreate) {
+        col.addButton = { label: 'Add Transmittal', onClick: () => self.showForm() };
+      }
+      return col;
+    });
+
     let cardNumber = 1;
+
+    const renderCard = (t) => {
+      const clientName = self.getClientName(t.clientId);
+      const itemCount = (t.items || []).length;
+      const date = t.sentAt || t.createdAt;
+
+      const statusPriorityClass = {
+        'Draft': 'card-v2-priority-normal',
+        'Sent': 'card-v2-priority-medium',
+        'Acknowledged': 'card-v2-priority-low'
+      }[t.status] || 'card-v2-priority-normal';
+
+      const progressMap = { 'Draft': 0, 'Sent': 50, 'Acknowledged': 100 };
+      const progress = progressMap[t.status] || 0;
+
+      const wr = DB.getById('workRequests', t.workRequestId);
+      const detail = wr ? wr.title : '';
+
+      return buildCompactBoardCard({
+        key: 'TX-' + cardNumber++,
+        progress,
+        statusColor: statusColors[t.status] || '#cbd5e1',
+        title: t.trackingNumber,
+        description: clientName,
+        detail: `${itemCount} item${itemCount === 1 ? '' : 's'}` + (detail ? ` • ${detail}` : ''),
+        date: date ? formatDate(date) : '',
+        priority: t.status,
+        priorityClass: statusPriorityClass,
+        onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+      });
+    };
+
+    const cardMenuItems = (t) => {
+      const menu = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+      }];
+      if (self.canEditTransmittal(t)) {
+        menu.push({
+          label: 'Edit',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+          onClick: () => self.showForm(t.id)
+        });
+      }
+      if (canMark && t.status === 'Draft' && !t.pendingChangeId) {
+        menu.push({
+          label: 'Mark as Sent',
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+          onClick: () => Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
+            const markData = { status: 'Sent', sentAt: new Date().toISOString(), sentBy: Auth.user.id };
+            if (Auth.canBypassReview('transmittals')) {
+              DB.update('transmittals', t.id, markData);
+            } else {
+              const record = Object.assign({}, t, markData, { id: t.id });
+              PendingChanges.submit('transmittals', record, false);
+            }
+            App.handleRoute();
+          }, 'success')
+        });
+      }
+      if (canMark && t.status === 'Sent') {
+        menu.push({
+          label: 'Acknowledge Receipt',
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+          onClick: () => self.showAcknowledgeDialog(t.id)
+        });
+      }
+      return menu;
+    };
+
+    if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
+      cardNumber = 1;
+      renderGroupedKanbanBoard({
+        container,
+        items,
+        columns: makeColumns(),
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        renderCard,
+        cardMenuItems,
+        storageKey: 'erp_transmittals_grouped_collapsed'
+      });
+      return;
+    }
+
+    cardNumber = 1;
 
     KanbanBoard.render({
       container,
       items,
-      columns: statuses.map(st => {
-        const col = {
-          key: st,
-          label: st,
-          targetStatus: st,
-          color: statusColors[st] || '#cbd5e1',
-          emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
-        };
-        if (st === 'Draft' && canCreate) {
-          col.addButton = { label: 'Add Transmittal', onClick: () => self.showForm() };
-        }
-        return col;
-      }),
-      renderCard(t) {
-        const clientName = self.getClientName(t.clientId);
-        const itemCount = (t.items || []).length;
-        const date = t.sentAt || t.createdAt;
-
-        const statusPriorityClass = {
-          'Draft': 'card-v2-priority-normal',
-          'Sent': 'card-v2-priority-medium',
-          'Acknowledged': 'card-v2-priority-low'
-        }[t.status] || 'card-v2-priority-normal';
-
-        const progressMap = { 'Draft': 0, 'Sent': 50, 'Acknowledged': 100 };
-        const progress = progressMap[t.status] || 0;
-
-        const wr = DB.getById('workRequests', t.workRequestId);
-        const detail = wr ? wr.title : '';
-
-        return buildCompactBoardCard({
-          key: 'TX-' + cardNumber++,
-          progress,
-          statusColor: statusColors[t.status] || '#cbd5e1',
-          title: t.trackingNumber,
-          description: clientName,
-          detail: `${itemCount} item${itemCount === 1 ? '' : 's'}` + (detail ? ` • ${detail}` : ''),
-          date: date ? formatDate(date) : '',
-          priority: t.status,
-          priorityClass: statusPriorityClass,
-          onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
-        });
-      },
-      cardMenuItems(t) {
-        const menu = [{
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
-        }];
-        if (self.canEditTransmittal(t)) {
-          menu.push({
-            label: 'Edit',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-            onClick: () => self.showForm(t.id)
-          });
-        }
-        if (canMark && t.status === 'Draft' && !t.pendingChangeId) {
-          menu.push({
-            label: 'Mark as Sent',
-            className: 'primary',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
-            onClick: () => Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
-              const markData = { status: 'Sent', sentAt: new Date().toISOString(), sentBy: Auth.user.id };
-              if (Auth.canBypassReview('transmittals')) {
-                DB.update('transmittals', t.id, markData);
-              } else {
-                const record = Object.assign({}, t, markData, { id: t.id });
-                PendingChanges.submit('transmittals', record, false);
-              }
-              App.handleRoute();
-            }, 'success')
-          });
-        }
-        if (canMark && t.status === 'Sent') {
-          menu.push({
-            label: 'Acknowledge Receipt',
-            className: 'primary',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-            onClick: () => self.showAcknowledgeDialog(t.id)
-          });
-        }
-        return menu;
-      },
+      columns: makeColumns(),
+      renderCard,
+      cardMenuItems,
       drag: {
         enabled: true,
         canDrag: t => canEdit && !t.pendingChangeId,
