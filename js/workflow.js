@@ -2058,6 +2058,7 @@ const Workflow = {
       { value: 'Overdue', label: 'Overdue' },
       { value: 'Due Today', label: 'Due Today' },
       { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
       { value: 'Due Later', label: 'Due Later' },
       { value: 'No Due Date', label: 'No Due Date' }
     ];
@@ -2124,15 +2125,24 @@ const Workflow = {
         endOfWeek.setDate(now.getDate() + distanceToSunday);
         const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
 
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
         result = result.filter(r => {
-          let bucket = 'No Due Date';
-          if (r.dueDate) {
-            const dStr = r.dueDate.slice(0, 10);
-            if (dStr < todayStr) bucket = 'Overdue';
-            else if (dStr === todayStr) bucket = 'Due Today';
-            else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
-            else bucket = 'Due Later';
+          if (!r.dueDate) {
+            return activeFilters.dueDate.has('No Due Date');
           }
+          const dStr = r.dueDate.slice(0, 10);
+
+          if (activeFilters.dueDate.has(`DATE:${dStr}`)) return true;
+
+          let bucket = 'No Due Date';
+          if (dStr < todayStr) bucket = 'Overdue';
+          else if (dStr === todayStr) bucket = 'Due Today';
+          else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+          else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+          else bucket = 'Due Later';
+
           return activeFilters.dueDate.has(bucket);
         });
       }
@@ -2203,86 +2213,10 @@ const Workflow = {
       let visibleCount = 0;
       const allOptions = options.slice();
 
-      if (selectedCategory === 'dueDate') {
-        let activeCustomDate = '';
-        activeFilters.dueDate.forEach(val => {
-          if (val.startsWith('DATE:')) activeCustomDate = val.slice(5);
-        });
-
-        if (activeCustomDate) {
-          const formatted = typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.formatDisplay === 'function' ? MaterialDatePicker.formatDisplay(activeCustomDate) : activeCustomDate;
-          allOptions.push({
-            value: `DATE:${activeCustomDate}`,
-            label: `Specific: ${formatted || activeCustomDate}`,
-            isCustomDate: true
-          });
-        } else {
-          allOptions.push({
-            value: '__SELECT_DATE__',
-            label: 'Select date',
-            isDatePickerTrigger: true
-          });
-        }
-      }
-
       if (allOptions.length === 0) {
         list.appendChild(el('div', { class: 'jira-filter-values-empty', text: 'No results' }));
       } else {
         allOptions.forEach(opt => {
-          if (opt.isDatePickerTrigger) {
-            const isVisible = !query || 'select date'.includes(query);
-            if (isVisible) visibleCount++;
-
-            const row = el('button', {
-              type: 'button',
-              class: 'jira-filter-value-item jira-filter-datepicker-trigger' + (isVisible ? '' : ' hidden')
-            });
-            const checkbox = el('input', { type: 'checkbox' });
-            checkbox.checked = false;
-            checkbox.addEventListener('click', (e) => e.stopPropagation());
-
-            const label = el('span', { text: opt.label });
-
-            const dateInput = el('input', { type: 'date', style: 'display:none;' });
-            dateInput.addEventListener('change', (e) => {
-              e.stopPropagation();
-              const val = dateInput.value;
-              Array.from(activeFilters.dueDate).forEach(v => {
-                if (v.startsWith('DATE:')) activeFilters.dueDate.delete(v);
-              });
-              if (val) {
-                activeFilters.dueDate.add(`DATE:${val}`);
-              }
-              saveCurrentFilters();
-              updateFilterUI();
-              refresh();
-              updateToolbar();
-            });
-
-            row.appendChild(checkbox);
-            row.appendChild(label);
-            row.appendChild(dateInput);
-
-            if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
-              setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
-            }
-
-            row.addEventListener('click', (e) => {
-              e.stopPropagation();
-              const mdpWrapper = dateInput.closest('.mdp-wrapper');
-              if (mdpWrapper) {
-                mdpWrapper.click();
-              } else if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.openPicker === 'function') {
-                MaterialDatePicker.openPicker(dateInput, dateInput._mdpDisplay || dateInput);
-              } else {
-                dateInput.click();
-              }
-            });
-
-            list.appendChild(row);
-            return;
-          }
-
           const isChecked = activeFilters[selectedCategory].has(opt.value);
           const isVisible = !query || opt.label.toLowerCase().includes(query);
           if (isVisible) visibleCount++;
@@ -2301,9 +2235,7 @@ const Workflow = {
 
           row.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (opt.isCustomDate) {
-              activeFilters.dueDate.delete(opt.value);
-            } else if (activeFilters[selectedCategory].has(opt.value)) {
+            if (activeFilters[selectedCategory].has(opt.value)) {
               activeFilters[selectedCategory].delete(opt.value);
             } else {
               activeFilters[selectedCategory].add(opt.value);
@@ -2316,6 +2248,75 @@ const Workflow = {
 
           list.appendChild(row);
         });
+      }
+
+      if (selectedCategory === 'dueDate') {
+        const dateBtnWrap = el('div', { class: 'jira-filter-select-date-wrap' });
+
+        let activeCustomDate = '';
+        activeFilters.dueDate.forEach(val => {
+          if (val.startsWith('DATE:')) activeCustomDate = val.slice(5);
+        });
+
+        const formattedDate = activeCustomDate && typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.formatDisplay === 'function'
+          ? MaterialDatePicker.formatDisplay(activeCustomDate)
+          : activeCustomDate;
+
+        const selectDateBtn = el('button', {
+          type: 'button',
+          class: 'jira-filter-select-date-btn' + (activeCustomDate ? ' active' : ''),
+          html: '<span class="jira-filter-date-btn-label" style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> ' +
+            (activeCustomDate ? `Date: ${formattedDate || activeCustomDate}` : 'Select date') + '</span>' +
+            (activeCustomDate ? ' <span class="jira-filter-clear-date" title="Clear date" style="cursor:pointer;padding:0 4px;font-weight:bold;">&times;</span>' : '')
+        });
+
+        const dateInput = el('input', { type: 'date', style: 'display:none;', value: activeCustomDate || '' });
+
+        dateInput.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const val = dateInput.value;
+          Array.from(activeFilters.dueDate).forEach(v => {
+            if (v.startsWith('DATE:')) activeFilters.dueDate.delete(v);
+          });
+          if (val) {
+            activeFilters.dueDate.add(`DATE:${val}`);
+          }
+          saveCurrentFilters();
+          updateFilterUI();
+          refresh();
+          updateToolbar();
+        });
+
+        selectDateBtn.appendChild(dateInput);
+
+        if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
+          setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
+        }
+
+        selectDateBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (activeCustomDate && e.target.classList.contains('jira-filter-clear-date')) {
+            Array.from(activeFilters.dueDate).forEach(v => {
+              if (v.startsWith('DATE:')) activeFilters.dueDate.delete(v);
+            });
+            saveCurrentFilters();
+            updateFilterUI();
+            refresh();
+            updateToolbar();
+            return;
+          }
+          const mdpWrapper = dateInput.closest('.mdp-wrapper');
+          if (mdpWrapper) {
+            mdpWrapper.click();
+          } else if (typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.openPicker === 'function') {
+            MaterialDatePicker.openPicker(dateInput, dateInput._mdpDisplay || dateInput);
+          } else {
+            dateInput.click();
+          }
+        });
+
+        dateBtnWrap.appendChild(selectDateBtn);
+        list.appendChild(dateBtnWrap);
       }
 
       const footer = filterDropdown.querySelector('.jira-filter-values-footer');
@@ -2519,6 +2520,9 @@ const Workflow = {
     if (!this._jiraToolbarClickListener) {
       this._jiraToolbarClickListener = true;
       document.addEventListener('click', (e) => {
+        // If the target element was detached during click handling (e.g. datepicker OK/close or re-rendered list item), do NOT treat as outside click
+        if (!e.target || !e.target.isConnected) return;
+
         if (
           !e.target.closest('.jira-group-wrap') &&
           !e.target.closest('.jira-filter-wrap') &&
