@@ -123,13 +123,14 @@ const KanbanBoardIcons = {
 
 function buildColumnStatusIcon(column) {
   const color = escapeHtml(column.color || '#94a3b8');
-  if (column.icon === 'phase' && KanbanBoardIcons.phase[column.key]) {
-    return KanbanBoardIcons.phase[column.key](color);
-  }
-  if (typeof column.icon === 'function') {
+  if (column.icon === 'phase') {
+    if (KanbanBoardIcons.phase[column.key]) {
+      return KanbanBoardIcons.phase[column.key](color);
+    }
+    // Phase was requested but no keyed icon exists; fall through to the default dot.
+  } else if (typeof column.icon === 'function') {
     return column.icon(color);
-  }
-  if (typeof column.icon === 'string') {
+  } else if (typeof column.icon === 'string') {
     return column.icon;
   }
   // Default: simple colored dot.

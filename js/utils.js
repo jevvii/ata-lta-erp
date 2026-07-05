@@ -1845,17 +1845,30 @@ function createJiraFilterToolbar(config) {
   toolbar.appendChild(clearFiltersBtn);
 
   // Grouping Dropdown
-  if (groupByOptions && currentGroupBy && onGroupByChange) {
+  if (groupByOptions && onGroupByChange) {
     const groupWrap = el('div', { class: 'jira-group-wrap' });
-    const groupTrigger = el('button', {
-      type: 'button',
-      class: 'jira-group-trigger',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Group'
-    });
+    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+    const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    const groupTrigger = el('button', { type: 'button', class: 'jira-group-trigger' });
+    const groupOptionsAll = [
+      { key: 'none', label: 'None' },
+      ...groupByOptions.filter(opt => opt.key !== 'none')
+    ];
+
+    const renderGroupTrigger = () => {
+      const selected = groupOptionsAll.find(opt => opt.key === currentGroupBy);
+      const label = (currentGroupBy && currentGroupBy !== 'none' && selected)
+        ? 'Group: ' + selected.label
+        : 'Group';
+      groupTrigger.classList.toggle('active', !!(currentGroupBy && currentGroupBy !== 'none'));
+      groupTrigger.innerHTML = groupIconSvg + ' <span>' + escapeHtml(label) + '</span> ' + groupCaretSvg;
+    };
+    renderGroupTrigger();
+
     const groupDropdown = el('div', { class: 'jira-dropdown jira-group-dropdown hidden' });
     const renderGroupDropdown = () => {
       groupDropdown.innerHTML = '';
-      groupByOptions.forEach(opt => {
+      groupOptionsAll.forEach(opt => {
         const active = currentGroupBy === opt.key;
         const btn = el('button', {
           type: 'button',
@@ -1864,7 +1877,10 @@ function createJiraFilterToolbar(config) {
         });
         btn.addEventListener('click', () => {
           groupDropdown.classList.add('hidden');
+          currentGroupBy = opt.key;
           onGroupByChange(opt.key);
+          renderGroupTrigger();
+          renderGroupDropdown();
         });
         groupDropdown.appendChild(btn);
       });

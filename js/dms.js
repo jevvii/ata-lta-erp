@@ -422,6 +422,7 @@ const DMS = {
     };
 
     if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
       renderGroupedKanbanBoard({
         container,
         items: docs,
