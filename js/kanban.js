@@ -557,11 +557,13 @@ const KanbanBoard = {
           const phaseHeader = el('div', { class: 'board-phase-header' });
           const phaseTitle = el('div', { class: 'board-phase-label' });
           const dotEl = el('span', { class: 'board-column-dot' });
-          if (section.icon) {
-            dotEl.innerHTML = typeof section.icon === 'function' ? section.icon(section.color || column.color) : section.icon;
-          } else {
-            dotEl.innerHTML = buildColumnStatusIcon({ key: section.key, color: section.color || column.color, icon: section.icon || 'phase' });
-          }
+          const iconHtml = section.icon
+            ? (typeof section.icon === 'function' ? section.icon(section.color || column.color) : section.icon)
+            : buildColumnStatusIcon({ key: section.key, color: section.color || column.color, icon: section.icon || 'phase' });
+          // Sanitize icon SVG to avoid XSS from column/section config.
+          dotEl.textContent = '';
+          const iconFragment = document.createRange().createContextualFragment(iconHtml);
+          dotEl.appendChild(iconFragment);
           phaseTitle.appendChild(dotEl);
           phaseTitle.appendChild(el('span', { text: section.label || section.key }));
           phaseHeader.appendChild(phaseTitle);

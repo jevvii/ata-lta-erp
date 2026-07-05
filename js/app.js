@@ -549,10 +549,16 @@ const App = {
     }
 
     const module = moduleMap[baseHash];
+    const previousModuleKey = this.currentModule;
     this.currentModule = baseHash.replace('#', '');
     const content = document.getElementById('content');
 
     if (module && module.render) {
+      const previousModule = moduleMap[`#${previousModuleKey}`];
+      if (previousModule && previousModule !== module && typeof previousModule.cleanup === 'function') {
+        previousModule.cleanup();
+      }
+
       content.innerHTML = '';
       const rendered = module.render();
       if (typeof rendered === 'string') {

@@ -114,6 +114,18 @@ const Workflow = {
     return this.isCompleted(itemOrTask) ? 'is-completed' : '';
   },
 
+  cleanup() {
+    if (this._jiraToolbarKeydownListener) {
+      document.removeEventListener('keydown', this._jiraToolbarKeydownListener);
+      this._jiraToolbarKeydownListener = null;
+    }
+    if (this._jiraToolbarClickListener) {
+      document.removeEventListener('click', this._jiraToolbarClickListener);
+      this._jiraToolbarClickListener = null;
+    }
+    document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+  },
+
   standardTaskTemplates: [
     { title: 'Gathering requirements and preparing documents for preprocessing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }] },
     { title: 'Gather requirements and prepare documents needed for processing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }], coAssignees: ['Employee 1', 'Employee 2', 'Employee 3'] },
@@ -2117,8 +2129,8 @@ const Workflow = {
         result = result.filter(r => {
           const wrPriority = r.priority || 'Normal';
           if (activeFilters.priority.has(wrPriority)) return true;
-          const wrTasks = DB.getWhere('tasks', t => t.workRequestId === r.id);
-          return wrTasks.some(t => activeFilters.priority.has(t.priority || 'Normal'));
+          const tasks = (this._tempTaskMap || buildTaskMap())[r.id] || [];
+          return tasks.some(t => activeFilters.priority.has(t.priority || 'Normal'));
         });
       }
 
