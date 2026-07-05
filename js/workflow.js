@@ -2180,11 +2180,18 @@ const Workflow = {
 
     // Group dropdown
     const groupWrap = el('div', { class: 'jira-group-wrap' });
+    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+    const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     const groupTrigger = el('button', {
       type: 'button',
-      class: 'jira-group-trigger',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Group'
+      class: 'jira-group-trigger'
     });
+    const renderGroupTrigger = () => {
+      const selected = groupOptions.find(opt => opt.key === groupBy);
+      const label = groupBy === 'none' ? 'Group' : 'Group: ' + (selected ? selected.label : 'Group');
+      groupTrigger.innerHTML = groupIconSvg + ' <span>' + escapeHtml(label) + '</span> ' + groupCaretSvg;
+    };
+    renderGroupTrigger();
     const groupDropdown = el('div', { class: 'jira-dropdown jira-group-dropdown hidden' });
     const renderGroupDropdown = () => {
       groupDropdown.innerHTML = '';
@@ -2198,6 +2205,7 @@ const Workflow = {
         btn.addEventListener('click', () => {
           groupBy = opt.key;
           App.saveGroupBy('operations', groupBy);
+          renderGroupTrigger();
           renderGroupDropdown();
           groupDropdown.classList.add('hidden');
           refresh();
@@ -2489,7 +2497,9 @@ const Workflow = {
     jiraToolbar.appendChild(vmToggle);
     jiraToolbar.appendChild(filterWrap);
     jiraToolbar.appendChild(clearFiltersBtn);
-    jiraToolbar.appendChild(groupWrap);
+    if (viewMode === 'board') {
+      jiraToolbar.appendChild(groupWrap);
+    }
     stickyContainer.appendChild(jiraToolbar);
     wrapper.appendChild(stickyContainer);
 
@@ -3052,7 +3062,9 @@ const Workflow = {
         drag: dragConfig
       });
     } else {
-      // Grouped board: columns are group values, sections are phases.
+      // Grouped board: stacked swimlanes. Each group is a collapsible row with a
+      // sticky header that shows the group title and the phase column headings;
+      // deeper headers naturally replace earlier sticky ones as the user scrolls.
       const getGroupName = (wr) => {
         if (groupBy === 'assignee') {
           const names = this.getWorkRequestAssigneeNames(wr);
@@ -3080,31 +3092,132 @@ const Workflow = {
         return a.localeCompare(b);
       });
 
-      KanbanBoard.render({
-        container,
-        items: wrs,
-        columns: groupNames.map(name => {
-          const groupWrs = groupMap.get(name);
-          return {
-            key: `group-${groupBy}-${name}`,
-            label: name,
-            targetStatus: '',
-            color: '#64748b',
-            icon: 'phase',
-            emptyState: { variant: 'compact', title: 'No work requests', body: '' },
-            sections: boardPhases.map(phase => ({
-              key: phase.key,
-              label: phase.label,
-              color: phase.color,
-              targetStatus: phase.targetStatus,
-              items: groupWrs.filter(wr => phase.statuses.includes(wr.status))
-            })).filter(s => s.items.length > 0)
-          };
-        }),
-        renderCard: renderBoardCard,
-        cardMenuItems: renderCardMenuItems,
-        drag: { enabled: false }
+      const COLLAPSED_KEY = 'erp_operations_collapsed_groups';
+      const getCollapsedSet = () => {
+        try {
+          const raw = JSON.parse(sessionStorage.getItem(COLLAPSED_KEY) || '[]');
+          return new Set(Array.isArray(raw) ? raw : []);
+        } catch (e) { return new Set(); }
+      };
+      const saveCollapsedSet = (set) => {
+        try { sessionStorage.setItem(COLLAPSED_KEY, JSON.stringify([...set])); } catch (e) { /* ignore */ }
+      };
+
+      const hashString = (str) => {
+        let h = 0;
+        for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+        return h;
+      };
+      const avatarPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+      const groupColor = (str) => avatarPalette[Math.abs(hashString(str)) % avatarPalette.length];
+      const getInitials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('');
+
+      const groupedBoard = el('div', { class: 'board-grouped-rows' });
+
+      groupNames.forEach(name => {
+        const groupWrs = groupMap.get(name);
+        const sectionKey = `group-${groupBy}-${name}`;
+        const collapsedSet = getCollapsedSet();
+        const isCollapsed = collapsedSet.has(sectionKey);
+
+        const section = el('div', { class: 'board-group-section' + (isCollapsed ? ' collapsed' : '') });
+        section.style.setProperty('--phase-count', String(boardPhases.length));
+
+        const header = el('div', { class: 'board-group-section-header' });
+        header.style.setProperty('--phase-count', String(boardPhases.length));
+
+        // Title cell (collapsible)
+        const titleCell = el('div', { class: 'board-group-title' });
+        const chevronBtn = el('button', {
+          type: 'button',
+          class: 'board-group-collapse',
+          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+        });
+        const avatar = el('div', { class: 'board-group-avatar' });
+        let displayName = name;
+        if (groupBy === 'client') {
+          const client = DB.getWhere('clients', c => c.name === name)[0];
+          displayName = client?.name || name;
+          avatar.textContent = getInitials(displayName);
+        } else if (groupBy === 'assignee') {
+          const user = DB.getWhere('users', u => u.name === name)[0];
+          displayName = user?.name || name;
+          if (user?.avatarUrl) {
+            avatar.style.backgroundImage = "url('" + user.avatarUrl + "')";
+            avatar.style.backgroundSize = 'cover';
+          } else {
+            avatar.textContent = getInitials(displayName);
+          }
+        } else {
+          avatar.textContent = getInitials(displayName);
+        }
+        avatar.style.backgroundColor = groupColor(displayName);
+        avatar.style.color = '#fff';
+
+        const nameWrap = el('div', { class: 'board-group-name-wrap' });
+        nameWrap.appendChild(el('div', { class: 'board-group-name', text: displayName }));
+        nameWrap.appendChild(el('div', { class: 'board-group-count', text: groupWrs.length + ' item' + (groupWrs.length === 1 ? '' : 's') }));
+
+        titleCell.appendChild(chevronBtn);
+        titleCell.appendChild(avatar);
+        titleCell.appendChild(nameWrap);
+
+        const toggleSection = () => {
+          const set = getCollapsedSet();
+          const currently = set.has(sectionKey);
+          if (currently) set.delete(sectionKey);
+          else set.add(sectionKey);
+          saveCollapsedSet(set);
+          section.classList.toggle('collapsed', !currently);
+        };
+        titleCell.addEventListener('click', toggleSection);
+        chevronBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSection(); });
+
+        header.appendChild(titleCell);
+
+        // Phase heading cells aligned with the card columns below
+        const phaseGrid = el('div', { class: 'board-group-phase-grid' });
+        phaseGrid.style.setProperty('--phase-count', String(boardPhases.length));
+        boardPhases.forEach(phase => {
+          const count = groupWrs.filter(wr => phase.statuses.includes(wr.status)).length;
+          const cell = el('div', { class: 'board-group-phase-header' });
+          cell.style.setProperty('--phase-color', phase.color);
+          cell.appendChild(el('div', { class: 'phase-header-top' }));
+          const body = el('div', { class: 'phase-header-body' });
+          body.appendChild(el('span', { class: 'board-column-dot', html: buildColumnStatusIcon({ key: phase.key, color: phase.color, icon: 'phase' }) }));
+          body.appendChild(el('span', { class: 'phase-header-label', text: phase.label.toUpperCase() }));
+          body.appendChild(el('span', { class: 'phase-header-count', text: count + ' OF ' + groupWrs.length }));
+          cell.appendChild(body);
+          phaseGrid.appendChild(cell);
+        });
+        header.appendChild(phaseGrid);
+        section.appendChild(header);
+
+        // Card columns
+        const body = el('div', { class: 'board-group-body' });
+        body.style.setProperty('--phase-count', String(boardPhases.length));
+        body.appendChild(el('div', { class: 'board-group-gutter' }));
+        boardPhases.forEach(phase => {
+          const col = el('div', { class: 'board-group-column', 'data-target-status': phase.targetStatus });
+          col.style.setProperty('--column-phase-color', phase.color);
+          const phaseWrs = groupWrs.filter(wr => phase.statuses.includes(wr.status));
+          if (phaseWrs.length === 0) {
+            col.appendChild(renderEmptyStateV2({ variant: 'compact', title: 'No ' + phase.label.toLowerCase(), body: '' }));
+          } else {
+            phaseWrs.forEach(wr => {
+              const card = renderBoardCard(wr, phase);
+              const items = renderCardMenuItems(wr);
+              if (items.length > 0) KanbanBoard.attachCardMenu(card, items);
+              col.appendChild(card);
+            });
+          }
+          body.appendChild(col);
+        });
+        section.appendChild(body);
+        groupedBoard.appendChild(section);
       });
+
+      container.appendChild(groupedBoard);
     }
   },
 
