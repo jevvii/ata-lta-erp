@@ -2556,11 +2556,19 @@ const Workflow = {
     // the toolbar height changes when filters wrap, compute the real offset and
     // expose it to the grouped board headers via a CSS variable on the container.
     const syncHeaderTop = () => {
-      if (!jiraToolbar) return;
-      const height = jiraToolbar.offsetHeight || 40;
+      if (!jiraToolbar || !stickyContainer) return;
+      const toolbarStyle = window.getComputedStyle(stickyContainer);
+      const marginTop = parseFloat(toolbarStyle.marginTop) || 0;
+      const paddingTop = parseFloat(toolbarStyle.paddingTop) || 0;
+      const paddingBottom = parseFloat(toolbarStyle.paddingBottom) || 0;
+      const marginBottom = parseFloat(toolbarStyle.marginBottom) || 0;
+      const toolbarHeight = jiraToolbar.offsetHeight || 40;
+      // Account for the full sticky container box (negative margin, paddings, margins)
+      // so grouped headers stick below the toolbar instead of being clipped by it.
+      const headerTopOffset = Math.max(0, -marginTop) + paddingTop + toolbarHeight + paddingBottom + marginBottom;
       contentContainer.style.setProperty(
         '--board-column-header-top',
-        'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + height + 'px)'
+        'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + headerTopOffset + 'px)'
       );
     };
     requestAnimationFrame(syncHeaderTop);
@@ -2572,12 +2580,16 @@ const Workflow = {
         const toolbar = page?.querySelector('.jira-toolbar');
         const board = page?.querySelector('.board-v2, .board-grouped-rows');
         const container = board?.parentElement;
-        if (toolbar && container) {
-          const height = toolbar.offsetHeight || 40;
-          container.style.setProperty(
-            '--board-column-header-top',
-            'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + height + 'px)'
-          );
+        const toolbarContainer = toolbar?.closest('.toolbar-sticky-container');
+        if (toolbar && container && toolbarContainer) {
+          const toolbarStyle = window.getComputedStyle(toolbarContainer);
+          const marginTop = parseFloat(toolbarStyle.marginTop) || 0;
+          const paddingTop = parseFloat(toolbarStyle.paddingTop) || 0;
+          const paddingBottom = parseFloat(toolbarStyle.paddingBottom) || 0;
+          const marginBottom = parseFloat(toolbarStyle.marginBottom) || 0;
+          const toolbarHeight = toolbar.offsetHeight || 40;
+          const headerTopOffset = Math.max(0, -marginTop) + paddingTop + toolbarHeight + paddingBottom + marginBottom;
+          container.style.setProperty('--board-column-header-top', 'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + headerTopOffset + 'px)');
         }
       };
       window.addEventListener('resize', this._syncHeaderTopResizeListener);
