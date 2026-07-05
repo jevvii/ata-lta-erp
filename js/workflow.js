@@ -3208,12 +3208,10 @@ const Workflow = {
         };
         titleCell.addEventListener('click', toggleSection);
         chevronBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSection(); });
-        section.appendChild(titleRow);
 
-        // Phase heading row (sticky, directly beneath the group title row)
+        // Phase heading row (sits beneath the group title inside a single sticky wrapper)
         const phaseRow = el('div', { class: 'board-group-phase-row' });
         phaseRow.style.setProperty('--phase-count', String(boardPhases.length));
-        phaseRow.appendChild(el('div', { class: 'board-group-phase-gutter' }));
         boardPhases.forEach(phase => {
           const count = groupWrs.filter(wr => phase.statuses.includes(wr.status)).length;
           const cell = el('div', { class: 'board-group-phase-header' });
@@ -3226,12 +3224,15 @@ const Workflow = {
           cell.appendChild(headerBody);
           phaseRow.appendChild(cell);
         });
-        section.appendChild(phaseRow);
+
+        const stickyWrap = el('div', { class: 'board-group-sticky-wrap' });
+        stickyWrap.appendChild(titleRow);
+        stickyWrap.appendChild(phaseRow);
+        section.appendChild(stickyWrap);
 
         // Card columns
         const body = el('div', { class: 'board-group-body' });
         body.style.setProperty('--phase-count', String(boardPhases.length));
-        body.appendChild(el('div', { class: 'board-group-gutter' }));
         boardPhases.forEach(phase => {
           const col = el('div', { class: 'board-group-column', 'data-target-status': phase.targetStatus });
           col.style.setProperty('--column-phase-color', phase.color);
