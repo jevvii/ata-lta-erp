@@ -114,11 +114,12 @@ const Workflow = {
     return this.isCompleted(itemOrTask) ? 'is-completed' : '';
   },
 
-  getWorkRequestAssigneeNames(r) {
+  getWorkRequestAssigneeNames(r, taskMap) {
     const names = new Set();
     const assignedUser = r.assignedTo ? DB.getById('users', r.assignedTo) : null;
     if (assignedUser?.name) names.add(assignedUser.name);
-    const tasks = (this._tempTaskMap || buildTaskMap())[r.id] || [];
+    const resolvedTaskMap = taskMap || this._tempTaskMap || buildTaskMap();
+    const tasks = resolvedTaskMap[r.id] || [];
     tasks.forEach(t => {
       if (t.assigneeId) {
         const u = DB.getById('users', t.assigneeId);
@@ -2116,13 +2117,14 @@ const Workflow = {
       });
     };
 
-    const applyFilters = (wrs) => {
+    const applyFilters = (wrs, taskMap) => {
       let result = wrs.slice();
+      const resolvedTaskMap = taskMap || this._tempTaskMap || buildTaskMap();
 
       if (activeFilters.assignee.size > 0) {
         const hasUnassigned = activeFilters.assignee.has('__UNASSIGNED__');
         result = result.filter(r => {
-          const names = this.getWorkRequestAssigneeNames(r);
+          const names = this.getWorkRequestAssigneeNames(r, resolvedTaskMap);
           if (names.size === 0) return hasUnassigned;
           return Array.from(names).some(name => activeFilters.assignee.has(name));
         });
@@ -2132,7 +2134,7 @@ const Workflow = {
         result = result.filter(r => {
           const wrPriority = r.priority || 'Normal';
           if (activeFilters.priority.has(wrPriority)) return true;
-          const tasks = (this._tempTaskMap || buildTaskMap())[r.id] || [];
+          const tasks = resolvedTaskMap[r.id] || [];
           return tasks.some(t => activeFilters.priority.has(t.priority || 'Normal'));
         });
       }
@@ -2341,7 +2343,10 @@ const Workflow = {
           const catBtn = catList.children[index];
           if (catBtn) {
             catBtn.className = 'jira-filter-category' + (selectedCategory === cat ? ' active' : '');
-            catBtn.innerHTML = escapeHtml(categories[cat].label) + (activeFilters[cat].size > 0 ? ` <span class="cat-count">${activeFilters[cat].size}</span>` : '');
+            catBtn.textContent = categories[cat].label;
+            if (activeFilters[cat].size > 0) {
+              catBtn.appendChild(el('span', { class: 'cat-count', text: String(activeFilters[cat].size) }));
+            }
           }
         });
       }
@@ -2367,9 +2372,12 @@ const Workflow = {
       Object.keys(categories).forEach(cat => {
         const catBtn = el('button', {
           type: 'button',
-          class: 'jira-filter-category' + (selectedCategory === cat ? ' active' : ''),
-          html: escapeHtml(categories[cat].label) + (activeFilters[cat].size > 0 ? ` <span class="cat-count">${activeFilters[cat].size}</span>` : '')
+          class: 'jira-filter-category' + (selectedCategory === cat ? ' active' : '')
         });
+        catBtn.appendChild(document.createTextNode(categories[cat].label));
+        if (activeFilters[cat].size > 0) {
+          catBtn.appendChild(el('span', { class: 'cat-count', text: String(activeFilters[cat].size) }));
+        }
         catBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           selectedCategory = cat;
@@ -2557,7 +2565,7 @@ const Workflow = {
 
       const listTaskMap = this._tempTaskMap || buildTaskMap();
       wrs = wrs.filter(r => Auth.canViewWrWithTasks(r, listTaskMap));
-      wrs = applyFilters(wrs);
+      wrs = applyFilters(wrs, listTaskMap);
 
       const hasActiveFilters = getActiveFilterCount() > 0;
       if (viewMode === 'table') this.refreshTable(contentContainer, wrs, hasActiveFilters);

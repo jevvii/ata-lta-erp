@@ -576,6 +576,13 @@ const KanbanBoard = {
           phaseHeader.appendChild(el('span', { class: 'board-phase-count', text: String(secItems.length) }));
           sectionEl.appendChild(phaseHeader);
 
+          if (dragConfig.enabled) {
+            sectionEl.addEventListener('dragover', handleDragOver);
+            sectionEl.addEventListener('dragenter', handleDragEnter);
+            sectionEl.addEventListener('dragleave', handleDragLeave);
+            sectionEl.addEventListener('drop', (e) => handleDrop(e, sectionColumn));
+          }
+
           if (secItems.length === 0) {
             const emptyCfg = typeof column.emptyState === 'function'
               ? column.emptyState(sectionColumn)
