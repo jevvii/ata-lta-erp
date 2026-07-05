@@ -2391,7 +2391,7 @@ tbody tr:hover {
 }
 
 .filters-bar .form-select,
-.filters-bar input {
+.filters-bar input:not([type="checkbox"]) {
   min-width: 120px;
   height: 34px;
   min-height: 34px !important;
@@ -12516,9 +12516,16 @@ html.loading-active #loading-screen:not(.hidden) {
   background: var(--color-bg-hover, #f0f1f3);
 }
 
-.jira-filter-value-item input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
+.jira-filter-value-item input[type="checkbox"],
+.jira-filter-checkbox {
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  max-width: 15px !important;
+  min-height: 15px !important;
+  max-height: 15px !important;
+  padding: 0 !important;
+  margin: 0 !important;
   accent-color: var(--color-primary, #2563eb);
   flex-shrink: 0;
   cursor: pointer;

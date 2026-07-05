@@ -1660,7 +1660,7 @@ function createJiraFilterToolbar(config) {
           type: 'button',
           class: 'jira-filter-value-item' + (isVisible ? '' : ' hidden')
         });
-        const checkbox = el('input', { type: 'checkbox' });
+        const checkbox = el('input', { type: 'checkbox', class: 'jira-filter-checkbox' });
         checkbox.checked = isChecked;
         checkbox.addEventListener('click', (e) => e.stopPropagation());
 
