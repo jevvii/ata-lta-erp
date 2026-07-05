@@ -2180,7 +2180,7 @@ const Workflow = {
 
     // Group dropdown
     const groupWrap = el('div', { class: 'jira-group-wrap' });
-    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
     const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     const groupTrigger = el('button', {
       type: 'button',
@@ -2189,6 +2189,7 @@ const Workflow = {
     const renderGroupTrigger = () => {
       const selected = groupOptions.find(opt => opt.key === groupBy);
       const label = groupBy === 'none' ? 'Group' : 'Group: ' + (selected ? selected.label : 'Group');
+      groupTrigger.classList.toggle('active', groupBy !== 'none');
       groupTrigger.innerHTML = groupIconSvg + ' <span>' + escapeHtml(label) + '</span> ' + groupCaretSvg;
     };
     renderGroupTrigger();
@@ -2550,6 +2551,37 @@ const Workflow = {
 
     const contentContainer = el('div');
     wrapper.appendChild(contentContainer);
+
+    // Sticky group/phase headers must sit directly beneath the Jira toolbar. Because
+    // the toolbar height changes when filters wrap, compute the real offset and
+    // expose it to the grouped board headers via a CSS variable on the container.
+    const syncHeaderTop = () => {
+      if (!jiraToolbar) return;
+      const height = jiraToolbar.offsetHeight || 40;
+      contentContainer.style.setProperty(
+        '--board-column-header-top',
+        'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + height + 'px)'
+      );
+    };
+    requestAnimationFrame(syncHeaderTop);
+    setTimeout(syncHeaderTop, 50);
+
+    if (!this._syncHeaderTopResizeListener) {
+      this._syncHeaderTopResizeListener = () => {
+        const page = document.querySelector('.operations-list-page, .operations-tab-page');
+        const toolbar = page?.querySelector('.jira-toolbar');
+        const board = page?.querySelector('.board-v2, .board-grouped-rows');
+        const container = board?.parentElement;
+        if (toolbar && container) {
+          const height = toolbar.offsetHeight || 40;
+          container.style.setProperty(
+            '--board-column-header-top',
+            'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + ' + height + 'px)'
+          );
+        }
+      };
+      window.addEventListener('resize', this._syncHeaderTopResizeListener);
+    }
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
@@ -3123,10 +3155,8 @@ const Workflow = {
         const section = el('div', { class: 'board-group-section' + (isCollapsed ? ' collapsed' : '') });
         section.style.setProperty('--phase-count', String(boardPhases.length));
 
-        const header = el('div', { class: 'board-group-section-header' });
-        header.style.setProperty('--phase-count', String(boardPhases.length));
-
-        // Title cell (collapsible)
+        // Group title row (full-width, sticky)
+        const titleRow = el('div', { class: 'board-group-title-row' });
         const titleCell = el('div', { class: 'board-group-title' });
         const chevronBtn = el('button', {
           type: 'button',
@@ -3155,12 +3185,18 @@ const Workflow = {
         avatar.style.color = '#fff';
 
         const nameWrap = el('div', { class: 'board-group-name-wrap' });
-        nameWrap.appendChild(el('div', { class: 'board-group-name', text: displayName }));
-        nameWrap.appendChild(el('div', { class: 'board-group-count', text: groupWrs.length + ' item' + (groupWrs.length === 1 ? '' : 's') }));
+        const nameLine = el('div', { class: 'board-group-name' });
+        nameLine.appendChild(document.createTextNode(displayName + ' '));
+        nameLine.appendChild(el('span', {
+          class: 'board-group-count',
+          text: '(' + groupWrs.length + ' item' + (groupWrs.length === 1 ? '' : 's') + ')'
+        }));
+        nameWrap.appendChild(nameLine);
 
         titleCell.appendChild(chevronBtn);
         titleCell.appendChild(avatar);
         titleCell.appendChild(nameWrap);
+        titleRow.appendChild(titleCell);
 
         const toggleSection = () => {
           const set = getCollapsedSet();
@@ -3172,26 +3208,25 @@ const Workflow = {
         };
         titleCell.addEventListener('click', toggleSection);
         chevronBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSection(); });
+        section.appendChild(titleRow);
 
-        header.appendChild(titleCell);
-
-        // Phase heading cells aligned with the card columns below
-        const phaseGrid = el('div', { class: 'board-group-phase-grid' });
-        phaseGrid.style.setProperty('--phase-count', String(boardPhases.length));
+        // Phase heading row (sticky, directly beneath the group title row)
+        const phaseRow = el('div', { class: 'board-group-phase-row' });
+        phaseRow.style.setProperty('--phase-count', String(boardPhases.length));
+        phaseRow.appendChild(el('div', { class: 'board-group-phase-gutter' }));
         boardPhases.forEach(phase => {
           const count = groupWrs.filter(wr => phase.statuses.includes(wr.status)).length;
           const cell = el('div', { class: 'board-group-phase-header' });
           cell.style.setProperty('--phase-color', phase.color);
           cell.appendChild(el('div', { class: 'phase-header-top' }));
-          const body = el('div', { class: 'phase-header-body' });
-          body.appendChild(el('span', { class: 'board-column-dot', html: buildColumnStatusIcon({ key: phase.key, color: phase.color, icon: 'phase' }) }));
-          body.appendChild(el('span', { class: 'phase-header-label', text: phase.label.toUpperCase() }));
-          body.appendChild(el('span', { class: 'phase-header-count', text: count + ' OF ' + groupWrs.length }));
-          cell.appendChild(body);
-          phaseGrid.appendChild(cell);
+          const headerBody = el('div', { class: 'phase-header-body' });
+          headerBody.appendChild(el('span', { class: 'board-column-dot', html: buildColumnStatusIcon({ key: phase.key, color: phase.color, icon: 'phase' }) }));
+          headerBody.appendChild(el('span', { class: 'phase-header-label', text: phase.label.toUpperCase() }));
+          headerBody.appendChild(el('span', { class: 'phase-header-count', text: count + ' OF ' + groupWrs.length }));
+          cell.appendChild(headerBody);
+          phaseRow.appendChild(cell);
         });
-        header.appendChild(phaseGrid);
-        section.appendChild(header);
+        section.appendChild(phaseRow);
 
         // Card columns
         const body = el('div', { class: 'board-group-body' });
