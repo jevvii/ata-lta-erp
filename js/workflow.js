@@ -2684,10 +2684,16 @@ const Workflow = {
       tr.appendChild(statusTd);
       
       tr.appendChild(el('td', { text: wr.dueDate ? formatDate(wr.dueDate) : '—' }));
-      tr.appendChild(el('td', { text: assignedUser?.name || '—' }));
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', (e) => {
+        if (!e.target.closest('button, a, input, select')) {
+          location.hash = '#operations/detail/' + wr.id;
+        }
+      });
+
       const tdAct = el('td');
       const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#operations/detail/' + wr.id; });
+      viewBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#operations/detail/' + wr.id; });
       tdAct.appendChild(viewBtn);
       
       if (isPendingWr(wr)) {

@@ -424,194 +424,180 @@ const Disbursement = {
       }
     }
 
-    const wrFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
-    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
-    DB.getWhere('workRequests', wr => {
-      const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).filter(wr => {
-      return Auth.canViewWr(wr);
-    }).forEach(wr => {
-      const client = DB.getById('clients', wr.clientId);
-      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title + ' — ' + (client?.name || '—') }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(wrFilter));
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      workRequest: new Set(),
+      client: new Set(),
+      employee: new Set(),
+      fund: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
 
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '180px' });
-    filters.appendChild(clientFilter);
-
-    const empOptions = [{ value: '', text: 'All Employees' }];
-    DB.getWhere('users', u => Auth.ALL_ROLES.includes(u.role)).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions, maxWidth: '180px' });
-    filters.appendChild(empFilter);
-
-    const fundFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
-    fundFilter.appendChild(el('option', { value: '', text: 'All Funds' }));
-    ['Firm Fund', 'Client Fund'].forEach(f => fundFilter.appendChild(el('option', { value: f, text: f })));
-    filters.appendChild(wrapFilterFieldWithClear(fundFilter));
-
-    const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
-    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released', 'Rejected'].forEach(s => {
-      statusFilter.appendChild(el('option', { value: s, text: s }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filters.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      wrFilter.value = '';
-      clientFilter.value = '';
-      empFilter.value = '';
-      fundFilter.value = '';
-      statusFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      App.clearSavedFilters('disbursement');
-      refresh();
-    });
-    filters.appendChild(clearBtn);
-
-    // Restore saved filters
     const savedFilters = App.restoreFilters('disbursement');
     if (savedFilters) {
-      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.fund) fundFilter.value = savedFilters.fund;
-      if (savedFilters.status) statusFilter.value = savedFilters.status;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+      if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
+      else if (savedFilters.workRequest) activeFilters.workRequest.add(savedFilters.workRequest);
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      else if (savedFilters.client) activeFilters.client.add(savedFilters.client);
+      if (Array.isArray(savedFilters.employee)) savedFilters.employee.forEach(v => activeFilters.employee.add(v));
+      else if (savedFilters.employee) activeFilters.employee.add(savedFilters.employee);
+      if (Array.isArray(savedFilters.fund)) savedFilters.fund.forEach(v => activeFilters.fund.add(v));
+      else if (savedFilters.fund) activeFilters.fund.add(savedFilters.fund);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
     const saveCurrentFilters = () => {
       App.saveFilters('disbursement', {
-        workRequest: wrFilter.value,
-        client: clientFilter.value,
-        employee: empFilter.value,
-        fund: fundFilter.value,
-        status: statusFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value
+        workRequest: Array.from(activeFilters.workRequest),
+        client: Array.from(activeFilters.client),
+        employee: Array.from(activeFilters.employee),
+        fund: Array.from(activeFilters.fund),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
       });
     };
 
-    // View mode toggle
-    const vmToggle = el('div', { class: 'view-mode-toggle' });
-    const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
-    [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: viewMode === mode ? 'active' : '' });
-      btn.addEventListener('click', () => {
-        saveCurrentFilters();
-        App.setPreferredViewMode('disbursement', mode);
-        App.handleRoute();
-      });
-      vmToggle.appendChild(btn);
+    const getWorkRequestOptions = () => DB.getWhere('workRequests', wr => {
+      const wrEnt = (wr.entity || '').toUpperCase();
+      return (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase()) && Auth.canViewWr(wr);
+    }).map(wr => {
+      const client = DB.getById('clients', wr.clientId);
+      return { value: wr.id, label: wr.title + ' — ' + (client?.name || '—') };
     });
 
-    stickyContainer.appendChild(filters);
-    stickyContainer.appendChild(vmToggle);
+    const getClientOptions = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt) : clientEnt === entity.toUpperCase();
+    }).map(c => ({ value: c.id, label: c.name }));
+
+    const getEmployeeOptions = () => {
+      const set = new Set();
+      DB.getWhere('users', u => Auth.ALL_ROLES.includes(u.role)).forEach(u => set.add(u.name));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) set.add(name);
+      });
+      return Array.from(set).map(n => ({ value: n, label: n }));
+    };
+
+    const getFundOptions = () => [
+      { value: 'Firm Fund', label: 'Firm Fund' },
+      { value: 'Client Fund', label: 'Client Fund' }
+    ];
+
+    const getStatusOptions = () => [
+      { value: 'Draft', label: 'Draft' },
+      { value: 'Pending', label: 'Pending' },
+      { value: 'Approved', label: 'Approved' },
+      { value: 'Release Pending Approval', label: 'Release Pending Approval' },
+      { value: 'Released', label: 'Released' },
+      { value: 'Rejected', label: 'Rejected' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      workRequest: { label: 'Work Request', getOptions: getWorkRequestOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      employee: { label: 'Employee', getOptions: getEmployeeOptions },
+      fund: { label: 'Fund', getOptions: getFundOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'disbursement',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        refresh();
+      },
+      viewMode,
+      onViewModeChange: (newMode) => {
+        viewMode = newMode;
+        App.setPreferredViewMode('disbursement', newMode);
+        saveCurrentFilters();
+        refresh();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const refresh = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value, viewMode, empFilter.searchText, clientFilter.searchText);
-    [wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); refresh(); }));
-
+    const refresh = () => this.refreshList(listContainer, activeFilters, viewMode);
     refresh();
 
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo, viewMode, empSearchText, clientSearchText) {
+  refreshList(container, activeFilters, viewMode) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
     let items = DB.getWhere('disbursements', d => (entity === 'ALL' ? Auth.user.entities.includes(d.entity) : d.entity === entity));
 
     items = items.filter(d => Auth.canViewDisbursement(d));
 
-    if (wrFilter) items = items.filter(d => d.linkedWorkRequestId === wrFilter);
-    if (clientFilter || (clientSearchText && clientSearchText.trim() !== '')) {
-      const selectedClient = clientFilter ? DB.getById('clients', clientFilter) : null;
-      if (selectedClient && selectedClient.name === clientSearchText) {
-        items = items.filter(d => {
-          if (!d.linkedWorkRequestId) return false;
-          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-          return wr && wr.clientId === clientFilter;
-        });
-      } else if (clientSearchText && clientSearchText.trim() !== '') {
-        const query = clientSearchText.trim().toLowerCase();
-        items = items.filter(d => {
-          if (!d.linkedWorkRequestId) return false;
-          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-          if (!wr) return false;
-          const client = DB.getById('clients', wr.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
-      }
+    if (activeFilters.workRequest && activeFilters.workRequest.size > 0) {
+      items = items.filter(d => activeFilters.workRequest.has(d.linkedWorkRequestId));
     }
-    if (empSearchText && empSearchText.trim() !== '') {
-      const query = empSearchText.trim().toLowerCase();
+    if (activeFilters.client && activeFilters.client.size > 0) {
+      items = items.filter(d => {
+        if (!d.linkedWorkRequestId) return false;
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        return wr && activeFilters.client.has(wr.clientId);
+      });
+    }
+    if (activeFilters.employee && activeFilters.employee.size > 0) {
       items = items.filter(d => {
         const empId = d.employeeId || d.requestedBy;
         const u = empId ? DB.getById('users', empId) : null;
-        return u && u.name.toLowerCase().includes(query);
+        return u && activeFilters.employee.has(u.name);
       });
-    } else if (empFilter) {
-      items = items.filter(d => this.getEmployeeId(d) === empFilter);
     }
-    if (fundFilter) items = items.filter(d => this.getFundSource(d) === fundFilter);
-    if (statusFilter) {
-      if (statusFilter === 'Draft') {
-        items = items.filter(d => d.status === 'Draft');
-      } else if (statusFilter === 'Pending') {
-        items = items.filter(d => this.PENDING_APPROVAL_STATUSES.includes(d.status));
-      } else {
-        items = items.filter(d => d.status === statusFilter);
-      }
+    if (activeFilters.fund && activeFilters.fund.size > 0) {
+      items = items.filter(d => activeFilters.fund.has(this.getFundSource(d)));
     }
-    if (dateFrom) {
-      const fromDate = new Date(dateFrom).getTime();
-      items = items.filter(d => new Date(d.submittedAt).getTime() >= fromDate);
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      items = items.filter(d => {
+        if (activeFilters.status.has(d.status)) return true;
+        if (activeFilters.status.has('Pending') && this.PENDING_APPROVAL_STATUSES.includes(d.status)) return true;
+        return false;
+      });
     }
-    if (dateTo) {
-      const toDate = new Date(dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      items = items.filter(d => new Date(d.submittedAt).getTime() <= toDate.getTime());
-    }
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
 
+      items = items.filter(d => {
+        const dStr = (d.date || d.requestedDate || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
+    }
     items.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
     if (items.length === 0) {

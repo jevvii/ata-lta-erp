@@ -1540,7 +1540,388 @@ function classNames(...args) {
       }
     }
   }
-  return classes.join(' ');
+}
+
+/**
+ * Creates a compact Jira-style two-pane filter toolbar.
+ * Used system-wide across Operations, Billing, Disbursement, Transmittal, DMS, Users, etc.
+ */
+function createJiraFilterToolbar(config) {
+  const {
+    moduleName,
+    categories,
+    activeFilters,
+    onFilterChange,
+    viewMode,
+    onViewModeChange,
+    groupByOptions,
+    currentGroupBy,
+    onGroupByChange
+  } = config;
+
+  const container = el('div', { class: 'jira-toolbar-sticky-container filters-bar' });
+  const toolbar = el('div', { class: 'jira-toolbar' });
+
+  // 1. View Mode Toggle
+  if (viewMode && onViewModeChange) {
+    const vmToggle = el('div', { class: 'view-mode-toggle' });
+    const modes = [
+      { key: 'table', label: 'Table', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.table : '' },
+      { key: 'board', label: 'Board', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.board : '' },
+      { key: 'list', label: 'List', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.list : '' }
+    ];
+    modes.forEach(m => {
+      const btn = el('button', {
+        type: 'button',
+        html: m.icon + ' ' + m.label,
+        class: viewMode === m.key ? 'active' : ''
+      });
+      btn.addEventListener('click', () => onViewModeChange(m.key));
+      vmToggle.appendChild(btn);
+    });
+    toolbar.appendChild(vmToggle);
+  }
+
+  // 2. Filter Wrap & Dropdown
+  const filterWrap = el('div', { class: 'jira-filter-wrap' });
+  const filterTrigger = el('button', {
+    type: 'button',
+    class: 'jira-filter-trigger',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="11" y2="16"/></svg> Filter'
+  });
+  const filterBadge = el('span', { class: 'jira-filter-badge hidden' });
+  filterTrigger.appendChild(filterBadge);
+  const filterDropdown = el('div', { class: 'jira-dropdown jira-filter-dropdown hidden' });
+
+  const getActiveFilterCount = () => Object.values(activeFilters).reduce((sum, set) => sum + (set ? set.size : 0), 0);
+
+  let selectedCategory = Object.keys(categories)[0];
+
+  const renderFilterValues = () => {
+    const catConfig = categories[selectedCategory];
+    if (!catConfig) return;
+    const options = typeof catConfig.getOptions === 'function' ? catConfig.getOptions() : [];
+    const list = filterDropdown.querySelector('.jira-filter-values-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const searchInput = filterDropdown.querySelector('.jira-filter-search');
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    let visibleCount = 0;
+    const allOptions = options.slice();
+
+    if (catConfig.hasDatePicker || catConfig.hasDateInput) {
+      const dateWrap = el('div', { class: 'jira-filter-select-date-wrap' });
+      let activeCustomDate = '';
+      if (activeFilters[selectedCategory]) {
+        activeFilters[selectedCategory].forEach(val => {
+          if (val.startsWith('DATE:')) activeCustomDate = val.slice(5);
+        });
+      }
+
+      const dateInput = el('input', {
+        type: 'date',
+        class: 'jira-filter-date-input',
+        value: activeCustomDate || ''
+      });
+
+      dateInput.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const val = dateInput.value;
+        if (activeFilters[selectedCategory]) {
+          Array.from(activeFilters[selectedCategory]).forEach(v => {
+            if (v.startsWith('DATE:')) activeFilters[selectedCategory].delete(v);
+          });
+          if (val) activeFilters[selectedCategory].add(`DATE:${val}`);
+        }
+        updateFilterUI();
+        if (onFilterChange) onFilterChange();
+      });
+
+      dateWrap.appendChild(dateInput);
+      list.appendChild(dateWrap);
+
+      if (!dateInput.dataset.mdpAttached && typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
+        setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
+      }
+    }
+
+    if (allOptions.length === 0 && !catConfig.hasDatePicker) {
+      list.appendChild(el('div', { class: 'jira-filter-values-empty', text: 'No results' }));
+    } else {
+      allOptions.forEach(opt => {
+        const catSet = activeFilters[selectedCategory];
+        const isChecked = catSet ? catSet.has(opt.value) : false;
+        const isVisible = !query || opt.label.toLowerCase().includes(query);
+        if (isVisible) visibleCount++;
+
+        const row = el('button', {
+          type: 'button',
+          class: 'jira-filter-value-item' + (isVisible ? '' : ' hidden')
+        });
+        const checkbox = el('input', { type: 'checkbox' });
+        checkbox.checked = isChecked;
+        checkbox.addEventListener('click', (e) => e.stopPropagation());
+
+        const label = el('span', { text: opt.label });
+        row.appendChild(checkbox);
+        row.appendChild(label);
+
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (catSet) {
+            if (catSet.has(opt.value)) catSet.delete(opt.value);
+            else catSet.add(opt.value);
+          }
+          updateFilterUI();
+          if (onFilterChange) onFilterChange();
+        });
+
+        list.appendChild(row);
+      });
+    }
+
+    const footer = filterDropdown.querySelector('.jira-filter-values-footer');
+    if (footer) {
+      footer.innerHTML = '';
+      const selectedInCat = activeFilters[selectedCategory] ? activeFilters[selectedCategory].size : 0;
+      const clearCatBtn = el('button', {
+        type: 'button',
+        class: 'jira-filter-clear-cat' + (selectedInCat > 0 ? '' : ' disabled'),
+        text: 'Clear'
+      });
+      if (selectedInCat > 0) {
+        clearCatBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (activeFilters[selectedCategory]) activeFilters[selectedCategory].clear();
+          updateFilterUI();
+          if (onFilterChange) onFilterChange();
+        });
+      }
+      footer.appendChild(clearCatBtn);
+      footer.appendChild(el('span', { class: 'jira-filter-footer-count', text: `${visibleCount} of ${allOptions.length}` }));
+    }
+  };
+
+  const updateFilterUI = () => {
+    const catList = filterDropdown.querySelector('.jira-filter-categories-list');
+    if (catList) {
+      const catKeys = Object.keys(categories);
+      catKeys.forEach((cat, index) => {
+        const catBtn = catList.children[index];
+        if (catBtn) {
+          catBtn.className = 'jira-filter-category' + (selectedCategory === cat ? ' active' : '');
+          catBtn.textContent = categories[cat].label;
+          const count = activeFilters[cat] ? activeFilters[cat].size : 0;
+          if (count > 0) {
+            catBtn.appendChild(el('span', { class: 'cat-count', text: String(count) }));
+          }
+        }
+      });
+    }
+
+    const clearAllBtn = filterDropdown.querySelector('.jira-filter-clear-all');
+    if (clearAllBtn) {
+      const totalActive = getActiveFilterCount();
+      clearAllBtn.className = 'jira-filter-clear-all' + (totalActive > 0 ? '' : ' disabled');
+    }
+
+    const count = getActiveFilterCount();
+    filterBadge.textContent = String(count);
+    filterBadge.classList.toggle('hidden', count === 0);
+    clearFiltersBtn.classList.toggle('hidden', count === 0);
+
+    renderFilterValues();
+  };
+
+  const renderFilterDropdown = () => {
+    filterDropdown.innerHTML = '';
+    const body = el('div', { class: 'jira-filter-body' });
+
+    // Left Pane: Categories
+    const leftPane = el('div', { class: 'jira-filter-categories' });
+    const catList = el('div', { class: 'jira-filter-categories-list' });
+
+    Object.keys(categories).forEach(cat => {
+      const catBtn = el('button', {
+        type: 'button',
+        class: 'jira-filter-category' + (selectedCategory === cat ? ' active' : '')
+      });
+      catBtn.appendChild(document.createTextNode(categories[cat].label));
+      const count = activeFilters[cat] ? activeFilters[cat].size : 0;
+      if (count > 0) {
+        catBtn.appendChild(el('span', { class: 'cat-count', text: String(count) }));
+      }
+      catBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedCategory = cat;
+        renderFilterDropdown();
+      });
+      catList.appendChild(catBtn);
+    });
+    leftPane.appendChild(catList);
+
+    const catFooter = el('div', { class: 'jira-filter-categories-footer' });
+    const totalActive = getActiveFilterCount();
+    const clearAllBtn = el('button', {
+      type: 'button',
+      class: 'jira-filter-clear-all' + (totalActive > 0 ? '' : ' disabled'),
+      text: 'Clear all'
+    });
+    clearAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (getActiveFilterCount() === 0) return;
+      Object.keys(activeFilters).forEach(cat => activeFilters[cat] && activeFilters[cat].clear());
+      if (moduleName) App.clearSavedFilters(moduleName);
+      updateFilterUI();
+      if (onFilterChange) onFilterChange();
+    });
+    catFooter.appendChild(clearAllBtn);
+    leftPane.appendChild(catFooter);
+
+    // Right Pane: Values
+    const rightPane = el('div', { class: 'jira-filter-values' });
+    const valuesHeader = el('div', { class: 'jira-filter-values-header' });
+    const searchIcon = el('span', {
+      class: 'jira-filter-search-icon',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    });
+    const searchInput = el('input', {
+      type: 'text',
+      class: 'jira-filter-search',
+      placeholder: `Search ${(categories[selectedCategory] ? categories[selectedCategory].label : '').toLowerCase()}`
+    });
+    searchInput.addEventListener('input', () => renderFilterValues());
+    valuesHeader.appendChild(searchIcon);
+    valuesHeader.appendChild(searchInput);
+    rightPane.appendChild(valuesHeader);
+
+    const valuesList = el('div', { class: 'jira-filter-values-list' });
+    rightPane.appendChild(valuesList);
+    const valuesFooter = el('div', { class: 'jira-filter-values-footer' });
+    rightPane.appendChild(valuesFooter);
+
+    body.appendChild(leftPane);
+    body.appendChild(rightPane);
+    filterDropdown.appendChild(body);
+
+    const globalFooter = el('div', { class: 'jira-filter-global-footer' });
+    const shortcutHint = el('div', {
+      class: 'jira-filter-shortcut-hint',
+      html: 'Press <kbd>Shift</kbd> + <kbd>F</kbd> to open and close'
+    });
+    globalFooter.appendChild(shortcutHint);
+    filterDropdown.appendChild(globalFooter);
+
+    renderFilterValues();
+  };
+
+  filterTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = filterDropdown.classList.contains('hidden');
+    if (isHidden) {
+      filterDropdown.classList.remove('hidden');
+      renderFilterDropdown();
+      const searchInput = filterDropdown.querySelector('.jira-filter-search');
+      if (searchInput) searchInput.focus();
+    } else {
+      filterDropdown.classList.add('hidden');
+    }
+  });
+
+  filterWrap.appendChild(filterTrigger);
+  filterWrap.appendChild(filterDropdown);
+
+  const clearFiltersBtn = el('button', { type: 'button', class: 'jira-clear-filters hidden', text: 'Clear filters' });
+  clearFiltersBtn.addEventListener('click', () => {
+    Object.keys(activeFilters).forEach(cat => activeFilters[cat] && activeFilters[cat].clear());
+    if (moduleName) App.clearSavedFilters(moduleName);
+    updateFilterUI();
+    if (onFilterChange) onFilterChange();
+  });
+
+  toolbar.appendChild(filterWrap);
+  toolbar.appendChild(clearFiltersBtn);
+
+  // Grouping Dropdown
+  if (groupByOptions && currentGroupBy && onGroupByChange) {
+    const groupWrap = el('div', { class: 'jira-group-wrap' });
+    const groupTrigger = el('button', {
+      type: 'button',
+      class: 'jira-group-trigger',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Group'
+    });
+    const groupDropdown = el('div', { class: 'jira-dropdown jira-group-dropdown hidden' });
+    const renderGroupDropdown = () => {
+      groupDropdown.innerHTML = '';
+      groupByOptions.forEach(opt => {
+        const active = currentGroupBy === opt.key;
+        const btn = el('button', {
+          type: 'button',
+          class: 'jira-group-option' + (active ? ' active' : ''),
+          html: escapeHtml(opt.label) + (active ? ' <span class="checkmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '')
+        });
+        btn.addEventListener('click', () => {
+          groupDropdown.classList.add('hidden');
+          onGroupByChange(opt.key);
+        });
+        groupDropdown.appendChild(btn);
+      });
+    };
+    renderGroupDropdown();
+    groupTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      filterDropdown.classList.add('hidden');
+      groupDropdown.classList.toggle('hidden');
+    });
+    groupWrap.appendChild(groupTrigger);
+    groupWrap.appendChild(groupDropdown);
+    toolbar.appendChild(groupWrap);
+  }
+
+  // Attach global Shift+F shortcut listener once
+  if (!window._jiraGlobalShortcutListenerAttached) {
+    window._jiraGlobalShortcutListenerAttached = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag) || document.activeElement?.isContentEditable;
+        const isFilterSearch = document.activeElement?.classList?.contains('jira-filter-search');
+        if (isInput && !isFilterSearch) return;
+
+        const visibleFilterWrap = document.querySelector('.jira-filter-wrap');
+        if (visibleFilterWrap) {
+          e.preventDefault();
+          const trigger = visibleFilterWrap.querySelector('.jira-filter-trigger');
+          if (trigger) trigger.click();
+        }
+      }
+    });
+  }
+
+  // Attach global click-outside listener once
+  if (!window._jiraGlobalClickListenerAttached) {
+    window._jiraGlobalClickListenerAttached = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target || !e.target.isConnected) return;
+      if (
+        e.target.closest('.jira-group-wrap') ||
+        e.target.closest('.jira-filter-wrap') ||
+        e.target.closest('.mdp-overlay') ||
+        e.target.closest('.mdp-dialog') ||
+        e.target.closest('.mdp-wrapper') ||
+        e.target.closest('.mdp-container')
+      ) {
+        return;
+      }
+      document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+    });
+  }
+
+  updateFilterUI();
+  container.appendChild(toolbar);
+  return container;
 }
 
 

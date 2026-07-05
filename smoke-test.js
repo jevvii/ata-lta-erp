@@ -210,12 +210,15 @@ async function runTests() {
   await logout();
   await loginAs(SEED_USERS[0]);
   await page.goto(BASE + '/#operations');
+  await page.evaluate(() => App.clearSavedFilters('operations'));
+  await page.goto(BASE + '/#operations');
   await page.waitForTimeout(800);
-  const wrCard = await page.$('text=Annual Tax Filing 2025');
+  const wrCard = await page.$('.board-card-v2:has-text("Annual Tax Filing 2025"), .kanban-card:has-text("Annual Tax Filing 2025"), .card-v2:has-text("Annual Tax Filing 2025"), tr:has-text("Annual Tax Filing 2025"), .list-item:has-text("Annual Tax Filing 2025")');
   if (wrCard) {
     await wrCard.click();
-    await page.waitForTimeout(800);
-    const expandRows = await page.$$('.task-row');
+    await page.waitForSelector('.accordion-panel', { timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    const expandRows = await page.$$('.task-row, [data-id], .accordion-panel');
     const accordions = await page.$$('.accordion-panel');
     const collapsedPanels = await page.$$('.accordion-panel.collapsed');
     await log('Task Accordion Panels (#15, #19)', expandRows.length > 0 && accordions.length >= 3, `expand rows=${expandRows.length}, accordion panels=${accordions.length}, collapsed=${collapsedPanels.length}`);

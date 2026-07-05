@@ -417,105 +417,106 @@ const Users = {
     const filters = el('div', { class: 'audit-filters' });
 
     const userFilter = el('select', { class: 'form-select' });
-    userFilter.appendChild(el('option', { value: '', text: 'All Users' }));
-    const users = DB.getAll('users');
-    users.forEach(u => {
-      const opt = el('option', { value: u.id, text: u.name });
-      userFilter.appendChild(opt);
-    });
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      user: new Set(),
+      client: new Set(),
+      date: new Set()
+    };
+
     if (!canViewAllAudit) {
-      userFilter.value = Auth.user.id;
-      userFilter.disabled = true;
+      const u = Auth.user?.name;
+      if (u) activeFilters.user.add(u);
     }
-    filters.appendChild(wrapFilterFieldWithClear(userFilter));
 
-    // Client Filter
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getAll('clients').forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
+    const savedFilters = App.restoreFilters('audit');
+    if (savedFilters && canViewAllAudit) {
+      if (Array.isArray(savedFilters.user)) savedFilters.user.forEach(v => activeFilters.user.add(v));
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
+    }
+
+    const saveCurrentFilters = () => {
+      App.saveFilters('audit', {
+        user: Array.from(activeFilters.user),
+        client: Array.from(activeFilters.client),
+        date: Array.from(activeFilters.date)
+      });
+    };
+
+    const getUserOptions = () => DB.getAll('users').map(u => ({ value: u.name, label: u.name }));
+    const getClientOptions = () => DB.getAll('clients').map(c => ({ value: c.name, label: c.name }));
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      user: { label: 'User', getOptions: getUserOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'audit',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        triggerRefresh();
+      }
     });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions });
-    filters.appendChild(clientFilter);
 
-    filters.appendChild(el('span', { text: 'From:', style: 'font-size: 0.875rem; color: var(--color-text-muted);' }));
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-
-    filters.appendChild(el('span', { text: 'To:', style: 'font-size: 0.875rem; color: var(--color-text-muted);' }));
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const clearBtn = el('button', { class: 'btn btn-secondary', text: 'Clear' });
-    clearBtn.addEventListener('click', () => {
-      if (canViewAllAudit) userFilter.value = '';
-      clientFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      this.refreshAuditLog(tableContainer, canViewAllAudit ? '' : Auth.user.id, '', '', '', '');
-    });
-    filters.appendChild(clearBtn);
-
-    wrapper.appendChild(filters);
+    wrapper.appendChild(toolbarContainer);
 
     const tableContainer = el('div');
     wrapper.appendChild(tableContainer);
 
     const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, userFilter.value, clientFilter.value, clientFilter.searchText, dateFrom.value, dateTo.value);
+      this.refreshAuditLog(tableContainer, activeFilters);
     };
 
-    userFilter.addEventListener('change', triggerRefresh);
-    clientFilter.addEventListener('change', triggerRefresh);
-    clientFilter.addEventListener('input', triggerRefresh);
-    dateFrom.addEventListener('change', triggerRefresh);
-    dateTo.addEventListener('change', triggerRefresh);
-
-    this.refreshAuditLog(tableContainer, canViewAllAudit ? '' : Auth.user.id, '', '', '', '');
-
+    triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, userId, clientId, clientSearchText, dateFrom, dateTo) {
+  refreshAuditLog(container, activeFilters) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
 
-    if (userId) {
-      logs = logs.filter(l => l.userId === userId);
+    if (activeFilters && activeFilters.user && activeFilters.user.size > 0) {
+      logs = logs.filter(l => activeFilters.user.has(l.userName || (DB.getById('users', l.userId)?.name)));
     }
-
-    if (clientId || (clientSearchText && clientSearchText.trim() !== '')) {
-      const selectedClient = clientId ? DB.getById('clients', clientId) : null;
-      if (selectedClient && selectedClient.name === clientSearchText) {
-        logs = logs.filter(l => {
-          if (!l.details) return false;
-          const detailsLower = l.details.toLowerCase();
-          return detailsLower.includes(clientId.toLowerCase()) ||
-                 detailsLower.includes(selectedClient.name.toLowerCase());
-        });
-      } else if (clientSearchText && clientSearchText.trim() !== '') {
-        const query = clientSearchText.trim().toLowerCase();
-        const matchingClients = DB.getAll('clients').filter(c =>
-          c.id.toLowerCase().includes(query) || c.name.toLowerCase().includes(query)
-        );
-        logs = logs.filter(l => {
-          if (!l.details) return false;
-          const detailsLower = l.details.toLowerCase();
-          if (detailsLower.includes(query)) return true;
-          return matchingClients.some(c =>
-            detailsLower.includes(c.id.toLowerCase()) || detailsLower.includes(c.name.toLowerCase())
-          );
-        });
-      }
+    if (activeFilters && activeFilters.client && activeFilters.client.size > 0) {
+      logs = logs.filter(l => {
+        if (!l.details) return false;
+        const detailsLower = l.details.toLowerCase();
+        return Array.from(activeFilters.client).some(clientName => detailsLower.includes(clientName.toLowerCase()));
+      });
     }
+    if (activeFilters && activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
 
-    if (dateFrom) {
-      const from = new Date(dateFrom + 'T00:00:00');
-      logs = logs.filter(l => new Date(l.timestamp) >= from);
-    }
-
-    if (dateTo) {
-      const to = new Date(dateTo + 'T23:59:59');
-      logs = logs.filter(l => new Date(l.timestamp) <= to);
+      logs = logs.filter(l => {
+        const dStr = (l.timestamp || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
     }
 
     // Sort newest first

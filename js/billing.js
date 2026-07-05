@@ -257,120 +257,108 @@ const Billing = {
       }
     }
 
-    // Filters
-    const filters = el('div', { class: 'filters-bar' });
-    const wrFilter = el('select', { class: 'form-select' });
-    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
-    DB.getWhere('workRequests', wr => {
-      const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).forEach(wr => {
-      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(wrFilter));
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      workRequest: new Set(),
+      client: new Set(),
+      employee: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
 
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions });
-    filters.appendChild(clientFilter);
-
-    const empOptions = [{ value: '', text: 'All Employees' }];
-    DB.getWhere('users', u => {
-      const userEnts = (u.entities || []).map(e => e.toUpperCase());
-      if (entity === 'ALL') {
-        return userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e));
-      }
-      return userEnts.includes(entity.toUpperCase());
-    }).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions });
-    filters.appendChild(empFilter);
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(el('span', { text: 'From', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filters.appendChild(el('span', { text: 'To', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const statusFilter = el('select', { class: 'form-select' });
-    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'].forEach(s => {
-      statusFilter.appendChild(el('option', { value: s, text: s }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      wrFilter.value = '';
-      clientFilter.value = '';
-      empFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      statusFilter.value = '';
-      App.clearSavedFilters('billing');
-      refresh();
-    });
-    filters.appendChild(clearBtn);
-
-    stickyContainer.appendChild(filters);
-
-    // Restore saved filters
     const savedFilters = App.restoreFilters('billing');
     if (savedFilters) {
-      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
-      if (savedFilters.status) statusFilter.value = savedFilters.status;
+      if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
+      else if (savedFilters.workRequest) activeFilters.workRequest.add(savedFilters.workRequest);
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      else if (savedFilters.client) activeFilters.client.add(savedFilters.client);
+      if (Array.isArray(savedFilters.employee)) savedFilters.employee.forEach(v => activeFilters.employee.add(v));
+      else if (savedFilters.employee) activeFilters.employee.add(savedFilters.employee);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
     const saveCurrentFilters = () => {
       App.saveFilters('billing', {
-        workRequest: wrFilter.value,
-        client: clientFilter.value,
-        employee: empFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value,
-        status: statusFilter.value
+        workRequest: Array.from(activeFilters.workRequest),
+        client: Array.from(activeFilters.client),
+        employee: Array.from(activeFilters.employee),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
       });
     };
 
-    // View mode toggle
-    const viewMode = App.getPreferredViewMode('billing') || 'table';
-    const vmToggle = el('div', { class: 'view-mode-toggle' });
-    const vmTable = el('button', { html: ViewIcons.table + ' Table', class: viewMode === 'table' ? 'active' : '' });
-    const vmBoard = el('button', { html: ViewIcons.board + ' Board', class: viewMode === 'board' ? 'active' : '' });
-    const vmList = el('button', { html: ViewIcons.list + ' List', class: viewMode === 'list' ? 'active' : '' });
-    vmTable.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'table'); App.handleRoute(); });
-    vmBoard.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'board'); App.handleRoute(); });
-    vmList.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'list'); App.handleRoute(); });
-    vmToggle.appendChild(vmTable);
-    vmToggle.appendChild(vmBoard);
-    vmToggle.appendChild(vmList);
-    stickyContainer.appendChild(vmToggle);
+    const getWorkRequestOptions = () => DB.getWhere('workRequests', wr => {
+      const wrEnt = (wr.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase();
+    }).map(wr => ({ value: wr.id, label: wr.title }));
+
+    const getClientOptions = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt) : clientEnt === entity.toUpperCase();
+    }).map(c => ({ value: c.id, label: c.name }));
+
+    const getEmployeeOptions = () => {
+      const set = new Set();
+      DB.getWhere('users', u => {
+        const userEnts = (u.entities || []).map(e => e.toUpperCase());
+        return entity === 'ALL' ? userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e)) : userEnts.includes(entity.toUpperCase());
+      }).forEach(u => set.add(u.name));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) set.add(name);
+      });
+      return Array.from(set).map(n => ({ value: n, label: n }));
+    };
+
+    const getStatusOptions = () => [
+      { value: 'Draft', label: 'Draft' },
+      { value: 'Pending', label: 'Pending' },
+      { value: 'Approved', label: 'Approved' },
+      { value: 'Sent', label: 'Sent' },
+      { value: 'Partially Paid', label: 'Partially Paid' },
+      { value: 'Paid', label: 'Paid' },
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Cancelled', label: 'Cancelled' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      workRequest: { label: 'Work Request', getOptions: getWorkRequestOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      employee: { label: 'Employee', getOptions: getEmployeeOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    let viewMode = App.getPreferredViewMode('billing') || 'table';
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'billing',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        refresh();
+      },
+      viewMode,
+      onViewModeChange: (newMode) => {
+        viewMode = newMode;
+        App.setPreferredViewMode('billing', newMode);
+        saveCurrentFilters();
+        refresh();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
 
     const contentContainer = el('div');
@@ -382,7 +370,7 @@ const Billing = {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
         return matchesEntity && inv.status !== 'Cancelled';
       });
-      
+
       const pendingInvs = DB.getWhere('pendingChanges', pc => {
         if (pc.table !== 'invoices' || pc.status !== 'pending') return false;
         const inv = pc.proposedData;
@@ -399,49 +387,53 @@ const Billing = {
 
       invoices = [...invoices, ...pendingInvs];
 
-      if (wrFilter.value) invoices = invoices.filter(inv => {
-        const wr = DB.getById('workRequests', inv.workRequestId);
-        return wr && wr.id === wrFilter.value;
-      });
-      const selectedClient = clientFilter.value ? DB.getById('clients', clientFilter.value) : null;
-      if (selectedClient && selectedClient.name === clientFilter.searchText) {
-        invoices = invoices.filter(inv => inv.clientId === clientFilter.value);
-      } else if (clientFilter.searchText && clientFilter.searchText.trim() !== '') {
-        const query = clientFilter.searchText.trim().toLowerCase();
-        invoices = invoices.filter(inv => {
-          const client = DB.getById('clients', inv.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
+      if (activeFilters.workRequest.size > 0) {
+        invoices = invoices.filter(inv => activeFilters.workRequest.has(inv.workRequestId));
       }
-      if (empFilter.searchText && empFilter.searchText.trim() !== '') {
-        const query = empFilter.searchText.trim().toLowerCase();
+      if (activeFilters.client.size > 0) {
+        invoices = invoices.filter(inv => activeFilters.client.has(inv.clientId));
+      }
+      if (activeFilters.employee.size > 0) {
         invoices = invoices.filter(inv => {
           const creator = inv.createdBy ? DB.getById('users', inv.createdBy) : null;
-          if (creator && creator.name.toLowerCase().includes(query)) return true;
+          if (creator && activeFilters.employee.has(creator.name)) return true;
           const tasks = inv.workRequestId ? DB.getWhere('tasks', t => t.workRequestId === inv.workRequestId) : [];
           return tasks.some(t => {
-            if (t.assigneeId) {
-              const u = DB.getById('users', t.assigneeId);
-              if (u && u.name.toLowerCase().includes(query)) return true;
-            }
-            if (t.assigneeName && t.assigneeName.toLowerCase().includes(query)) return true;
-            return false;
+            const u = t.assigneeId ? DB.getById('users', t.assigneeId) : null;
+            return (u && activeFilters.employee.has(u.name)) || activeFilters.employee.has(t.assigneeName);
           });
         });
-      } else if (empFilter.value) {
-        invoices = invoices.filter(inv => inv.createdBy === empFilter.value);
       }
-      if (dateFrom.value) invoices = invoices.filter(inv => inv.issueDate >= dateFrom.value);
-      if (dateTo.value) invoices = invoices.filter(inv => inv.issueDate <= dateTo.value);
-      if (statusFilter.value) invoices = invoices.filter(inv => inv.status === statusFilter.value);
+      if (activeFilters.status.size > 0) {
+        invoices = invoices.filter(inv => activeFilters.status.has(inv.status));
+      }
+      if (activeFilters.date.size > 0) {
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        const endOfWeek = new Date(now);
+        endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+        const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
+        invoices = invoices.filter(inv => {
+          if (!inv.dueDate && !inv.issueDate) return false;
+          const dStr = (inv.dueDate || inv.issueDate).slice(0, 10);
+          if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+          let bucket = 'Due Later';
+          if (dStr < todayStr) bucket = 'Overdue';
+          else if (dStr === todayStr) bucket = 'Due Today';
+          else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+          else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+          return activeFilters.date.has(bucket);
+        });
+      }
 
       if (viewMode === 'table') this.refreshTable(contentContainer, invoices);
       else if (viewMode === 'board') this.refreshBoard(contentContainer, invoices);
       else this.refreshListCompact(contentContainer, invoices);
     };
 
-    [wrFilter, clientFilter, empFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); refresh(); }));
     refresh();
 
     return wrapper;

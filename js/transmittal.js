@@ -269,179 +269,158 @@ const Transmittal = {
       }
     }
 
-    const wrFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
-    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
-    DB.getWhere('workRequests', wr => {
-      const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).forEach(wr => {
-      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(wrFilter));
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      workRequest: new Set(),
+      client: new Set(),
+      employee: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
 
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '200px' });
-    filters.appendChild(clientFilter);
-
-    const empOptions = [{ value: '', text: 'All Employees' }];
-    DB.getWhere('users', u => {
-      const userEnts = (u.entities || []).map(e => e.toUpperCase());
-      if (entity === 'ALL') {
-        return userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e));
-      }
-      return userEnts.includes(entity.toUpperCase());
-    }).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions, maxWidth: '200px' });
-    filters.appendChild(empFilter);
-
-    const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
-    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Sent', 'Acknowledged'].forEach(s => statusFilter.appendChild(el('option', { value: s, text: s })));
-    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filters.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      wrFilter.value = '';
-      clientFilter.value = '';
-      empFilter.value = '';
-      statusFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      App.clearSavedFilters('transmittals');
-      updateFilters();
-    });
-    filters.appendChild(clearBtn);
-
-    // Restore saved filters
     const savedFilters = App.restoreFilters('transmittals');
     if (savedFilters) {
-      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.status) statusFilter.value = savedFilters.status;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+      if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
+      else if (savedFilters.workRequest) activeFilters.workRequest.add(savedFilters.workRequest);
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      else if (savedFilters.client) activeFilters.client.add(savedFilters.client);
+      if (Array.isArray(savedFilters.employee)) savedFilters.employee.forEach(v => activeFilters.employee.add(v));
+      else if (savedFilters.employee) activeFilters.employee.add(savedFilters.employee);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
     const saveCurrentFilters = () => {
       App.saveFilters('transmittals', {
-        workRequest: wrFilter.value,
-        client: clientFilter.value,
-        employee: empFilter.value,
-        status: statusFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value
+        workRequest: Array.from(activeFilters.workRequest),
+        client: Array.from(activeFilters.client),
+        employee: Array.from(activeFilters.employee),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
       });
     };
 
-    // View mode toggle
-    const vmToggle = el('div', { class: 'view-mode-toggle' });
-    const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
-    [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: this.listViewMode === mode ? 'active' : '' });
-      btn.addEventListener('click', () => {
-        saveCurrentFilters();
-        App.setPreferredViewMode('transmittals', mode);
-        App.handleRoute();
+    const getWorkRequestOptions = () => DB.getWhere('workRequests', wr => {
+      const wrEnt = (wr.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase();
+    }).map(wr => ({ value: wr.id, label: wr.title }));
+
+    const getClientOptions = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt) : clientEnt === entity.toUpperCase();
+    }).map(c => ({ value: c.id, label: c.name }));
+
+    const getEmployeeOptions = () => {
+      const set = new Set();
+      DB.getWhere('users', u => {
+        const userEnts = (u.entities || []).map(e => e.toUpperCase());
+        return entity === 'ALL' ? userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e)) : userEnts.includes(entity.toUpperCase());
+      }).forEach(u => set.add(u.name));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) set.add(name);
       });
-      vmToggle.appendChild(btn);
+      return Array.from(set).map(n => ({ value: n, label: n }));
+    };
+
+    const getStatusOptions = () => [
+      { value: 'Draft', label: 'Draft' },
+      { value: 'Sent', label: 'Sent' },
+      { value: 'Acknowledged', label: 'Acknowledged' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      workRequest: { label: 'Work Request', getOptions: getWorkRequestOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      employee: { label: 'Employee', getOptions: getEmployeeOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'transmittals',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        updateFilters();
+      },
+      viewMode: this.listViewMode || 'table',
+      onViewModeChange: (newMode) => {
+        this.listViewMode = newMode;
+        App.setPreferredViewMode('transmittals', newMode);
+        saveCurrentFilters();
+        updateFilters();
+      }
     });
 
-    stickyContainer.appendChild(filters);
-    stickyContainer.appendChild(vmToggle);
+    stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
-    [wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); updateFilters(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); updateFilters(); }));
+    const updateFilters = () => this.refreshList(listContainer, activeFilters, this.listViewMode || 'table');
+    updateFilters();
 
-    this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo, empSearchText, clientSearchText) {
+  refreshList(container, activeFilters, viewMode) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
 
     let items = DB.getWhere('transmittals', t => (entity === 'ALL' ? Auth.user.entities.includes(t.entity) : t.entity === entity));
 
-    if (wrFilter) items = items.filter(t => t.workRequestId === wrFilter);
-    if (clientFilter || (clientSearchText && clientSearchText.trim() !== '')) {
-      const selectedClient = clientFilter ? DB.getById('clients', clientFilter) : null;
-      if (selectedClient && selectedClient.name === clientSearchText) {
-        items = items.filter(t => t.clientId === clientFilter);
-      } else if (clientSearchText && clientSearchText.trim() !== '') {
-        const query = clientSearchText.trim().toLowerCase();
-        items = items.filter(t => {
-          const client = DB.getById('clients', t.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
-      }
+    if (activeFilters.workRequest && activeFilters.workRequest.size > 0) {
+      items = items.filter(t => activeFilters.workRequest.has(t.workRequestId));
     }
-
-    if (empSearchText && empSearchText.trim() !== '') {
-      const query = empSearchText.trim().toLowerCase();
+    if (activeFilters.client && activeFilters.client.size > 0) {
+      items = items.filter(t => activeFilters.client.has(t.clientId));
+    }
+    if (activeFilters.employee && activeFilters.employee.size > 0) {
       items = items.filter(t => {
         const creator = t.createdBy ? DB.getById('users', t.createdBy) : null;
         const sender = t.sentBy ? DB.getById('users', t.sentBy) : null;
         const acknowledger = t.acknowledgedBy ? DB.getById('users', t.acknowledgedBy) : null;
-        return (creator && creator.name.toLowerCase().includes(query)) ||
-               (sender && sender.name.toLowerCase().includes(query)) ||
-               (acknowledger && acknowledger.name.toLowerCase().includes(query));
-      });
-    } else if (empFilter) {
-      items = items.filter(t => t.createdBy === empFilter || t.sentBy === empFilter || t.acknowledgedBy === empFilter);
-    }
-    if (statusFilter) items = items.filter(t => t.status === statusFilter);
-    if (dateFrom) {
-      const fromTime = new Date(dateFrom).getTime();
-      items = items.filter(t => {
-        const d = t.sentAt || t.createdAt || '';
-        return d && new Date(d).getTime() >= fromTime;
+        return (creator && activeFilters.employee.has(creator.name)) ||
+               (sender && activeFilters.employee.has(sender.name)) ||
+               (acknowledger && activeFilters.employee.has(acknowledger.name));
       });
     }
-    if (dateTo) {
-      const toTime = new Date(dateTo);
-      toTime.setHours(23, 59, 59, 999);
-      items = items.filter(t => {
-        const d = t.sentAt || t.createdAt || '';
-        return d && new Date(d).getTime() <= toTime.getTime();
-      });
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      items = items.filter(t => activeFilters.status.has(t.status));
     }
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
 
+      items = items.filter(t => {
+        const dStr = (t.transmittalDate || t.sentAt || t.createdAt || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
+    }
     items.sort((a, b) => {
       const da = a.sentAt || a.createdAt || '';
       const db = b.sentAt || b.createdAt || '';
