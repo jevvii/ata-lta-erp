@@ -12729,14 +12729,13 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Sticky wrapper: holds the group title row and phase heading row as one sticky unit */
 .board-group-sticky-wrap {
   position: sticky;
-  top: calc(var(--board-column-header-top, 0px) - var(--radius-md, 12px));
+  top: var(--board-column-header-top, 0);
   z-index: 23;
   background: var(--color-surface, #ffffff);
   border-bottom: 1px solid var(--color-border, #e2e8f0);
   border-top-left-radius: var(--radius-md, 12px);
   border-top-right-radius: var(--radius-md, 12px);
   overflow: hidden;
-  padding-top: var(--radius-md, 12px);
 }
 
 /* Group title row: full-width, sits inside the sticky wrapper */
