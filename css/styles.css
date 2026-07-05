@@ -12469,38 +12469,13 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-filter-select-date-wrap {
-  padding: 8px 12px;
-  border-top: 1px solid var(--color-border, #e2e8f0);
-  margin-top: 4px;
+  padding: 6px 10px 4px 10px;
+  border: none;
+  margin-bottom: 4px;
 }
 
-.jira-filter-select-date-btn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.jira-filter-select-date-wrap .mdp-wrapper {
   width: 100%;
-  padding: 6px 12px;
-  border: 1px solid var(--color-border, #cbd5e1);
-  border-radius: 6px;
-  background: var(--color-surface, #ffffff);
-  color: var(--color-text, #1f2937);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.jira-filter-select-date-btn:hover {
-  background: var(--color-bg-hover, #f0f1f3);
-  border-color: var(--color-primary, #2563eb);
-  color: var(--color-primary, #2563eb);
-}
-
-.jira-filter-select-date-btn.active {
-  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 90%);
-  border-color: var(--color-primary, #2563eb);
-  color: var(--color-primary, #2563eb);
-  font-weight: 600;
 }
 
 .jira-filter-datepicker-label {
