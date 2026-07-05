@@ -2516,14 +2516,17 @@ const Workflow = {
         const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
         if (!operationsContainer) return;
         if (
-          !e.target.closest('.operations-list-page, .operations-tab-page') &&
-          !e.target.closest('.mdp-overlay') &&
-          !e.target.closest('.mdp-dialog') &&
-          !e.target.closest('.mdp-wrapper') &&
-          !e.target.closest('.mdp-container')
+          e.target.closest('.jira-group-wrap') ||
+          e.target.closest('.jira-filter-wrap') ||
+          e.target.closest('.mdp-overlay') ||
+          e.target.closest('.mdp-dialog') ||
+          e.target.closest('.mdp-wrapper') ||
+          e.target.closest('.mdp-container')
         ) {
-          operationsContainer.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+          return;
         }
+        operationsContainer.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+
       };
       document.addEventListener('click', this._jiraToolbarClickListener);
     }
