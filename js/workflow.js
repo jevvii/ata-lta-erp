@@ -2007,6 +2007,17 @@ const Workflow = {
           { text: '← Back to Operations', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } }
         ]
       }));
+    } else if (this.view === 'addTask' && this.addTaskWrId) {
+      container.classList.add('operations-tab-page');
+      const wr = DB.getById('workRequests', this.addTaskWrId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Operations',
+        baseHash: '#operations',
+        currentText: 'Add Task',
+        actions: [
+          { text: '← Back to Work Request', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations/detail/' + this.addTaskWrId; } }
+        ]
+      }));
     }
 
     if (this.view === 'list') {
@@ -2021,6 +2032,13 @@ const Workflow = {
       container.appendChild(this.renderTemplateForm());
     } else if (this.view === 'archive') {
       container.appendChild(this.renderArchive());
+    } else if (this.view === 'addTask' && this.addTaskWrId) {
+      const form = this.renderAddTaskForm(this.addTaskWrId);
+      if (form) {
+        container.appendChild(el('div', { class: 'page-content-section' }, [form]));
+      } else {
+        location.hash = '#operations/detail/' + this.addTaskWrId;
+      }
     }
 
     setTimeout(() => this.updateStickyOffsets(), 0);
@@ -5878,7 +5896,7 @@ const Workflow = {
         actionsWrap.appendChild(note);
       } else {
         addTaskBtn.addEventListener('click', () => {
-          this.showAddTaskModal(wr.id, () => App.handleRoute());
+          this.showAddTaskPanel(wr.id);
         });
         actionsWrap.appendChild(addTaskBtn);
       }
@@ -5959,7 +5977,7 @@ const Workflow = {
           className: 'btn btn-primary btn-sm',
           onClick: () => {
             if (wr.isPendingApproval) return;
-            this.showAddTaskModal(wr.id, () => App.handleRoute());
+            this.showAddTaskPanel(wr.id);
           }
         });
       }
@@ -6315,7 +6333,7 @@ const Workflow = {
                 text: '+ Add Task',
                 className: 'btn btn-primary btn-sm',
                 onClick: () => {
-                  this.showAddTaskModal(wr.id, () => App.handleRoute());
+                  this.showAddTaskPanel(wr.id);
                 }
               }
             ]
@@ -8559,7 +8577,7 @@ const Workflow = {
     });
   },
 
-  showAddTaskModal(wrId, onAdded) {
+  renderAddTaskForm(wrId) {
     let wr = DB.getById('workRequests', wrId);
     if (!wr) {
       const pc = DB.getById('pendingChanges', wrId) || 
@@ -8572,10 +8590,20 @@ const Workflow = {
     }
     if (wr && wr.isPendingApproval) {
       this.showMessage('Blocked', 'Tasks cannot be added while the Work Request is awaiting approval.', 'danger');
-      return;
+      return null;
     }
 
-    const form = el('form', { class: 'form-stacked' });
+    const form = el('form', { id: 'add-task-form', class: 'form-stacked notion-form' });
+
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const topActions = el('div', { class: 'form-actions-top' });
+    const saveBtn = el('button', { type: 'submit', form: 'add-task-form', class: 'btn btn-primary', text: 'Add Task' });
+    topActions.appendChild(saveBtn);
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#operations/detail/' + wrId));
+    topActions.appendChild(cancelBtn);
+    headerBar.appendChild(topActions);
+    form.appendChild(headerBar);
 
     // Standard Task Template state
     let checklistItems = [];
@@ -8895,10 +8923,6 @@ const Workflow = {
       predMenu.appendChild(optionEl);
     });
 
-    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Add Task' });
-    form.appendChild(submitBtn);
-
-    const overlay = this.showModal('Add New Task', form, null);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;
@@ -8937,14 +8961,35 @@ const Workflow = {
         comments: []
       };
       const result = PendingChanges.submit('tasks', newTask, true);
-      if (result.approved) {
-        overlay.remove();
-        if (onAdded) onAdded();
-      } else {
-        overlay.remove();
-        Workflow.showMessage('Task Submitted', 'Your task has been submitted and is pending Manager approval.', 'success');
-        if (onAdded) onAdded();
-      }
+      const msgConfig = {
+        title: 'Task Added',
+        message: result.approved
+          ? 'Task has been added to the work request.'
+          : 'Task addition has been submitted for Manager approval.',
+        type: 'success'
+      };
+      closeFormPanelAndRoute('#operations/detail/' + wrId, msgConfig);
+    });
+
+    return form;
+  },
+
+  showAddTaskPanel(wrId) {
+    const form = this.renderAddTaskForm(wrId);
+    if (!form) return;
+    const fullPageRoute = '#operations/addTask/' + wrId;
+    openFormPanel({
+      icon: '✅',
+      title: 'Add New Task',
+      formContent: form,
+      formId: 'add-task-form',
+      viewContext: 'add-task-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      actions: [
+        { text: 'Add Task', class: 'btn btn-primary', type: 'submit', form: 'add-task-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations/detail/' + wrId) }
+      ]
     });
   },
 
