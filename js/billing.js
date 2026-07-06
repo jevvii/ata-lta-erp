@@ -518,7 +518,7 @@ const Billing = {
     const isAdmin = role === 'Admin';
     const isAccounting = role === 'Accounting';
 
-    const releasedStatuses = ['Sent', 'Release Pending Approval'];
+    const releasedStatuses = ['Sent'];
 
     if (isAdmin) {
       return [
@@ -552,7 +552,6 @@ const Billing = {
 
   getInvoiceDisplayStatus(status) {
     if (status === 'Sent') return 'Released';
-    if (status === 'Release Pending Approval') return 'Release Pending';
     return status;
   },
 
@@ -566,7 +565,6 @@ const Billing = {
       'Pending': '#f59e0b',
       'Approved': '#10b981',
       'Sent': '#3b82f6',
-      'Release Pending Approval': '#f59e0b',
       'Partially Paid': '#f59e0b',
       'Paid': '#10b981',
       'Overdue': '#ef4444'
@@ -616,7 +614,6 @@ const Billing = {
         'Paid': 'card-v2-priority-low',
         'Approved': 'card-v2-priority-low',
         'Sent': 'card-v2-priority-normal',
-        'Release Pending Approval': 'card-v2-priority-medium',
         'Partially Paid': 'card-v2-priority-medium',
         'Pending': 'card-v2-priority-medium',
         'Draft': 'card-v2-priority-normal',
@@ -703,9 +700,8 @@ const Billing = {
         canDrag: inv => canEdit && !inv.pendingChangeId,
         canDrop: ({ item, targetStatus }) => {
           if (item.status === targetStatus) return true;
-          const effectiveStatus = item.status === 'Release Pending Approval' ? 'Sent' : item.status;
           const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
-          const currentIdx = flow.indexOf(effectiveStatus);
+          const currentIdx = flow.indexOf(item.status);
           const targetIdx = flow.indexOf(targetStatus);
           if (currentIdx === -1 || targetIdx === -1) return false;
           if (targetIdx <= currentIdx) return false;
@@ -861,7 +857,6 @@ const Billing = {
       'Pending': 'badge-warning',
       'Approved': 'badge-success',
       'Sent': 'badge-warning',
-      'Release Pending Approval': 'badge-warning',
       'Partially Paid': 'badge-warning',
       'Paid': 'badge-success',
       'Overdue': 'badge-danger',
@@ -1792,23 +1787,6 @@ const Billing = {
         App.handleRoute();
       });
       actions.appendChild(sentBtn);
-    } else if (inv.status === 'Release Pending Approval' && canApprove) {
-      // Admin approval of accounting release request
-      const approveReleaseBtn = el('button', { class: 'btn btn-success', text: 'Approve Release' });
-      approveReleaseBtn.addEventListener('click', () => {
-        DB.update('invoices', inv.id, { status: 'Sent', releasedBy: Auth.user.id, releasedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-        App.handleRoute();
-      });
-      actions.appendChild(approveReleaseBtn);
-
-      const rejectReleaseBtn = el('button', { class: 'btn btn-danger', text: 'Reject Release', style: 'margin-left:8px;' });
-      rejectReleaseBtn.addEventListener('click', () => {
-        const reason = prompt('Enter rejection reason:');
-        if (reason === null) return;
-        DB.update('invoices', inv.id, { status: 'Approved', releaseRejectedBy: Auth.user.id, releaseRejectionReason: reason, updatedAt: new Date().toISOString() });
-        App.handleRoute();
-      });
-      actions.appendChild(rejectReleaseBtn);
     }
     container.appendChild(actions);
 

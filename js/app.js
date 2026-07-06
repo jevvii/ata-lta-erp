@@ -132,22 +132,13 @@ const App = {
   },
 
   updateSidebarNotifications() {
-    const canApprove = Auth.can('disbursement:approve');
     const entity = Auth.activeEntity;
 
+    // Disbursement nav badge only surfaces work awaiting the assigned handler's final release.
+    // Pending approvals and release requests are handled in the dedicated Admin > Pending Approvals page.
     const items = DB.getWhere('disbursements', d => d.entity === entity);
     let count = 0;
-
     items.forEach(d => {
-      // Admin sees count of submissions awaiting approval
-      if (canApprove && (d.status === 'Submitted' || d.status === 'Under Review')) {
-        count++;
-      }
-      // Admin also sees count of Manager release requests pending approval
-      if (canApprove && d.status === 'Release Pending Approval') {
-        count++;
-      }
-      // Handlers see count of disbursements awaiting their final release
       if (d.status === 'Approved' && d.paymentHandledBy === Auth.user.id) {
         count++;
       }
@@ -169,6 +160,7 @@ const App = {
     }
 
     // Staff-level: badge count of user's own pending changes, rejected changes, and pending requests
+    // on the Admin nav (the dedicated page for all pending items).
     const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
     const rejectedChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getRejectedForUser === 'function') ? PendingChanges.getRejectedForUser(Auth.user.id) : [];
     const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
@@ -188,46 +180,7 @@ const App = {
       }
     }
 
-    // Badge Billing nav for pending billing operations requests
-    const billingReqRole = Auth.user?.role;
-    if (billingReqRole === 'Accounting' || billingReqRole === 'Admin' || billingReqRole === 'Manager') {
-      const billingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'billing');
-      const billingNav = document.querySelector('nav a[href="#billing"]');
-      if (billingNav) {
-        let bBadge = billingNav.querySelector('.nav-badge');
-        if (billingReqs.length > 0) {
-          if (!bBadge) { bBadge = document.createElement('span'); bBadge.className = 'nav-badge'; billingNav.appendChild(bBadge); }
-          bBadge.textContent = billingReqs.length > 99 ? '99+' : billingReqs.length;
-        } else if (bBadge) { bBadge.remove(); }
-      }
-    }
-
-    // Badge Disbursement nav for pending disbursement operations requests
-    if (billingReqRole === 'Accounting' || billingReqRole === 'Admin' || billingReqRole === 'Manager') {
-      const disbReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'disbursement');
-      const disbNav = document.querySelector('nav a[href="#disbursement"]');
-      if (disbNav) {
-        let dBadge = disbNav.querySelector('.nav-badge');
-        if (disbReqs.length > 0) {
-          if (!dBadge) { dBadge = document.createElement('span'); dBadge.className = 'nav-badge'; disbNav.appendChild(dBadge); }
-          dBadge.textContent = disbReqs.length > 99 ? '99+' : disbReqs.length;
-        } else if (dBadge) { dBadge.remove(); }
-      }
-    }
-
-    // Badge Transmittal nav for pending transmittal operations requests
-    // Only Documentation and Admin can fulfill transmittal requests, so only they see the badge.
-    if (billingReqRole === 'Documentation' || billingReqRole === 'Admin') {
-      const transReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'transmittal');
-      const transNav = document.querySelector('nav a[href="#transmittal"]');
-      if (transNav) {
-        let tBadge = transNav.querySelector('.nav-badge');
-        if (transReqs.length > 0) {
-          if (!tBadge) { tBadge = document.createElement('span'); tBadge.className = 'nav-badge'; transNav.appendChild(tBadge); }
-          tBadge.textContent = transReqs.length > 99 ? '99+' : transReqs.length;
-        } else if (tBadge) { tBadge.remove(); }
-      }
-    }
+    // Pending requests are centralized on the Admin page; no module-level nav badges needed.
   },
 
   renderShell() {

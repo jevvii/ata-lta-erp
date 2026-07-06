@@ -289,7 +289,6 @@ const Disbursement = {
       'Under Review': 'badge-warning',
       'Pending': 'badge-warning',
       'Approved': 'badge-info',
-      'Release Pending Approval': 'badge-warning',
       'Released': 'badge-success',
       'Funded': 'badge-success',
       'Rejected': 'badge-danger',
@@ -344,81 +343,6 @@ const Disbursement = {
     const filters = el('div', { class: 'filters-bar' });
 
 
-
-    // "Pending for Release" Section for Handlers
-    const pendingForRelease = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Approved' && d.paymentHandledBy === Auth.user.id);
-    if (pendingForRelease.length > 0) {
-      const pfrSection = el('div', { class: 'form-section', style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); padding: var(--spacing-md); border-radius: 12px; margin-bottom: var(--spacing-lg);' });
-      pfrSection.appendChild(el('h3', { text: '⚠️ Pending for Release', style: 'color: var(--color-warning); margin-top: 0;' }));
-      pfrSection.appendChild(el('p', { text: 'The following disbursements have been approved by Admin and are waiting for your final authorization and fund release.', style: 'font-size: 0.875rem; color: var(--color-text-muted); margin-bottom: var(--spacing-md);' }));
-      
-      const pfrTable = el('table', { class: 'task-table-v2' });
-      pfrTable.appendChild(el('thead', {}, [
-        el('tr', {}, [
-          el('th', { text: 'Category' }),
-          el('th', { text: 'Amount' }),
-          el('th', { text: 'Requested By' }),
-          el('th', { text: 'Actions', class: 'text-right' })
-        ])
-      ]));
-      const pfrBody = el('tbody');
-      pendingForRelease.forEach(d => {
-        const tr = el('tr');
-        tr.appendChild(el('td', { text: d.category, style: 'font-weight:600;' }));
-        tr.appendChild(el('td', { text: formatPHP(d.amount) }));
-        const req = DB.getById('users', d.requestedBy);
-        tr.appendChild(el('td', { text: req?.name || '—' }));
-        const tdAct = el('td', { class: 'text-right' });
-        const authBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Authorize Release' });
-        authBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-        tdAct.appendChild(authBtn);
-        tr.appendChild(tdAct);
-        pfrBody.appendChild(tr);
-      });
-      pfrTable.appendChild(pfrBody);
-      pfrSection.appendChild(pfrTable);
-      wrapper.appendChild(pfrSection);
-    }
-
-    // "Release Pending Admin Approval" Section — visible to Admin
-    if (Auth.can('disbursement:approve')) {
-      const releasePending = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Release Pending Approval');
-      if (releasePending.length > 0) {
-        const rpSection = el('div', { class: 'form-section', style: 'background: #fdf4ff; border: 1px solid #f0abfc; padding: var(--spacing-md); border-radius: 12px; margin-bottom: var(--spacing-lg);' });
-        rpSection.appendChild(el('h3', { text: '📋 Release Requests Pending Approval', style: 'color: #86198f; margin-top: 0;' }));
-        rpSection.appendChild(el('p', { text: 'A Manager has marked the following disbursements for release. Please review and approve or reject.', style: 'font-size: 0.875rem; color: #a21caf; margin-bottom: var(--spacing-md);' }));
-
-        const rpTable = el('table', { class: 'task-table-v2' });
-        rpTable.appendChild(el('thead', {}, [
-          el('tr', {}, [
-            el('th', { text: 'Category' }),
-            el('th', { text: 'Amount' }),
-            el('th', { text: 'Requested By' }),
-            el('th', { text: 'Marked By' }),
-            el('th', { text: 'Actions', class: 'text-right' })
-          ])
-        ]));
-        const rpBody = el('tbody');
-        releasePending.forEach(d => {
-          const tr = el('tr');
-          tr.appendChild(el('td', { text: d.category, style: 'font-weight:600;' }));
-          tr.appendChild(el('td', { text: formatPHP(d.amount) }));
-          const req = DB.getById('users', d.requestedBy);
-          tr.appendChild(el('td', { text: req?.name || '—' }));
-          const marker = d.releaseRequestedBy ? DB.getById('users', d.releaseRequestedBy) : null;
-          tr.appendChild(el('td', { text: marker?.name || '—' }));
-          const tdAct = el('td', { class: 'text-right' });
-          const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review & Approve' });
-          reviewBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-          tdAct.appendChild(reviewBtn);
-          tr.appendChild(tdAct);
-          rpBody.appendChild(tr);
-        });
-        rpTable.appendChild(rpBody);
-        rpSection.appendChild(rpTable);
-        wrapper.appendChild(rpSection);
-      }
-    }
 
     // Jira Filter Toolbar & Active Filters State
     const activeFilters = {
@@ -488,7 +412,6 @@ const Disbursement = {
       { value: 'Draft', label: 'Draft' },
       { value: 'Pending', label: 'Pending' },
       { value: 'Approved', label: 'Approved' },
-      { value: 'Release Pending Approval', label: 'Release Pending Approval' },
       { value: 'Released', label: 'Released' },
       { value: 'Funded', label: 'Funded' },
       { value: 'Rejected', label: 'Rejected' }
@@ -762,7 +685,6 @@ const Disbursement = {
       'Under Review': '#f59e0b',
       'Pending': '#f59e0b',
       'Approved': '#3b82f6',
-      'Release Pending Approval': '#e879f9',
       'Released': '#10b981',
       'Funded': '#059669',
       'Rejected': '#ef4444'
@@ -812,7 +734,6 @@ const Disbursement = {
         'Under Review': 'card-v2-priority-medium',
         'Pending': 'card-v2-priority-medium',
         'Approved': 'card-v2-priority-medium',
-        'Release Pending Approval': 'card-v2-priority-medium',
         'Released': 'card-v2-priority-low',
         'Funded': 'card-v2-priority-low',
         'Rejected': 'card-v2-priority-urgent'
@@ -824,7 +745,6 @@ const Disbursement = {
         'Under Review': 25,
         'Pending': 35,
         'Approved': 50,
-        'Release Pending Approval': 75,
         'Released': 100,
         'Funded': 100,
         'Rejected': 0
@@ -942,7 +862,7 @@ const Disbursement = {
           // Map pre-approval statuses to the canonical Pending step.
           const preApproval = ['Submitted', 'Under Review', 'Pending'];
           const effectiveStatus = preApproval.includes(item.status) ? 'Pending' : item.status;
-          const flow = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released', 'Funded'];
+          const flow = ['Draft', 'Pending', 'Approved', 'Released', 'Funded'];
           const currentIdx = flow.indexOf(effectiveStatus);
           const targetIdx = flow.indexOf(targetStatus);
           if (currentIdx === -1 || targetIdx === -1) return false;
@@ -1570,29 +1490,6 @@ const Disbursement = {
         actions.appendChild(rejectBtn);
         container.appendChild(actions);
       }
-    } else if (d.status === 'Release Pending Approval' && canApprove) {
-      // Admin approves a Manager's mark-as-released action
-      const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
-      actions.appendChild(el('p', { style: 'font-size:0.875rem;color:#64748b;margin-bottom:var(--spacing-sm);' , text: `A Manager has marked this disbursement for release. Please approve or reject.` }));
-      const approveReleaseBtn = el('button', { class: 'btn btn-success', text: 'Approve & Release Funds' });
-      approveReleaseBtn.addEventListener('click', () => {
-        this.showReleaseDialog(d.id, true);
-      });
-      actions.appendChild(approveReleaseBtn);
-
-      const rejectReleaseBtn = el('button', { class: 'btn btn-danger', text: 'Reject Release', style: 'margin-left: 8px;' });
-      rejectReleaseBtn.addEventListener('click', () => {
-        Workflow.showConfirm('Reject Release', 'Are you sure you want to reject this release request?', () => {
-          const reason = prompt('Enter rejection reason:');
-          if (reason) {
-            DB.update('disbursements', d.id, { status: 'Approved', releaseRejectionReason: reason, releaseRejectedBy: Auth.user.id, releaseRejectedAt: new Date().toISOString() });
-            Workflow.showMessage('Release Rejected', 'The release has been rejected and returned to Approved status.', 'warning');
-            App.handleRoute();
-          }
-        }, 'danger');
-      });
-      actions.appendChild(rejectReleaseBtn);
-      container.appendChild(actions);
     } else if (d.status === 'Approved') {
         const isHandler = d.paymentHandledBy === Auth.user.id;
         const canMarkReleased = Auth.can('disbursement:mark_released');

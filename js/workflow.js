@@ -4331,55 +4331,6 @@ const Workflow = {
             handler();
           });
 
-          // Status Badge Overlay
-          const req = (wr && wr.id) ? DB.getWhere('operationsRequests', r => r.workRequestId === wr.id && r.type === type).sort((a,b) => new Date(b.requestedAt) - new Date(a.requestedAt))[0] : null;
-          if (req) {
-            let dotColor = '';
-            let badgeText = '';
-            if (req.status === 'pending') {
-              dotColor = '#eab308'; // Amber yellow
-              badgeText = 'Pending';
-            } else if (req.status === 'fulfilled') {
-              dotColor = '#22c55e'; // Emerald green
-              badgeText = 'Fulfilled';
-            } else if (req.status === 'rejected') {
-              dotColor = '#ef4444'; // Red
-              badgeText = 'Rejected';
-            }
-
-            if (badgeText) {
-              const badge = el('span', { 
-                style: `
-                  position: absolute;
-                  top: 6px;
-                  right: 6px;
-                  display: flex;
-                  align-items: center;
-                  gap: 4px;
-                  font-size: 0.6875rem;
-                  font-weight: 500;
-                  padding: 2px 6px;
-                  border-radius: 9999px;
-                  background: ${dotColor}15;
-                  color: ${dotColor};
-                  border: 1px solid ${dotColor}30;
-                `
-              });
-              
-              const dot = el('span', {
-                style: `
-                  width: 6px;
-                  height: 6px;
-                  border-radius: 50%;
-                  background: ${dotColor};
-                `
-              });
-              badge.appendChild(dot);
-              badge.appendChild(document.createTextNode(badgeText));
-              card.appendChild(badge);
-            }
-          }
-
           return card;
         };
 
