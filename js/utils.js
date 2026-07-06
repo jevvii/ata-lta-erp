@@ -2630,10 +2630,15 @@ const JiraBacklogList = {
             iconHtml = '<span style="font-weight:700; margin-right:2px; font-size:0.75rem;">₱</span>';
           }
 
+          let textVal = tag.text;
+          if (tag.type === 'amount' && textVal.startsWith('₱')) {
+            textVal = textVal.substring(1).trim();
+          }
+
           if (iconHtml) {
-            tNode.innerHTML = iconHtml + '<span>' + escapeHtml(tag.text) + '</span>';
+            tNode.innerHTML = iconHtml + '<span>' + escapeHtml(textVal) + '</span>';
           } else {
-            tNode.textContent = tag.text;
+            tNode.textContent = textVal;
           }
 
           if (tag.style) tNode.setAttribute('style', tag.style);
