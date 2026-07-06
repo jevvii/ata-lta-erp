@@ -2607,7 +2607,35 @@ const JiraBacklogList = {
       const tagsNode = el('div', { class: 'jira-backlog-row-tags' });
       if (item.tags && item.tags.length > 0) {
         item.tags.forEach(tag => {
-          const tNode = el('div', { class: 'jira-backlog-tag ' + (tag.className || ''), text: tag.text });
+          const typeCls = tag.type ? ` jira-backlog-tag-${tag.type}` : '';
+          let valCls = '';
+          if (tag.type === 'schedule' && tag.value) {
+            valCls = ` jira-backlog-tag-schedule-${tag.value.toLowerCase()}`;
+          } else if (tag.type === 'fund' && tag.value) {
+            valCls = ` jira-backlog-tag-fund-${tag.value.toLowerCase().replace(/\s+/g, '')}`;
+          }
+
+          const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') });
+
+          let iconHtml = '';
+          if (tag.type === 'client') {
+            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+          } else if (tag.type === 'schedule') {
+            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+          } else if (tag.type === 'category') {
+            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+          } else if (tag.type === 'fund') {
+            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
+          } else if (tag.type === 'amount') {
+            iconHtml = '<span style="font-weight:700; margin-right:2px; font-size:0.75rem;">₱</span>';
+          }
+
+          if (iconHtml) {
+            tNode.innerHTML = iconHtml + '<span>' + escapeHtml(tag.text) + '</span>';
+          } else {
+            tNode.textContent = tag.text;
+          }
+
           if (tag.style) tNode.setAttribute('style', tag.style);
           tagsNode.appendChild(tNode);
         });

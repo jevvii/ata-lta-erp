@@ -2260,10 +2260,10 @@ const Disbursement = {
         name: t.name,
         iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary);"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
         tags: [
-          { text: t.category },
-          { text: t.fundSource, className: 'tag-primary' },
-          { text: t.schedule || '—', style: 'text-transform: capitalize;' },
-          { text: formatPHP(t.amount || 0) }
+          { text: t.category || 'Other', type: 'category' },
+          { text: t.fundSource || 'Firm Fund', type: 'fund', value: t.fundSource },
+          { text: t.schedule || '—', type: 'schedule', value: t.schedule, style: 'text-transform: capitalize;' },
+          { text: formatPHP(t.amount || 0), type: 'amount' }
         ]
       };
     });
