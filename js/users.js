@@ -1085,24 +1085,29 @@ const Users = {
         tr.appendChild(el('td', { text: pc.status }));
 
         const tdAct = el('td');
-        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review' });
-        reviewBtn.addEventListener('click', () => {
+        const actionsDiv = el('div', { class: 'inline-actions' });
+
+        const reviewLink = el('button', { class: 'action-link action-link-review', text: 'Review' });
+        reviewLink.addEventListener('click', () => {
           this.pendingDetailId = pc.id;
           App.handleRoute();
         });
-        tdAct.appendChild(reviewBtn);
+        actionsDiv.appendChild(reviewLink);
 
         if (pc.status === 'pending') {
-          const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
-          withdrawBtn.addEventListener('click', () => {
+          actionsDiv.appendChild(el('span', { class: 'action-separator', text: '|' }));
+
+          const withdrawLink = el('button', { class: 'action-link action-link-danger', text: 'Withdraw' });
+          withdrawLink.addEventListener('click', () => {
             Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => {
               PendingChanges.delete(pc.id);
               App.handleRoute();
             }, 'danger');
           });
-          tdAct.appendChild(withdrawBtn);
+          actionsDiv.appendChild(withdrawLink);
         }
 
+        tdAct.appendChild(actionsDiv);
         tr.appendChild(tdAct);
         tbody.appendChild(tr);
       });
@@ -1128,35 +1133,38 @@ const Users = {
         tr.appendChild(el('td', { text: pc.rejectionReason || '—', style: 'color:var(--color-danger);font-weight:600;word-break:break-word;' }));
 
         const tdAct = el('td');
-        
-        // Review button to inspect details
-        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
-        reviewBtn.addEventListener('click', () => {
+        const actionsDiv = el('div', { class: 'inline-actions' });
+
+        const reviewLink = el('button', { class: 'action-link action-link-review', text: 'Review' });
+        reviewLink.addEventListener('click', () => {
           this.pendingDetailId = pc.id;
           App.handleRoute();
         });
-        tdAct.appendChild(reviewBtn);
+        actionsDiv.appendChild(reviewLink);
 
-        // Resubmit button
-        const resubmitBtn = el('button', { class: 'btn btn-warning btn-sm', text: 'Resubmit', style: 'margin-right: 4px;' });
-        resubmitBtn.addEventListener('click', () => {
+        actionsDiv.appendChild(el('span', { class: 'action-separator', text: '|' }));
+
+        const resubmitLink = el('button', { class: 'action-link action-link-resubmit', text: 'Resubmit' });
+        resubmitLink.addEventListener('click', () => {
           Workflow.showConfirm('Confirm Resubmission', 'Are you sure you want to resubmit this request for approval?', () => {
             PendingChanges.resubmit(pc.id);
             App.handleRoute();
           }, 'warning');
         });
-        tdAct.appendChild(resubmitBtn);
+        actionsDiv.appendChild(resubmitLink);
 
-        // Dismiss button to clear rejected submission from view
-        const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
-        dismissBtn.addEventListener('click', () => {
+        actionsDiv.appendChild(el('span', { class: 'action-separator', text: '|' }));
+
+        const dismissLink = el('button', { class: 'action-link action-link-danger', text: 'Dismiss' });
+        dismissLink.addEventListener('click', () => {
           Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
             PendingChanges.delete(pc.id);
             App.handleRoute();
           }, 'danger');
         });
-        tdAct.appendChild(dismissBtn);
+        actionsDiv.appendChild(dismissLink);
 
+        tdAct.appendChild(actionsDiv);
         tr.appendChild(tdAct);
         tbody.appendChild(tr);
       });

@@ -24,6 +24,7 @@
   --color-primary-alpha: rgba(37, 99, 235, 0.08);
   --color-danger: #ef4444;
   --color-success: #10b981;
+  --color-warning: #fbbf24;
   --font-sans: "Poppins", "Inter", system-ui, -apple-system, sans-serif;
   --transition-loading: 0.25s;
   --delay-loading: 0.25s;
@@ -12128,4 +12129,47 @@ html.loading-active #loading-screen:not(.hidden) {
 .module-tab-link:not(.active) .circular-count-badge {
   background: var(--color-bg-muted);
   color: var(--color-text-muted);
+}
+
+/* Inline text links for table actions (Notion-style Option A) */
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.action-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  outline: none;
+  transition: color 0.15s ease-in-out;
+  text-decoration: none;
+  display: inline-block;
+  line-height: 1;
+}
+
+.action-link-review:hover {
+  color: var(--color-primary);
+}
+
+.action-link-resubmit:hover {
+  color: var(--color-warning);
+}
+
+.action-link-danger:hover {
+  color: var(--color-danger);
+}
+
+.action-separator {
+  color: var(--color-border);
+  font-size: 0.8125rem;
+  user-select: none;
 }
