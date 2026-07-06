@@ -1540,6 +1540,7 @@ function classNames(...args) {
       }
     }
   }
+  return classes.join(' ');
 }
 
 /**
