@@ -842,9 +842,8 @@ const Users = {
 
     Object.keys(categoryDefs).forEach(key => {
       const items = categories[key] || [];
-      const count = items.length;
-      const isSelected = this.pendingCategory === key;
-      addPill(key, categoryDefs[key].label, count, isSelected, count === 0);
+      if (items.length === 0) return;
+      addPill(key, categoryDefs[key].label, items.length, this.pendingCategory === key, false);
     });
 
     return pillsWrap;
