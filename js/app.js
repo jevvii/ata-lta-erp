@@ -187,11 +187,10 @@ const App = {
         }
       }
     } else {
-      // Staff-level: badge count of user's own pending changes, rejected changes, and pending requests
+      // Staff-level: badge count of user's own pending changes and pending requests
       const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
-      const rejectedChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getRejectedForUser === 'function') ? PendingChanges.getRejectedForUser(Auth.user.id) : [];
       const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
-      const staffCount = pendingChanges.length + rejectedChanges.length + myReqs.length;
+      const staffCount = pendingChanges.length + myReqs.length;
       const adminNav = document.querySelector('nav a[href="#admin"]');
       if (adminNav) {
         let adminBadge = adminNav.querySelector('.nav-badge');

@@ -44,12 +44,11 @@ const Users = {
       const tabs = el('div', { class: 'module-tab-nav' });
       tabs.style.marginBottom = '12px'; // align layout nicely below breadcrumb
 
-      // Calculate counts for badges (pre-filtering)
+      // Calculate counts for badges (pre-filtering) - only display unresolved/pending items
       const pendingItems = PendingChanges.getPendingForUser(Auth.user.id);
-      const rejectedItems = PendingChanges.getRejectedForUser(Auth.user.id);
-      const totalPending = pendingItems.length + rejectedItems.length;
+      const totalPending = pendingItems.length;
 
-      const requestsItems = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
+      const requestsItems = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending');
       const totalRequests = requestsItems.length;
 
       // 1. Pending submissions tab
@@ -1126,10 +1125,20 @@ const Users = {
         tr.appendChild(el('td', { text: pc.table }));
         tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
         tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
-        tr.appendChild(el('td', { text: pc.rejectionReason || '—', style: 'color:var(--color-danger);font-weight:600;' }));
+        tr.appendChild(el('td', { text: pc.rejectionReason || '—', style: 'color:var(--color-danger);font-weight:600;word-break:break-word;' }));
 
         const tdAct = el('td');
-        const resubmitBtn = el('button', { class: 'btn btn-warning btn-sm', text: 'Resubmit' });
+        
+        // Review button to inspect details
+        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
+        reviewBtn.addEventListener('click', () => {
+          this.pendingDetailId = pc.id;
+          App.handleRoute();
+        });
+        tdAct.appendChild(reviewBtn);
+
+        // Resubmit button
+        const resubmitBtn = el('button', { class: 'btn btn-warning btn-sm', text: 'Resubmit', style: 'margin-right: 4px;' });
         resubmitBtn.addEventListener('click', () => {
           Workflow.showConfirm('Confirm Resubmission', 'Are you sure you want to resubmit this request for approval?', () => {
             PendingChanges.resubmit(pc.id);
@@ -1137,6 +1146,17 @@ const Users = {
           }, 'warning');
         });
         tdAct.appendChild(resubmitBtn);
+
+        // Dismiss button to clear rejected submission from view
+        const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
+        dismissBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
+            PendingChanges.delete(pc.id);
+            App.handleRoute();
+          }, 'danger');
+        });
+        tdAct.appendChild(dismissBtn);
+
         tr.appendChild(tdAct);
         tbody.appendChild(tr);
       });
@@ -1351,6 +1371,26 @@ const Users = {
         }, 'danger');
       });
       actions.appendChild(withdrawBtn);
+    } else if (isSubmitter && pc.status === 'rejected') {
+      const resubmitBtn = el('button', { class: 'btn btn-warning', text: 'Resubmit' });
+      resubmitBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Confirm Resubmission', 'Are you sure you want to resubmit this request for approval?', () => {
+          PendingChanges.resubmit(pc.id);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        }, 'warning');
+      });
+      actions.appendChild(resubmitBtn);
+
+      const dismissBtn = el('button', { class: 'btn btn-danger', text: 'Dismiss Submission' });
+      dismissBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
+          PendingChanges.delete(pc.id);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        }, 'danger');
+      });
+      actions.appendChild(dismissBtn);
     }
 
     wrapper.appendChild(actions);
