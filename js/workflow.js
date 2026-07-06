@@ -3190,7 +3190,10 @@ const Workflow = {
           return client?.name || 'No Client';
         }
         if (groupBy === 'priority') {
-          return wr.priority || 'No Priority';
+          const p = (wr.priority || '').toString().trim().toLowerCase();
+          if (p.includes('urg') || p.includes('high')) return 'Urgent';
+          if (p.includes('low')) return 'Low';
+          return 'Priority';
         }
         return 'All';
       };
@@ -3202,10 +3205,14 @@ const Workflow = {
         groupMap.get(name).push(wr);
       });
 
-      const specialLast = groupBy === 'assignee' ? 'Unassigned' : groupBy === 'client' ? 'No Client' : 'No Priority';
+      const specialLast = groupBy === 'assignee' ? 'Unassigned' : groupBy === 'client' ? 'No Client' : null;
       const groupNames = Array.from(groupMap.keys()).sort((a, b) => {
-        if (a === specialLast) return 1;
-        if (b === specialLast) return -1;
+        if (specialLast && a === specialLast) return 1;
+        if (specialLast && b === specialLast) return -1;
+        if (groupBy === 'priority') {
+          const order = { 'Urgent': 0, 'Priority': 1, 'Low': 2 };
+          return (order[a] ?? 99) - (order[b] ?? 99);
+        }
         return a.localeCompare(b);
       });
 
