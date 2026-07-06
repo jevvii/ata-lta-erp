@@ -508,7 +508,7 @@ const Transmittal = {
     });
 
     if (items.length === 0 && (this.listViewMode !== 'board' || groupBy === 'none')) {
-      container.appendChild(el('p', { text: 'No transmittals found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No transmittals found', null, { variant: 'zero-state' }));
       return;
     }
 
@@ -1883,6 +1883,7 @@ const Transmittal = {
     const t = DB.getById('transmittals', id);
     if (!t || t.status !== 'Acknowledged' || t.archived) return;
     DB.update('transmittals', id, { archived: true, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Archived', 'Transmittal has been archived.', 'success');
     App.handleRoute();
   },
 
@@ -1890,6 +1891,7 @@ const Transmittal = {
     const t = DB.getById('transmittals', id);
     if (!t || t.status !== 'Acknowledged' || !t.archived) return;
     DB.update('transmittals', id, { archived: false, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Restored', 'Transmittal has been restored to the active list.', 'success');
     App.handleRoute();
   },
 

@@ -556,7 +556,7 @@ const Disbursement = {
     items.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
     if (items.length === 0 && (viewMode !== 'board' || groupBy === 'none')) {
-      container.appendChild(el('p', { text: 'No expenses found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No expenses found', null, { variant: 'zero-state' }));
       return;
     }
 
@@ -1565,7 +1565,7 @@ const Disbursement = {
           container.appendChild(actions);
         } else {
           const handler = DB.getById('users', d.paymentHandledBy);
-          container.appendChild(el('p', { class: 'empty-state', text: `Waiting for release authorization from ${handler?.name || 'assigned handler'}.` }));
+          container.appendChild(renderEmptyState(`Waiting for release authorization from ${handler?.name || 'assigned handler'}`));
         }
     } else if (d.status === 'Released' && (canApprove || Auth.user?.role === 'Accounting')) {
       // Final funding step after release.
@@ -2263,7 +2263,7 @@ const Disbursement = {
     wrapper.appendChild(actions);
 
     if (templates.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No templates found.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('No templates found', null, { variant: 'zero-state' }));
       return wrapper;
     }
 
@@ -2463,6 +2463,7 @@ const Disbursement = {
     const d = DB.getById('disbursements', id);
     if (!d || d.status !== 'Funded' || d.archived) return;
     DB.update('disbursements', id, { archived: true, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Archived', 'Disbursement has been archived.', 'success');
     App.handleRoute();
   },
 
@@ -2470,6 +2471,7 @@ const Disbursement = {
     const d = DB.getById('disbursements', id);
     if (!d || d.status !== 'Funded' || !d.archived) return;
     DB.update('disbursements', id, { archived: false, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Restored', 'Disbursement has been restored to the active list.', 'success');
     App.handleRoute();
   },
 

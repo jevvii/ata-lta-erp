@@ -458,7 +458,7 @@ const Billing = {
 
   refreshTable(container, invoices) {
     if (invoices.length === 0) {
-      container.appendChild(el('p', { text: 'No invoices found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No invoices found', null, { variant: 'zero-state' }));
       return;
     }
     const table = el('table', { class: 'data-table' });
@@ -845,7 +845,7 @@ const Billing = {
 
   refreshListCompact(container, invoices) {
     if (invoices.length === 0) {
-      container.appendChild(el('p', { text: 'No invoices found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No invoices found', null, { variant: 'zero-state' }));
       return;
     }
     const list = el('div', { class: 'list-view' });
@@ -2725,7 +2725,7 @@ const Billing = {
     const entity = Auth.activeEntity;
     const templates = DB.getWhere('billingTemplates', t => t.entity === entity);
     if (templates.length === 0) {
-      container.appendChild(el('p', { text: 'No billing templates found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No billing templates found', null, { variant: 'zero-state' }));
       return;
     }
     
@@ -2927,6 +2927,7 @@ const Billing = {
         DB.update('workRequests', wr.id, { linkedInvoiceId: inv.id });
       }
     }
+    Workflow.showMessage('Restored', 'Invoice has been restored to the active list.', 'success');
     App.handleRoute();
   },
 
@@ -2934,6 +2935,7 @@ const Billing = {
     const inv = DB.getById('invoices', id);
     if (!inv || inv.status !== 'Paid' || inv.archived) return;
     DB.update('invoices', id, { archived: true, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Archived', 'Invoice has been archived.', 'success');
     App.handleRoute();
   },
 
@@ -2941,6 +2943,7 @@ const Billing = {
     const inv = DB.getById('invoices', id);
     if (!inv || inv.status !== 'Paid' || !inv.archived) return;
     DB.update('invoices', id, { archived: false, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Restored', 'Invoice has been restored to the active list.', 'success');
     App.handleRoute();
   },
 
@@ -2961,6 +2964,7 @@ const Billing = {
           }
         }
         DB.delete('invoices', id);
+        Workflow.showMessage('Deleted', 'Invoice has been permanently deleted.', 'success');
         App.handleRoute();
       },
       'danger'

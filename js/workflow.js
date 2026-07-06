@@ -3845,7 +3845,7 @@ const Workflow = {
       const renderChecklist = () => {
         listContainer.innerHTML = '';
         if (normalizedChecklist.length === 0) {
-          listContainer.appendChild(el('div', { class: 'empty-state', text: 'No checklist items.' }));
+          listContainer.appendChild(renderEmptyState('No checklist items'));
         } else {
           normalizedChecklist.forEach((item, idx) => {
             const blocked = isChecklistBlocked(item, normalizedChecklist);
@@ -4142,7 +4142,7 @@ const Workflow = {
 
       const docsList = el('div', { class: 'details-content-list' });
       if ((task.taskDocuments || []).length === 0) {
-        docsList.appendChild(el('div', { class: 'empty-state', text: 'No documents attached.', style: 'margin-bottom: 8px;' }));
+        docsList.appendChild(renderEmptyState('No documents attached', null, { style: 'margin-bottom: 8px;' }));
       } else {
         const canEditDms = Auth.can('dms:edit');
         task.taskDocuments.forEach((d, dIdx) => {
@@ -4282,7 +4282,7 @@ const Workflow = {
       });
 
       if (logs.length === 0 && checklistLogGroups.length === 0) {
-        timeList.appendChild(el('div', { class: 'empty-state', text: 'No logs recorded.' }));
+        timeList.appendChild(renderEmptyState('No logs recorded'));
       } else {
         const buildTimeLogEntry = (l, subtaskName = null) => {
           const [y, m, d] = l.date.split('-').map(Number);
@@ -4350,7 +4350,7 @@ const Workflow = {
       const checklistDeps = (task.checklist || []).filter(item => item.dependsOn);
 
       if (taskPreds.length === 0 && checklistDeps.length === 0) {
-        depList.appendChild(el('div', { class: 'empty-state', text: 'No dependencies.' }));
+        depList.appendChild(renderEmptyState('No dependencies'));
       } else {
         taskPreds.forEach(pid => {
           const pTask = DB.getById('tasks', pid);
@@ -7056,7 +7056,7 @@ const Workflow = {
         const renderChecklist = () => {
           checklistList.innerHTML = '';
           if (normalizedChecklist.length === 0) {
-            checklistList.appendChild(el('div', { class: 'empty-state', text: 'No checklist items.' }));
+            checklistList.appendChild(renderEmptyState('No checklist items'));
           } else {
             normalizedChecklist.forEach((item, idx) => {
               const blocked = isChecklistBlocked(item, normalizedChecklist);
@@ -7398,7 +7398,7 @@ const Workflow = {
 
         const docsList = el('div', { class: 'details-content-list' });
         if ((t.taskDocuments || []).length === 0) {
-          docsList.appendChild(el('div', { class: 'empty-state', text: 'No documents attached.' }));
+          docsList.appendChild(renderEmptyState('No documents attached'));
         } else {
           t.taskDocuments.forEach((d, dIdx) => {
             const item = el('div', { class: 'detail-item-v2', style: 'display:flex; justify-content:space-between; align-items:center;' });
@@ -7465,7 +7465,7 @@ const Workflow = {
               commentContainer.innerHTML = '';
               const list = el('div', { style: 'display:flex; flex-direction:column; gap:8px;' });
               if (!d.comments || d.comments.length === 0) {
-                list.appendChild(el('div', { class: 'empty-state', text: 'No comments for this document.', style: 'padding: 4px 0;' }));
+                list.appendChild(renderEmptyState('No comments for this document', null, { style: 'padding: 4px 0;' }));
               } else {
                 d.comments.forEach((c, cIdx) => {
                   const commentRow = el('div', { style: 'background:var(--surface); padding:8px 12px; border-radius:var(--radius-sm); border: 1px solid var(--border); position:relative;' });
@@ -7581,7 +7581,7 @@ const Workflow = {
           if (item.timeLogs && item.timeLogs.length > 0) checklistLogGroups.push({ item, logs: item.timeLogs });
         });
         if (logs.length === 0 && checklistLogGroups.length === 0) {
-          timeList.appendChild(el('div', { class: 'empty-state', text: isArchived ? 'Archived — time logging disabled.' : 'No logs recorded.' }));
+          timeList.appendChild(renderEmptyState(isArchived ? 'Archived' : 'No logs recorded', isArchived ? 'Time logging is disabled for archived items.' : null));
         } else {
           const buildTimeLogEntry = (l) => {
             const [y, m, d] = l.date.split('-').map(Number);
@@ -7620,7 +7620,7 @@ const Workflow = {
         const taskPreds = t.predecessors || [];
         const checklistDeps = (t.checklist || []).filter(item => item.dependsOn);
         if (taskPreds.length === 0 && checklistDeps.length === 0) {
-          depContent.appendChild(el('div', { class: 'empty-state', text: 'No dependencies.' }));
+          depContent.appendChild(renderEmptyState('No dependencies'));
         } else {
           taskPreds.forEach(pid => {
             const pTask = DB.getById('tasks', pid);
@@ -9296,7 +9296,7 @@ const Workflow = {
     section.appendChild(el('h4', { text: 'Time Log' }));
     const logs = task.timeLogs || [];
     if (logs.length === 0) {
-      section.appendChild(el('p', { class: 'empty-state', text: 'No time logs recorded yet.' }));
+      section.appendChild(renderEmptyState('No time logs recorded yet'));
     } else {
       const logTable = el('table', { class: 'data-table' });
       logTable.appendChild(el('thead', {}, [
@@ -9332,7 +9332,7 @@ const Workflow = {
     section.appendChild(el('h4', { text: 'Comments' }));
     const comments = task.comments || [];
     if (comments.length === 0) {
-      section.appendChild(el('p', { class: 'empty-state', text: 'No comments yet.' }));
+      section.appendChild(renderEmptyState('No comments yet'));
     } else {
       const commentList = el('div');
       comments.forEach(c => {
@@ -9561,7 +9561,7 @@ const Workflow = {
     wrapper.appendChild(actions);
 
     if (templates.length === 0) {
-      wrapper.appendChild(el('p', { class: 'empty-state', text: 'No retainer templates found.' }));
+      wrapper.appendChild(renderEmptyState('No retainer templates found', null, { variant: 'zero-state' }));
       return wrapper;
     }
 

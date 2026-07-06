@@ -192,7 +192,7 @@ const Users = {
     const users = DB.getAll('users');
 
     if (users.length === 0) {
-      container.appendChild(el('p', { text: 'No users found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No users found', null, { variant: 'zero-state' }));
       return;
     }
 
@@ -534,7 +534,7 @@ const Users = {
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     if (logs.length === 0) {
-      container.appendChild(el('p', { text: 'No audit log entries found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No audit log entries found', null, { variant: 'zero-state' }));
       return;
     }
 
@@ -764,7 +764,7 @@ const Users = {
     };
 
     if (totalPending === 0) {
-      wrapper.appendChild(el('p', { text: 'No pending approvals.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('No pending approvals', null, { variant: 'zero-state' }));
       return wrapper;
     }
 
@@ -1066,7 +1066,7 @@ const Users = {
     const pendingDisbursements = DB.getWhere('disbursements', d => d.entity === entity && (d.status === 'Submitted' || d.status === 'Under Review'));
 
     if (pendingChanges.length === 0 && pendingDisbursements.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No pending approvals.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('No pending approvals', null, { variant: 'zero-state' }));
       return wrapper;
     }
 
@@ -1354,7 +1354,7 @@ const Users = {
     const pending = PendingChanges.getPendingForUser(Auth.user.id);
     const rejected = PendingChanges.getRejectedForUser(Auth.user.id);
     if (pending.length === 0 && rejected.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No pending submissions.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('No pending submissions', null, { variant: 'zero-state' }));
       return wrapper;
     }
 
@@ -1440,7 +1440,7 @@ const Users = {
     const pc = PendingChanges.getById(pendingId);
     if (!pc) {
       this.pendingDetailId = null;
-      return el('p', { text: 'Pending change not found.', class: 'empty-state' });
+      return renderEmptyState('Pending change not found', null, { variant: 'zero-state' });
     }
 
     const canApprove = PendingChanges.canApproveChange(pc);
@@ -1548,7 +1548,7 @@ const Users = {
     diffContainer.innerHTML = '';
     
     if (diffs.length === 0) {
-      diffContainer.appendChild(el('p', { text: 'No changes detected between current and proposed data.', class: 'empty-state' }));
+      diffContainer.appendChild(renderEmptyState('No changes detected', 'Current and proposed data are identical.', { variant: 'compact' }));
     } else {
       // Build a clean, styled table of changed fields only
       const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
@@ -1641,7 +1641,7 @@ const Users = {
     const requests = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
     
     if (requests.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No requests submitted yet.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('No requests submitted yet', null, { variant: 'zero-state' }));
       return wrapper;
     }
 

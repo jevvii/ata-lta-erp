@@ -71,7 +71,7 @@ const DMS = {
     // Restrict Documents module to roles with dms:edit or dms:handover
     if (!Auth.can('dms:edit') && !Auth.can('dms:handover')) {
       const wrapper = el('div');
-      wrapper.appendChild(el('p', { text: 'Documents are restricted to Admin, Manager, and Documentation users.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('Permission denied', 'Documents are restricted to Admin, Manager, and Documentation users.', { variant: 'zero-state' }));
       return wrapper;
     }
 
@@ -277,7 +277,7 @@ const DMS = {
     docs.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
 
     if (docs.length === 0) {
-      container.appendChild(el('p', { text: 'No documents found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No documents found', null, { variant: 'zero-state' }));
       return;
     }
 
@@ -814,7 +814,7 @@ const DMS = {
       });
       commentsSection.appendChild(thread);
     } else {
-      commentsSection.appendChild(el('p', { class: 'empty-state', text: 'No comments yet.' }));
+      commentsSection.appendChild(renderEmptyState('No comments yet'));
     }
 
     if (Auth.can('dms:edit')) {
@@ -922,7 +922,7 @@ const DMS = {
         handoverSection.appendChild(recordBtn);
         handoverSection.appendChild(handoverForm);
       } else {
-        handoverSection.appendChild(el('p', { class: 'empty-state', text: 'Only authorized users can record handovers.' }));
+        handoverSection.appendChild(renderEmptyState('Only authorized users can record handovers'));
       }
       container.appendChild(handoverSection);
     }

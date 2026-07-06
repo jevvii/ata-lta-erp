@@ -7,48 +7,7 @@
  * insertion, and boardOrder persistence.
  */
 
-/**
- * Build a Notion-style empty-state v2 component.
- * @param {Object} opts
- * @param {string} [opts.variant='zero-state'] - 'zero-state' | 'filtered-empty' | 'compact' | 'card-empty'
- * @param {string} [opts.icon] - SVG string
- * @param {string} opts.title
- * @param {string} [opts.body]
- * @param {Array<{text:string, className:string, onClick:Function}>} [opts.actions]
- * @returns {HTMLElement}
- */
-function renderEmptyStateV2(opts = {}) {
-  const { variant = 'zero-state', icon, title, body, actions = [] } = opts;
-  const className = ['empty-state-v2', variant].filter(Boolean).join(' ');
-  const wrap = el('div', { class: className });
-  if (icon) {
-    wrap.appendChild(el('div', { class: 'empty-state-icon', html: icon }));
-  }
-  wrap.appendChild(el('div', { class: 'empty-state-title', text: title }));
-  if (body) {
-    wrap.appendChild(el('div', { class: 'empty-state-body', text: body }));
-  }
-  if (actions.length > 0) {
-    const actionsWrap = el('div', { class: 'empty-state-actions' });
-    actions.forEach(action => {
-      let btn;
-      if (action.tag === 'a' || action.href != null) {
-        btn = el('a', { href: action.href || 'javascript:void(0)', class: action.className || 'empty-state-clear', text: action.text });
-      } else {
-        btn = el('button', { type: 'button', class: action.className || 'btn btn-primary btn-sm', text: action.text });
-      }
-      if (action.onClick) {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          action.onClick(e);
-        });
-      }
-      actionsWrap.appendChild(btn);
-    });
-    wrap.appendChild(actionsWrap);
-  }
-  return wrap;
-}
+/* renderEmptyStateV2 and renderEmptyState are shared helpers defined in utils.js. */
 
 /* ── Shared action menu helpers ── */
 

@@ -204,7 +204,7 @@ const Clients = {
     const clients = this.getFilteredClients(query);
 
     if (clients.length === 0) {
-      container.appendChild(el('p', { text: 'No clients found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No clients found', null, { variant: 'zero-state' }));
       return;
     }
 

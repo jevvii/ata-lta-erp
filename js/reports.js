@@ -23,7 +23,7 @@ const Reports = {
   render() {
     if (!Auth.can('reports:view')) {
       return el('div', { class: 'page' }, [
-        el('div', { class: 'empty-state', text: 'You do not have permission to view reports.' })
+        renderEmptyState('Permission denied', 'You do not have permission to view reports.', { variant: 'zero-state' })
       ]);
     }
 
@@ -474,7 +474,7 @@ const Reports = {
       reportContentContainer.appendChild(statsGrid);
 
       if (tasks.length === 0) {
-        reportContentContainer.appendChild(el('p', { class: 'empty-state', text: 'No tasks with time logs for ' + formatDate(this.dailyDate) + '.' }));
+        reportContentContainer.appendChild(renderEmptyState('No tasks with time logs', 'No time logs recorded for ' + formatDate(this.dailyDate) + '.', { variant: 'zero-state' }));
         return;
       }
 
@@ -607,7 +607,7 @@ const Reports = {
       reportContentContainer.appendChild(statsGrid);
 
       if (summaryRows.length === 0) {
-        reportContentContainer.appendChild(el('p', { class: 'empty-state', text: 'No tasks for the week of ' + periodLabel + '.' }));
+        reportContentContainer.appendChild(renderEmptyState('No tasks for the week', 'No tasks were completed or pending during the week of ' + periodLabel + '.', { variant: 'zero-state' }));
       } else {
         const table = el('table', { class: 'report-table' });
         table.appendChild(el('thead', {}, [
@@ -637,7 +637,7 @@ const Reports = {
       reportContentContainer.appendChild(this.renderViewModeToggle());
 
       if (tasks.length === 0) {
-        reportContentContainer.appendChild(el('p', { class: 'empty-state', text: 'No tasks to display for this week.' }));
+        reportContentContainer.appendChild(renderEmptyState('No tasks to display', 'No tasks are available for this weekly report.', { variant: 'zero-state' }));
       } else if (this.viewMode === 'table') {
         reportContentContainer.appendChild(this.renderTaskTable(tasks));
       } else if (this.viewMode === 'board') {
@@ -686,7 +686,7 @@ const Reports = {
       reportContentContainer.appendChild(statsGrid);
 
       if (tasks.length === 0) {
-        reportContentContainer.appendChild(el('p', { class: 'empty-state', text: 'No pending tasks for ' + this.monthlyMonth + '.' }));
+        reportContentContainer.appendChild(renderEmptyState('No pending tasks', 'No pending tasks recorded for ' + this.monthlyMonth + '.', { variant: 'zero-state' }));
       } else if (this.viewMode === 'table') {
         reportContentContainer.appendChild(this.renderPendingTable(tasks));
       } else if (this.viewMode === 'board') {
@@ -709,7 +709,7 @@ const Reports = {
       retainerSection.appendChild(el('h3', { text: 'Recurring Retainer Tasks Due This Month', style: 'margin-bottom: var(--spacing-md);' }));
 
       if (retainerTemplates.length === 0) {
-        retainerSection.appendChild(el('p', { class: 'empty-state', text: 'No retainer templates due this month.' }));
+        retainerSection.appendChild(renderEmptyState('No retainer templates due', 'No recurring retainer templates are due this month.', { variant: 'zero-state' }));
       } else {
         const rtTable = el('table', { class: 'report-table' });
         rtTable.appendChild(el('thead', {}, [
@@ -854,7 +854,7 @@ const Reports = {
 
     let overdueSection;
     if (overdueTasks.length === 0) {
-      overdueSection = el('p', { class: 'empty-state', text: 'No overdue tasks.' });
+      overdueSection = renderEmptyState('No overdue tasks', null, { variant: 'compact' });
     } else {
       const rows = overdueTasks.map(t => {
         const assignee = t.assigneeName
@@ -979,7 +979,7 @@ const Reports = {
     let employeeTable;
     const empEntries = Object.values(byEmployee);
     if (empEntries.length === 0) {
-      employeeTable = el('p', { class: 'empty-state', text: 'No released disbursements.' });
+      employeeTable = renderEmptyState('No released disbursements', null, { variant: 'compact' });
     } else {
       const rows = empEntries.map(emp =>
         el('tr', {}, [

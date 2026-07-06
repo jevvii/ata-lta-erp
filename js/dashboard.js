@@ -109,7 +109,7 @@ const Dashboard = {
     }
     
     if (disbursements.length === 0) {
-      card.appendChild(el('p', { class: 'empty-state', text: 'No upcoming disbursements.', style: 'margin: auto;' }));
+      card.appendChild(renderEmptyState('No upcoming disbursements'));
     } else {
       const list = el('div', { style: 'display: flex; flex-direction: column; gap: var(--spacing-sm);' });
       disbursements.forEach(d => {
@@ -146,7 +146,7 @@ const Dashboard = {
     }
     
     if (wrs.length === 0) {
-      card.appendChild(el('p', { class: 'empty-state', text: 'No work requests due this week.', style: 'margin: auto;' }));
+      card.appendChild(renderEmptyState('No work requests due this week'));
     } else {
       const list = el('div', { style: 'display: flex; flex-direction: column; gap: var(--spacing-sm);' });
       wrs.forEach(wr => {
@@ -1375,7 +1375,7 @@ const Dashboard = {
 
       const dayEvents = events[this.selectedDay] || [];
       if (dayEvents.length === 0) {
-        sidebar.appendChild(el('p', { class: 'empty-state', text: 'Nothing scheduled for this day.' }));
+        sidebar.appendChild(renderEmptyState('Nothing scheduled for this day'));
       } else {
         const wrs = dayEvents.filter(e => e.type === 'wr');
         const dbs = dayEvents.filter(e => e.type === 'db');
@@ -1409,7 +1409,7 @@ const Dashboard = {
       });
 
       if (upcomingEvents.length === 0) {
-        sidebar.appendChild(el('p', { class: 'empty-state', text: 'No items due this week.' }));
+        sidebar.appendChild(renderEmptyState('No items due this week'));
       } else {
         upcomingEvents.sort((a, b) => {
           const dateA = new Date(a.type === 'wr' ? a.data.dueDate : (a.data.dueDate || a.data.submittedAt));
