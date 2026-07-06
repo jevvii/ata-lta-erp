@@ -291,6 +291,7 @@ const Disbursement = {
       'Approved': 'badge-info',
       'Release Pending Approval': 'badge-warning',
       'Released': 'badge-success',
+      'Funded': 'badge-success',
       'Rejected': 'badge-danger',
       'Cancelled': 'badge-danger'
     };
@@ -513,6 +514,7 @@ const Disbursement = {
       { value: 'Approved', label: 'Approved' },
       { value: 'Release Pending Approval', label: 'Release Pending Approval' },
       { value: 'Released', label: 'Released' },
+      { value: 'Funded', label: 'Funded' },
       { value: 'Rejected', label: 'Rejected' }
     ];
 
@@ -702,6 +704,64 @@ const Disbursement = {
     container.appendChild(table);
   },
 
+  /**
+   * Role-aware board columns for Disbursement.
+   *
+   * - Admin: Draft | Released | Funded | Rejected
+   *   Pending/Approved/Release Pending Approval are funnelled to the Admin Console.
+   * - Accounting: Draft | Pending | Released | Funded | Rejected
+   *   Approved/Release Pending Approval are funnelled to the Admin Console / handler list.
+   * - Operations: Requested | Released | Funded | Rejected
+   *   Draft is hidden; Pending maps the pre-approval statuses.
+   * - Others: Released | Funded | Rejected
+   */
+  getBoardColumns() {
+    const role = Auth.user?.role;
+    const isAdmin = role === 'Admin';
+    const isAccounting = role === 'Accounting';
+    const isOperations = role === 'Operations';
+
+    if (isAdmin) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+        { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+        { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+      ];
+    }
+
+    if (isAccounting) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Pending', label: 'Pending', statuses: this.PENDING_APPROVAL_STATUSES, targetStatus: 'Pending', color: '#f59e0b' },
+        { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+        { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+        { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+      ];
+    }
+
+    if (isOperations) {
+      return [
+        { key: 'Requested', label: 'Requested', statuses: this.PENDING_APPROVAL_STATUSES, targetStatus: 'Pending', color: '#94a3b8' },
+        { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+        { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+        { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+      ];
+    }
+
+    return [
+      { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+      { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+      { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+    ];
+  },
+
+  getDisbursementDisplayStatus(status) {
+    if (status === 'Released') return 'Released';
+    if (status === 'Funded') return 'Funded';
+    return status;
+  },
+
   renderBoardView(container, items, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     toolbarContainer?.classList.remove('grouped-board-active');
     if (items.length === 0) {
@@ -719,26 +779,22 @@ const Disbursement = {
     const canDelete = Auth.can('disbursement:delete');
     const self = this;
 
-    const statuses = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released', 'Rejected'];
+    const boardPhases = this.getBoardColumns();
     const statusColors = {
       'Draft': '#94a3b8',
+      'Submitted': '#f59e0b',
+      'Under Review': '#f59e0b',
       'Pending': '#f59e0b',
       'Approved': '#3b82f6',
       'Release Pending Approval': '#e879f9',
       'Released': '#10b981',
+      'Funded': '#059669',
       'Rejected': '#ef4444'
     };
 
-    // Normalize boardOrder within each column (skip pending-change proxies).
-    statuses.forEach(st => {
-      let colItems = [];
-      if (st === 'Draft') {
-        colItems = items.filter(d => d.status === 'Draft' && !d.pendingChangeId);
-      } else if (st === 'Pending') {
-        colItems = items.filter(d => this.PENDING_APPROVAL_STATUSES.includes(d.status) && !d.pendingChangeId);
-      } else {
-        colItems = items.filter(d => d.status === st && !d.pendingChangeId);
-      }
+    // Normalize boardOrder within each visible column (skip pending-change proxies).
+    boardPhases.forEach(phase => {
+      const colItems = items.filter(d => phase.statuses.includes(d.status) && !d.pendingChangeId);
       colItems.sort((a, b) => {
         const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
         const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
@@ -756,16 +812,13 @@ const Disbursement = {
       });
     });
 
-    const makeColumns = () => statuses.map(st => {
+    const makeColumns = () => boardPhases.map(phase => {
       const col = {
-        key: st,
-        label: st,
-        targetStatus: st,
-        color: statusColors[st] || '#cbd5e1',
-        statuses: st === 'Pending' ? self.PENDING_APPROVAL_STATUSES : [st],
+        ...phase,
+        icon: 'phase',
         emptyState: { variant: 'compact', title: 'No expenses', body: '' }
       };
-      if (st === 'Draft' && canCreate) {
+      if (phase.key === 'Draft' && canCreate) {
         col.addButton = { label: 'Add Expense', onClick: () => self.showForm() };
       }
       return col;
@@ -779,19 +832,25 @@ const Disbursement = {
 
       const statusPriorityClass = {
         'Draft': 'card-v2-priority-normal',
+        'Submitted': 'card-v2-priority-medium',
+        'Under Review': 'card-v2-priority-medium',
         'Pending': 'card-v2-priority-medium',
         'Approved': 'card-v2-priority-medium',
         'Release Pending Approval': 'card-v2-priority-medium',
         'Released': 'card-v2-priority-low',
+        'Funded': 'card-v2-priority-low',
         'Rejected': 'card-v2-priority-urgent'
       }[d.status] || 'card-v2-priority-normal';
 
       const progressMap = {
         'Draft': 0,
-        'Pending': 25,
+        'Submitted': 15,
+        'Under Review': 25,
+        'Pending': 35,
         'Approved': 50,
         'Release Pending Approval': 75,
         'Released': 100,
+        'Funded': 100,
         'Rejected': 0
       };
       const progress = progressMap[d.status] || 0;
@@ -818,7 +877,7 @@ const Disbursement = {
         description: `${emp?.name || '—'} • ${source}`,
         detail: descParts.join(' • '),
         date: d.submittedAt ? formatDate(d.submittedAt) : '',
-        priority: d.status,
+        priority: self.getDisbursementDisplayStatus(d.status),
         priorityClass: statusPriorityClass,
         onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
       });
@@ -904,8 +963,11 @@ const Disbursement = {
         canDrag: d => canEdit && !d.pendingChangeId,
         canDrop: ({ item, targetStatus }) => {
           if (item.status === targetStatus) return true;
-          const flow = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released'];
-          const currentIdx = flow.indexOf(item.status);
+          // Map pre-approval statuses to the canonical Pending step.
+          const preApproval = ['Submitted', 'Under Review', 'Pending'];
+          const effectiveStatus = preApproval.includes(item.status) ? 'Pending' : item.status;
+          const flow = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released', 'Funded'];
+          const currentIdx = flow.indexOf(effectiveStatus);
           const targetIdx = flow.indexOf(targetStatus);
           if (currentIdx === -1 || targetIdx === -1) return false;
           return targetIdx > currentIdx;
@@ -943,17 +1005,25 @@ const Disbursement = {
           }
 
           const label = item.category + ' — ' + formatPHP(item.amount);
+          const isAdmin = Auth.user?.role === 'Admin';
           const applyMove = () => {
-            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+            // Non-Admin marking as Released must submit for admin approval.
+            const nextStatus = (targetStatus === 'Released' && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+            const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
+            if (nextStatus === 'Release Pending Approval') {
+              changes.releaseRequestedBy = Auth.user.id;
+              changes.releaseRequestedAt = new Date().toISOString();
+            }
             DB.update('disbursements', item.id, changes);
             App.handleRoute();
           };
 
           // Confirm critical transitions
-          if (['Approved', 'Released'].includes(targetStatus)) {
+          if (['Approved', 'Released', 'Funded'].includes(targetStatus)) {
             const msgs = {
               'Approved': `Approve disbursement "${label}"?`,
-              'Released': `Mark disbursement "${label}" as Released? This confirms funds have been disbursed.`
+              'Released': isAdmin ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
+              'Funded': `Mark disbursement "${label}" as Funded? This confirms funds have been credited.`
             };
             Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
             return;
@@ -1580,6 +1650,19 @@ const Disbursement = {
           const handler = DB.getById('users', d.paymentHandledBy);
           container.appendChild(el('p', { class: 'empty-state', text: `Waiting for release authorization from ${handler?.name || 'assigned handler'}.` }));
         }
+    } else if (d.status === 'Released' && (canApprove || Auth.user?.role === 'Accounting')) {
+      // Final funding step after release.
+      const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
+      const fundBtn = el('button', { class: 'btn btn-success', text: 'Mark as Funded' });
+      fundBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Mark as Funded', `Confirm that funds for "${d.category}" have been credited?`, () => {
+          DB.update('disbursements', d.id, { status: 'Funded', fundedBy: Auth.user.id, fundedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+          Workflow.showMessage('Funded', 'Disbursement marked as funded.', 'success');
+          App.handleRoute();
+        }, 'success');
+      });
+      actions.appendChild(fundBtn);
+      container.appendChild(actions);
     }
 
     return container;

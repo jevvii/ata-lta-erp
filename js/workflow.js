@@ -476,24 +476,60 @@ const Workflow = {
     return null;
   },
 
-  transitionWorkRequest(wrId) {
-    if (!Auth.can('workflow:approve')) {
-      this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
+  canRequestPhaseRouting() {
+    const role = Auth.user?.role;
+    if (role === 'Admin') return false;
+    return Auth.can('workflow:edit') || Auth.can('workflow:task_add') || Auth.can('workflow:task_approve');
+  },
+
+  requestPhaseRouting(wrId, nextPhase) {
+    const wr = DB.getById('workRequests', wrId);
+    if (!wr) return;
+    const existing = DB.getWhere('pendingChanges', pc =>
+      pc.status === 'pending' && pc.table === 'workRequestPhaseRouting' && pc.parentRecordId === wrId
+    )[0];
+    if (existing) {
+      this.showMessage('Request Pending', 'A phase routing request for this work request is already pending Admin approval.', 'warning');
       return;
     }
+
+    const record = {
+      id: wrId,
+      status: nextPhase,
+      previousStatus: wr.status,
+      requestedAt: new Date().toISOString()
+    };
+    PendingChanges.submit('workRequestPhaseRouting', record, false);
+    this.showMessage('Routing Requested', `Phase routing to "${nextPhase}" has been submitted for Admin approval.`, 'success');
+  },
+
+  transitionWorkRequest(wrId) {
     const status = this.getPhaseTransitionStatus(wrId);
     if (!status || !status.canTransition) {
       this.showMessage('Routing Error', 'Cannot transition phase:\n- ' + (status?.missing.join('\n- ') || 'Requirements not met'), 'danger');
       return;
     }
 
-    this.showConfirm('Confirm Routing', `Are you sure you want to transition this Work Request to ${status.nextPhase}?`, () => {
-      DB.update('workRequests', wrId, {
-        status: status.nextPhase,
-        updatedAt: new Date().toISOString()
-      });
-      App.handleRoute();
-    }, 'success');
+    if (Auth.can('workflow:approve')) {
+      this.showConfirm('Confirm Routing', `Are you sure you want to transition this Work Request to ${status.nextPhase}?`, () => {
+        DB.update('workRequests', wrId, {
+          status: status.nextPhase,
+          updatedAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+      return;
+    }
+
+    if (this.canRequestPhaseRouting()) {
+      this.showConfirm('Request Phase Routing', `Submit request to route this Work Request to ${status.nextPhase}? An Admin must approve it.`, () => {
+        this.requestPhaseRouting(wrId, status.nextPhase);
+        App.handleRoute();
+      }, 'success');
+      return;
+    }
+
+    this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
   },
 
   cancelWorkRequest(wrId) {
@@ -2942,7 +2978,7 @@ const Workflow = {
 
     const renderCardMenuItems = (wr) => {
       const transitionStatus = self.getPhaseTransitionStatus(wr.id);
-      const showQuickRoute = canApprove && transitionStatus && transitionStatus.canTransition && transitionStatus.nextPhase;
+      const showQuickRoute = transitionStatus && transitionStatus.canTransition && transitionStatus.nextPhase;
       const items = [];
 
       items.push({
@@ -2952,8 +2988,9 @@ const Workflow = {
       });
 
       if (showQuickRoute) {
+        const isAdmin = Auth.user?.role === 'Admin';
         items.push({
-          label: `Advance to ${transitionStatus.nextPhase}`,
+          label: isAdmin ? `Advance to ${transitionStatus.nextPhase}` : `Request Advance to ${transitionStatus.nextPhase}`,
           className: 'primary',
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
           onClick: () => self.transitionWorkRequest(wr.id)
@@ -5416,10 +5453,12 @@ const Workflow = {
       lifecycleActions.appendChild(cancelWrBtn);
     }
 
-    if (showRouteButton && canApprove) {
+    if (showRouteButton) {
+      const isAdmin = Auth.user?.role === 'Admin';
+      const canRequest = !isAdmin && this.canRequestPhaseRouting();
       const routeBtn = el('button', {
         class: 'btn btn-sm btn-primary',
-        text: `Route to ${ts.nextPhase}`,
+        text: isAdmin ? `Route to ${ts.nextPhase}` : `Request Route to ${ts.nextPhase}`,
         style: `font-weight: 600; cursor: ${ts.canTransition ? 'pointer' : 'not-allowed'};`,
         disabled: !ts.canTransition
       });

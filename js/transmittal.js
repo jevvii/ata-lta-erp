@@ -30,26 +30,53 @@ const Transmittal = {
             const editBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Edit', style: 'margin-right:8px;' });
             editBtn.addEventListener('click', () => { this.showForm(t.id); });
             actions.appendChild(editBtn);
-            const sendBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Mark as Sent', style: 'margin-right:8px;' });
+            const isAdmin = Auth.user?.role === 'Admin';
+            const sendBtn = el('button', { class: 'btn btn-primary btn-sm', text: isAdmin ? 'Mark as Sent' : 'Submit for Release Approval', style: 'margin-right:8px;' });
             sendBtn.addEventListener('click', () => {
-              Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
-                const markData = {
-                  status: 'Sent',
-                  sentAt: new Date().toISOString(),
-                  sentBy: Auth.user.id
-                };
-                if (Auth.canBypassReview('transmittals')) {
-                  // Admin marks are applied immediately
-                  DB.update('transmittals', t.id, markData);
+              const title = isAdmin ? 'Confirm Sent' : 'Confirm Release Request';
+              const msg = isAdmin ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?';
+              Workflow.showConfirm(title, msg, () => {
+                if (isAdmin) {
+                  DB.update('transmittals', t.id, {
+                    status: 'Sent',
+                    sentAt: new Date().toISOString(),
+                    sentBy: Auth.user.id,
+                    updatedAt: new Date().toISOString()
+                  });
                 } else {
-                  // Manager/Documentation: pending Admin approval
-                  const record = Object.assign({}, t, markData, { id: t.id });
-                  PendingChanges.submit('transmittals', record, false);
+                  DB.update('transmittals', t.id, {
+                    status: 'Release Pending Approval',
+                    releaseRequestedAt: new Date().toISOString(),
+                    releaseRequestedBy: Auth.user.id,
+                    updatedAt: new Date().toISOString()
+                  });
                 }
                 App.handleRoute();
               }, 'success');
             });
             actions.appendChild(sendBtn);
+          } else if (t.status === 'Release Pending Approval' && Auth.user?.role === 'Admin') {
+            const approveBtn = el('button', { class: 'btn btn-success btn-sm', text: 'Approve Release', style: 'margin-right:8px;' });
+            approveBtn.addEventListener('click', () => {
+              Workflow.showConfirm('Approve Release', 'Mark this transmittal as Sent?', () => {
+                DB.update('transmittals', t.id, {
+                  status: 'Sent',
+                  sentAt: new Date().toISOString(),
+                  sentBy: Auth.user.id,
+                  updatedAt: new Date().toISOString()
+                });
+                App.handleRoute();
+              }, 'success');
+            });
+            actions.appendChild(approveBtn);
+            const rejectBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Reject Release', style: 'margin-right:8px;' });
+            rejectBtn.addEventListener('click', () => {
+              Workflow.showConfirm('Reject Release', 'Return this transmittal to Draft?', () => {
+                DB.update('transmittals', t.id, { status: 'Draft', updatedAt: new Date().toISOString() });
+                App.handleRoute();
+              }, 'warning');
+            });
+            actions.appendChild(rejectBtn);
           } else if (t.status === 'Sent') {
             const ackBtn = el('button', { class: 'btn btn-success btn-sm', text: 'Acknowledge Receipt', style: 'margin-right:8px;' });
             ackBtn.addEventListener('click', () => {
@@ -202,12 +229,84 @@ const Transmittal = {
   // Helpers
   // ============================================================
   statusBadge(status) {
+    const role = Auth.user?.role;
+    const label = this.getTransmittalDisplayStatus(status, role);
     const map = {
       'Draft': 'badge badge-ghost',
+      'Release Pending Approval': 'badge badge-warning',
       'Sent': 'badge badge-info',
       'Acknowledged': 'badge badge-success'
     };
-    return el('span', { class: map[status] || 'badge', text: status });
+    return el('span', { class: map[status] || 'badge', text: label });
+  },
+
+  getTransmittalDisplayStatus(status, role) {
+    if (status === 'Release Pending Approval') {
+      if (role === 'Operations') return 'Requested';
+      return 'Pending';
+    }
+    return status;
+  },
+
+  getBoardColumns() {
+    const role = Auth.user?.role;
+    const canCreate = Auth.can('transmittal:create');
+    const rpaLabel = role === 'Operations' ? 'Requested' : 'Pending';
+    const rpaColor = '#f59e0b';
+    const draftColor = '#94a3b8';
+    const sentColor = '#3b82f6';
+    const ackColor = '#10b981';
+
+    const draftCol = {
+      key: 'Draft',
+      label: role === 'Operations' ? 'Requested' : 'Draft',
+      targetStatus: 'Draft',
+      statuses: ['Draft'],
+      color: role === 'Operations' ? '#f59e0b' : draftColor,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    };
+    if (role !== 'Operations' && canCreate) {
+      draftCol.addButton = { label: 'Add Transmittal', onClick: () => this.showForm() };
+    }
+
+    const rpaCol = {
+      key: 'Release Pending Approval',
+      label: rpaLabel,
+      targetStatus: 'Release Pending Approval',
+      statuses: ['Release Pending Approval'],
+      color: rpaColor,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    };
+
+    const sentCol = {
+      key: 'Sent',
+      label: 'Sent',
+      targetStatus: 'Sent',
+      statuses: ['Sent'],
+      color: sentColor,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    };
+
+    const ackCol = {
+      key: 'Acknowledged',
+      label: 'Acknowledged',
+      targetStatus: 'Acknowledged',
+      statuses: ['Acknowledged'],
+      color: ackColor,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    };
+
+    // Admin: same as now (Draft | Sent | Acknowledged)
+    if (role === 'Admin') return [draftCol, sentCol, ackCol];
+
+    // Documentation and Manager: Draft | Pending | Sent | Acknowledged
+    if (role === 'Documentation' || role === 'Manager') return [draftCol, rpaCol, sentCol, ackCol];
+
+    // Operations: Requested | Sent | Acknowledged
+    if (role === 'Operations') return [draftCol, sentCol, ackCol];
+
+    // Others (Accounting, HR, etc.): Sent | Acknowledged
+    return [sentCol, ackCol];
   },
 
   generateTrackingNumber(entity) {
@@ -327,6 +426,7 @@ const Transmittal = {
 
     const getStatusOptions = () => [
       { value: 'Draft', label: 'Draft' },
+      { value: 'Release Pending Approval', label: 'Release Pending Approval' },
       { value: 'Sent', label: 'Sent' },
       { value: 'Acknowledged', label: 'Acknowledged' }
     ];
@@ -512,15 +612,16 @@ const Transmittal = {
     const canMark = Auth.can('transmittal:mark');
     const self = this;
 
-    const statuses = ['Draft', 'Sent', 'Acknowledged'];
+    const boardPhases = self.getBoardColumns();
     const statusColors = {
       'Draft': '#94a3b8',
+      'Release Pending Approval': '#f59e0b',
       'Sent': '#3b82f6',
       'Acknowledged': '#10b981'
     };
 
-    statuses.forEach(st => {
-      const colItems = items.filter(t => t.status === st && !t.pendingChangeId);
+    boardPhases.forEach(phase => {
+      const colItems = items.filter(t => phase.statuses.includes(t.status) && !t.pendingChangeId);
       colItems.sort((a, b) => {
         const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
         const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
@@ -538,19 +639,14 @@ const Transmittal = {
       });
     });
 
-    const makeColumns = () => statuses.map(st => {
-      const col = {
-        key: st,
-        label: st,
-        targetStatus: st,
-        color: statusColors[st] || '#cbd5e1',
-        emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
-      };
-      if (st === 'Draft' && canCreate) {
-        col.addButton = { label: 'Add Transmittal', onClick: () => self.showForm() };
-      }
-      return col;
-    });
+    const makeColumns = () => boardPhases.map(phase => ({
+      key: phase.key,
+      label: phase.label,
+      targetStatus: phase.targetStatus,
+      color: phase.color,
+      addButton: phase.addButton,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    }));
 
     let cardNumber = 1;
 
@@ -559,13 +655,15 @@ const Transmittal = {
       const itemCount = (t.items || []).length;
       const date = t.sentAt || t.createdAt;
 
+      const displayStatus = self.getTransmittalDisplayStatus(t.status, Auth.user?.role);
       const statusPriorityClass = {
         'Draft': 'card-v2-priority-normal',
+        'Release Pending Approval': 'card-v2-priority-high',
         'Sent': 'card-v2-priority-medium',
         'Acknowledged': 'card-v2-priority-low'
       }[t.status] || 'card-v2-priority-normal';
 
-      const progressMap = { 'Draft': 0, 'Sent': 50, 'Acknowledged': 100 };
+      const progressMap = { 'Draft': 0, 'Release Pending Approval': 33, 'Sent': 50, 'Acknowledged': 100 };
       const progress = progressMap[t.status] || 0;
 
       const wr = DB.getById('workRequests', t.workRequestId);
@@ -579,7 +677,7 @@ const Transmittal = {
         description: clientName,
         detail: `${itemCount} item${itemCount === 1 ? '' : 's'}` + (detail ? ` • ${detail}` : ''),
         date: date ? formatDate(date) : '',
-        priority: t.status,
+        priority: displayStatus,
         priorityClass: statusPriorityClass,
         onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
       });
@@ -599,20 +697,62 @@ const Transmittal = {
         });
       }
       if (canMark && t.status === 'Draft' && !t.pendingChangeId) {
+        const isAdmin = Auth.user?.role === 'Admin';
         menu.push({
-          label: 'Mark as Sent',
+          label: isAdmin ? 'Mark as Sent' : 'Submit for Release Approval',
           className: 'primary',
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
-          onClick: () => Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
-            const markData = { status: 'Sent', sentAt: new Date().toISOString(), sentBy: Auth.user.id };
-            if (Auth.canBypassReview('transmittals')) {
-              DB.update('transmittals', t.id, markData);
-            } else {
-              const record = Object.assign({}, t, markData, { id: t.id });
-              PendingChanges.submit('transmittals', record, false);
-            }
+          onClick: () => Workflow.showConfirm(
+            isAdmin ? 'Confirm Sent' : 'Confirm Release Request',
+            isAdmin ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?',
+            () => {
+              if (isAdmin) {
+                DB.update('transmittals', t.id, {
+                  status: 'Sent',
+                  sentAt: new Date().toISOString(),
+                  sentBy: Auth.user.id,
+                  updatedAt: new Date().toISOString()
+                });
+              } else {
+                DB.update('transmittals', t.id, {
+                  status: 'Release Pending Approval',
+                  releaseRequestedAt: new Date().toISOString(),
+                  releaseRequestedBy: Auth.user.id,
+                  updatedAt: new Date().toISOString()
+                });
+              }
+              App.handleRoute();
+            },
+            'success'
+          )
+        });
+      }
+      if (Auth.user?.role === 'Admin' && t.status === 'Release Pending Approval') {
+        menu.push({
+          label: 'Approve Release',
+          className: 'success',
+          icon: BoardCardIcons.checkCircle,
+          onClick: () => {
+            DB.update('transmittals', t.id, {
+              status: 'Sent',
+              sentAt: new Date().toISOString(),
+              sentBy: Auth.user.id,
+              updatedAt: new Date().toISOString()
+            });
             App.handleRoute();
-          }, 'success')
+          }
+        });
+        menu.push({
+          label: 'Reject Release',
+          className: 'danger',
+          icon: BoardCardIcons.reject,
+          onClick: () => {
+            DB.update('transmittals', t.id, {
+              status: 'Draft',
+              updatedAt: new Date().toISOString()
+            });
+            App.handleRoute();
+          }
         });
       }
       if (canMark && t.status === 'Sent') {
@@ -656,11 +796,18 @@ const Transmittal = {
         canDrag: t => canEdit && !t.pendingChangeId,
         canDrop: ({ item, targetStatus }) => {
           if (item.status === targetStatus) return true;
-          const flow = ['Draft', 'Sent', 'Acknowledged'];
-          const currentIdx = flow.indexOf(item.status);
-          const targetIdx = flow.indexOf(targetStatus);
-          if (currentIdx === -1 || targetIdx === -1) return false;
-          return targetIdx > currentIdx;
+          // Admin can move freely; non-Admin can only request release (Draft -> Release Pending Approval)
+          const isAdmin = Auth.user?.role === 'Admin';
+          if (isAdmin) {
+            const flow = ['Draft', 'Release Pending Approval', 'Sent', 'Acknowledged'];
+            const currentIdx = flow.indexOf(item.status);
+            const targetIdx = flow.indexOf(targetStatus);
+            if (currentIdx === -1 || targetIdx === -1) return false;
+            return targetIdx >= currentIdx;
+          }
+          // Non-Admin may only drag Draft into Release Pending Approval (or Sent for Operations/others if their board lacks RPA)
+          if (item.status === 'Draft' && targetStatus === 'Release Pending Approval') return true;
+          return false;
         },
         orderField: 'boardOrder',
         onDrop({ item, targetStatus, newOrder, fromStatus }) {
@@ -676,13 +823,29 @@ const Transmittal = {
             return;
           }
 
-          // Block Sent if no items attached
-          if (targetStatus === 'Sent' && (!item.items || item.items.length === 0)) {
-            Workflow.showMessage('Incomplete Transmittal', 'Cannot send — transmittal has no items attached.', 'warning');
+          const isAdmin = Auth.user?.role === 'Admin';
+          const label = item.trackingNumber || item.id;
+
+          // Non-Admin dropping Draft into Sent column (e.g. Operations/others without RPA) is not allowed directly
+          if (!isAdmin && targetStatus === 'Sent') {
+            Workflow.showMessage('Approval Required', 'Only an Admin can mark a transmittal as Sent directly.', 'warning');
             return;
           }
 
-          const label = item.trackingNumber || item.id;
+          // Non-Admin draft -> Release Pending Approval
+          if (!isAdmin && item.status === 'Draft' && targetStatus === 'Release Pending Approval') {
+            DB.update('transmittals', item.id, {
+              status: 'Release Pending Approval',
+              boardOrder: newOrder,
+              releaseRequestedAt: new Date().toISOString(),
+              releaseRequestedBy: Auth.user.id,
+              updatedAt: new Date().toISOString()
+            });
+            App.handleRoute();
+            return;
+          }
+
+          // Admin release/acknowledge flows
           const applyMove = () => {
             const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
             if (targetStatus === 'Sent') changes.sentAt = new Date().toISOString();
@@ -691,8 +854,8 @@ const Transmittal = {
             App.handleRoute();
           };
 
-          // Confirm both Sent and Acknowledged
           const msgs = {
+            'Release Pending Approval': `Submit transmittal "${label}" for release approval?`,
             'Sent': `Mark transmittal "${label}" as Sent? This indicates the documents have been dispatched.`,
             'Acknowledged': `Mark transmittal "${label}" as Acknowledged by the recipient?`
           };

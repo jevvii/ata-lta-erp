@@ -168,43 +168,23 @@ const App = {
       }
     }
 
-    // Also badge the Admin nav link for pending changes and disbursement submissions
-    if (canApprove) {
-      const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getAllPending === 'function') ? PendingChanges.getAllPending() : [];
-      const adminCount = count + pendingChanges.length;
-      const adminNav = document.querySelector('nav a[href="#admin"]');
-      if (adminNav && Auth.user?.role !== 'Manager') {
-        let adminBadge = adminNav.querySelector('.nav-badge');
-        if (adminCount > 0) {
-          if (!adminBadge) {
-            adminBadge = document.createElement('span');
-            adminBadge.className = 'nav-badge';
-            adminNav.appendChild(adminBadge);
-          }
-          adminBadge.textContent = adminCount > 99 ? '99+' : adminCount;
-        } else if (adminBadge) {
-          adminBadge.remove();
+    // Staff-level: badge count of user's own pending changes, rejected changes, and pending requests
+    const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
+    const rejectedChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getRejectedForUser === 'function') ? PendingChanges.getRejectedForUser(Auth.user.id) : [];
+    const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
+    const staffCount = pendingChanges.length + rejectedChanges.length + myReqs.length;
+    const adminNav = document.querySelector('nav a[href="#admin"]');
+    if (adminNav && Auth.user?.role !== 'Manager') {
+      let adminBadge = adminNav.querySelector('.nav-badge');
+      if (staffCount > 0) {
+        if (!adminBadge) {
+          adminBadge = document.createElement('span');
+          adminBadge.className = 'nav-badge';
+          adminNav.appendChild(adminBadge);
         }
-      }
-    } else {
-      // Staff-level: badge count of user's own pending changes, rejected changes, and pending requests
-      const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
-      const rejectedChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getRejectedForUser === 'function') ? PendingChanges.getRejectedForUser(Auth.user.id) : [];
-      const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
-      const staffCount = pendingChanges.length + rejectedChanges.length + myReqs.length;
-      const adminNav = document.querySelector('nav a[href="#admin"]');
-      if (adminNav && Auth.user?.role !== 'Manager') {
-        let adminBadge = adminNav.querySelector('.nav-badge');
-        if (staffCount > 0) {
-          if (!adminBadge) {
-            adminBadge = document.createElement('span');
-            adminBadge.className = 'nav-badge';
-            adminNav.appendChild(adminBadge);
-          }
-          adminBadge.textContent = staffCount > 99 ? '99+' : staffCount;
-        } else if (adminBadge) {
-          adminBadge.remove();
-        }
+        adminBadge.textContent = staffCount > 99 ? '99+' : staffCount;
+      } else if (adminBadge) {
+        adminBadge.remove();
       }
     }
 
@@ -267,8 +247,8 @@ const App = {
 
     // Configure Admin / My Submissions nav link dynamically based on role/permissions
     const adminNav = document.querySelector('nav a[href="#admin"]');
+    const canManageUsers = Auth.can('users:view');
     if (adminNav) {
-      const canManageUsers = Auth.can('users:view');
       const labelEl = adminNav.querySelector('.nav-link-text');
       if (Auth.user.role === 'Manager') {
         adminNav.parentElement.style.display = 'none';
@@ -384,7 +364,8 @@ const App = {
           '#operations': () => { Workflow.view = 'list'; Workflow.detailWrId = null; Workflow.editingId = null; },
           '#billing': () => { Billing.view = 'list'; Billing.detailId = null; },
           '#disbursement': () => { Disbursement.view = 'list'; Disbursement.detailId = null; },
-          '#transmittal': () => { if (typeof Transmittal !== 'undefined') { Transmittal.view = 'list'; Transmittal.detailId = null; } }
+          '#transmittal': () => { if (typeof Transmittal !== 'undefined') { Transmittal.view = 'list'; Transmittal.detailId = null; } },
+          '#admin': () => { if (typeof Users !== 'undefined') { Users.view = 'users'; Users.editingId = null; Users.pendingDetailId = null; } }
         };
         if (moduleViewMap[href]) moduleViewMap[href]();
         if (location.hash === href) {

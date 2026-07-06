@@ -533,24 +533,77 @@ const Billing = {
     container.appendChild(table);
   },
 
+  /**
+   * Role-aware board columns for Billing.
+   *
+   * - Admin: Draft | Released (Sent) | Partially Paid | Paid | Overdue
+   *   Pending and Approved are funnelled to the Admin Console and hidden from the board.
+   * - Accounting: Draft | Pending | Released (Sent) | Partially Paid | Paid | Overdue
+   *   Approved is hidden from the board (action happens via list/detail).
+   * - Others: Requested (Draft/Pending/Approved) | Released (Sent) | Partially Paid | Paid | Overdue
+   */
+  getBoardColumns() {
+    const role = Auth.user?.role;
+    const isAdmin = role === 'Admin';
+    const isAccounting = role === 'Accounting';
+
+    const releasedStatuses = ['Sent', 'Release Pending Approval'];
+
+    if (isAdmin) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Released', label: 'Released', statuses: releasedStatuses, targetStatus: 'Sent', color: '#3b82f6' },
+        { key: 'Partially Paid', label: 'Partially Paid', statuses: ['Partially Paid'], targetStatus: 'Partially Paid', color: '#f59e0b' },
+        { key: 'Paid', label: 'Paid', statuses: ['Paid'], targetStatus: 'Paid', color: '#10b981' },
+        { key: 'Overdue', label: 'Overdue', statuses: ['Overdue'], targetStatus: 'Overdue', color: '#ef4444' }
+      ];
+    }
+
+    if (isAccounting) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Pending', label: 'Pending', statuses: ['Pending'], targetStatus: 'Pending', color: '#f59e0b' },
+        { key: 'Released', label: 'Released', statuses: releasedStatuses, targetStatus: 'Sent', color: '#3b82f6' },
+        { key: 'Partially Paid', label: 'Partially Paid', statuses: ['Partially Paid'], targetStatus: 'Partially Paid', color: '#f59e0b' },
+        { key: 'Paid', label: 'Paid', statuses: ['Paid'], targetStatus: 'Paid', color: '#10b981' },
+        { key: 'Overdue', label: 'Overdue', statuses: ['Overdue'], targetStatus: 'Overdue', color: '#ef4444' }
+      ];
+    }
+
+    return [
+      { key: 'Requested', label: 'Requested', statuses: ['Draft', 'Pending', 'Approved'], targetStatus: 'Pending', color: '#94a3b8' },
+      { key: 'Released', label: 'Released', statuses: releasedStatuses, targetStatus: 'Sent', color: '#3b82f6' },
+      { key: 'Partially Paid', label: 'Partially Paid', statuses: ['Partially Paid'], targetStatus: 'Partially Paid', color: '#f59e0b' },
+      { key: 'Paid', label: 'Paid', statuses: ['Paid'], targetStatus: 'Paid', color: '#10b981' },
+      { key: 'Overdue', label: 'Overdue', statuses: ['Overdue'], targetStatus: 'Overdue', color: '#ef4444' }
+    ];
+  },
+
+  getInvoiceDisplayStatus(status) {
+    if (status === 'Sent') return 'Released';
+    if (status === 'Release Pending Approval') return 'Release Pending';
+    return status;
+  },
+
   refreshBoard(container, invoices, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     const canEdit = Auth.can('billing:edit');
     const self = this;
     toolbarContainer?.classList.remove('grouped-board-active');
-    const statuses = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
+    const boardPhases = this.getBoardColumns();
     const statusColors = {
       'Draft': '#94a3b8',
       'Pending': '#f59e0b',
       'Approved': '#10b981',
       'Sent': '#3b82f6',
+      'Release Pending Approval': '#f59e0b',
       'Partially Paid': '#f59e0b',
       'Paid': '#10b981',
       'Overdue': '#ef4444'
     };
 
-    // Normalize boardOrder within each status column.
-    statuses.forEach(st => {
-      const colInvs = invoices.filter(inv => inv.status === st && !inv.pendingChangeId);
+    // Normalize boardOrder within each visible column.
+    boardPhases.forEach(phase => {
+      const colInvs = invoices.filter(inv => phase.statuses.includes(inv.status) && !inv.pendingChangeId);
       colInvs.sort((a, b) => {
         const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
         const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
@@ -568,15 +621,13 @@ const Billing = {
       });
     });
 
-    const makeColumns = () => statuses.map(st => {
+    const makeColumns = () => boardPhases.map(phase => {
       const col = {
-        key: st,
-        label: st,
-        targetStatus: st,
-        color: statusColors[st] || '#cbd5e1',
+        ...phase,
+        icon: 'phase',
         emptyState: { variant: 'compact', title: 'No invoices', body: '' }
       };
-      if (st === 'Draft' && canEdit) {
+      if (phase.key === 'Draft' && canEdit) {
         col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
       }
       return col;
@@ -594,6 +645,7 @@ const Billing = {
         'Paid': 'card-v2-priority-low',
         'Approved': 'card-v2-priority-low',
         'Sent': 'card-v2-priority-normal',
+        'Release Pending Approval': 'card-v2-priority-medium',
         'Partially Paid': 'card-v2-priority-medium',
         'Pending': 'card-v2-priority-medium',
         'Draft': 'card-v2-priority-normal',
@@ -615,7 +667,7 @@ const Billing = {
         description: client?.name || '—',
         detail: descParts.slice(1).join(' • '),
         date: inv.issueDate ? formatDate(inv.issueDate) : '',
-        priority: inv.status,
+        priority: self.getInvoiceDisplayStatus(inv.status),
         priorityClass: statusPriorityClass,
         onClick: () => { location.hash = '#billing/detail/' + inv.id; }
       });
@@ -680,8 +732,9 @@ const Billing = {
         canDrag: inv => canEdit && !inv.pendingChangeId,
         canDrop: ({ item, targetStatus }) => {
           if (item.status === targetStatus) return true;
+          const effectiveStatus = item.status === 'Release Pending Approval' ? 'Sent' : item.status;
           const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
-          const currentIdx = flow.indexOf(item.status);
+          const currentIdx = flow.indexOf(effectiveStatus);
           const targetIdx = flow.indexOf(targetStatus);
           if (currentIdx === -1 || targetIdx === -1) return false;
           if (targetIdx <= currentIdx) return false;
@@ -746,16 +799,21 @@ const Billing = {
           }
 
           const applyMove = () => {
-            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+            const isRelease = targetStatus === 'Sent';
+            const isAdmin = Auth.user?.role === 'Admin';
+            const nextStatus = (isRelease && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+            const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
             DB.update('invoices', item.id, changes);
             App.handleRoute();
           };
 
           // Confirm critical transitions
           if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
+            const isRelease = targetStatus === 'Sent';
+            const isAdmin = Auth.user?.role === 'Admin';
             const labels = {
               'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
-              'Sent': { msg: `Mark invoice "${item.invoiceNumber}" as Sent to client?`, type: 'success' },
+              'Sent': { msg: isAdmin ? `Release invoice "${item.invoiceNumber}" to client?` : `Submit invoice "${item.invoiceNumber}" for release approval?`, type: 'success' },
               'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
             };
             const cfg = labels[targetStatus];
@@ -832,12 +890,13 @@ const Billing = {
       'Pending': 'badge-warning',
       'Approved': 'badge-success',
       'Sent': 'badge-warning',
+      'Release Pending Approval': 'badge-warning',
       'Partially Paid': 'badge-warning',
       'Paid': 'badge-success',
       'Overdue': 'badge-danger',
       'Cancelled': 'badge-danger'
     };
-    return el('span', { class: 'badge ' + (map[status] || ''), text: status });
+    return el('span', { class: 'badge ' + (map[status] || ''), text: this.getInvoiceDisplayStatus(status) });
   },
 
   recurringBadge(inv) {
@@ -1749,20 +1808,36 @@ const Billing = {
         actions.appendChild(sendBtn);
       }
     } else if (inv.status === 'Approved' && canEdit) {
-      // Mark as Sent — billing:edit (Accounting), pending Admin approval
-      const sentBtn = el('button', { class: 'btn btn-primary', text: 'Mark as Sent' });
+      // Mark as Released — billing:edit (Accounting), pending Admin approval
+      const isAdmin = Auth.user?.role === 'Admin';
+      const sentBtn = el('button', { class: 'btn btn-primary', text: isAdmin ? 'Release Invoice' : 'Submit for Release' });
       sentBtn.addEventListener('click', () => {
-        if (canApprove) {
-          // Admin: direct update
+        if (isAdmin) {
           DB.update('invoices', inv.id, { status: 'Sent', updatedAt: new Date().toISOString() });
         } else {
-          // Accounting: submit for Admin approval
-          PendingChanges.submit('invoices', { ...inv, status: 'Sent', updatedAt: new Date().toISOString() }, false);
-          Workflow.showMessage('Submitted', 'Mark as Sent has been submitted for administrative approval.', 'success');
+          DB.update('invoices', inv.id, { status: 'Release Pending Approval', updatedAt: new Date().toISOString() });
+          Workflow.showMessage('Submitted', 'Invoice release has been submitted for administrative approval.', 'success');
         }
         App.handleRoute();
       });
       actions.appendChild(sentBtn);
+    } else if (inv.status === 'Release Pending Approval' && canApprove) {
+      // Admin approval of accounting release request
+      const approveReleaseBtn = el('button', { class: 'btn btn-success', text: 'Approve Release' });
+      approveReleaseBtn.addEventListener('click', () => {
+        DB.update('invoices', inv.id, { status: 'Sent', releasedBy: Auth.user.id, releasedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+        App.handleRoute();
+      });
+      actions.appendChild(approveReleaseBtn);
+
+      const rejectReleaseBtn = el('button', { class: 'btn btn-danger', text: 'Reject Release', style: 'margin-left:8px;' });
+      rejectReleaseBtn.addEventListener('click', () => {
+        const reason = prompt('Enter rejection reason:');
+        if (reason === null) return;
+        DB.update('invoices', inv.id, { status: 'Approved', releaseRejectedBy: Auth.user.id, releaseRejectionReason: reason, updatedAt: new Date().toISOString() });
+        App.handleRoute();
+      });
+      actions.appendChild(rejectReleaseBtn);
     }
     container.appendChild(actions);
 

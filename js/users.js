@@ -6,6 +6,7 @@ const Users = {
   view: 'users', // 'users' | 'audit' | 'pending'
   editingId: null,
   pendingDetailId: null,
+  pendingCategory: sessionStorage.getItem('admin_pending_category') || 'workRequestCreation',
 
   render() {
     const container = el('div', { class: 'page' });
@@ -18,69 +19,19 @@ const Users = {
 
     const canManageUsers = Auth.can('users:view');
 
-    // Tabs
-    const tabs = el('div', { class: 'admin-tabs' });
-    tabs.style.marginBottom = '20px'; // align layout nicely below breadcrumb
+    // Internal Admin tabs use the same module-tab-link style as other pages
+    container.appendChild(this.renderTabNav());
 
     if (canManageUsers) {
-      const usersTab = el('button', {
-        class: 'btn ' + (this.view === 'users' ? 'btn-primary' : 'btn-secondary'),
-        text: 'Users'
-      });
-      usersTab.addEventListener('click', () => { this.view = 'users'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(usersTab);
-    }
-
-    if (canManageUsers) {
-      const auditTab = el('button', {
-        class: 'btn ' + (this.view === 'audit' ? 'btn-primary' : 'btn-secondary'),
-        text: 'Audit Log'
-      });
-      auditTab.addEventListener('click', () => { this.view = 'audit'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(auditTab);
-    }
-
-    if (canManageUsers) {
-      const entity = Auth.activeEntity;
-      const pendingDisbursements = DB.getWhere('disbursements', d => d.entity === entity && (d.status === 'Submitted' || d.status === 'Under Review'));
-      let pendingChanges = PendingChanges.getAllPending();
-      pendingChanges = pendingChanges.filter(pc => PendingChanges.canApproveChange(pc));
-      const totalPending = pendingDisbursements.length + pendingChanges.length;
-
-      const pendingTab = el('button', {
-        class: 'btn ' + (this.view === 'pending' ? 'btn-primary' : 'btn-secondary'),
-        text: 'Pending Approvals'
-      });
-      if (totalPending > 0) {
-        const tabBadge = el('span', { class: 'nav-badge', style: 'margin-left:6px;', text: totalPending > 99 ? '99+' : String(totalPending) });
-        pendingTab.appendChild(tabBadge);
-      }
-      pendingTab.addEventListener('click', () => { this.view = 'pending'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(pendingTab);
+      const validAdminViews = ['users', 'audit', 'pending'];
+      if (!validAdminViews.includes(this.view)) this.view = 'users';
     } else {
       const isOperations = Auth.user.role === 'Operations';
-      
-      const myPendingTab = el('button', {
-        class: 'btn ' + (this.view === 'myPending' ? 'btn-primary' : 'btn-secondary'),
-        text: 'My Pending Submissions'
-      });
-      myPendingTab.addEventListener('click', () => { this.view = 'myPending'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(myPendingTab);
-      
-      const myRequestsTab = el('button', {
-        class: 'btn ' + (this.view === 'myRequests' ? 'btn-primary' : 'btn-secondary'),
-        text: 'My Requests'
-      });
-      myRequestsTab.addEventListener('click', () => { this.view = 'myRequests'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(myRequestsTab);
-
       const validStaffViews = ['myRequests', 'myPending'];
       if (!validStaffViews.includes(this.view)) {
         this.view = isOperations ? 'myRequests' : 'myPending';
       }
     }
-
-    container.appendChild(tabs);
 
     if (this.view === 'users' && canManageUsers) {
       container.appendChild(this.renderUsersSection());
@@ -108,31 +59,91 @@ const Users = {
     return container;
   },
 
+  renderTabNav() {
+    const canManageUsers = Auth.can('users:view');
+    const tabNav = el('div', { class: 'module-tab-nav' });
+
+    if (canManageUsers) {
+      const pendingCount = (() => {
+        if (typeof this.getPendingCategories !== 'function') return 0;
+        const categories = this.getPendingCategories();
+        return Object.values(categories).reduce((sum, arr) => sum + arr.length, 0);
+      })();
+
+      const tabs = [
+        { key: 'users', label: 'Users', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+        { key: 'audit', label: 'Audit Log', icon: BoardCardIcons.document },
+        { key: 'pending', label: 'Pending Approvals', icon: BoardCardIcons.checkCircle, count: pendingCount }
+      ];
+
+      tabs.forEach(tab => {
+        const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
+        btn.appendChild(parseHTML(tab.icon));
+        btn.appendChild(document.createTextNode(' ' + tab.label));
+        if (tab.count !== undefined) {
+          btn.appendChild(document.createTextNode(' '));
+          btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
+        }
+        btn.addEventListener('click', () => {
+          this.view = tab.key;
+          this.editingId = null;
+          this.pendingDetailId = null;
+          App.handleRoute();
+        });
+        tabNav.appendChild(btn);
+      });
+    } else {
+      const tabs = [
+        { key: 'myPending', label: 'My Pending Submissions' },
+        { key: 'myRequests', label: 'My Requests' }
+      ];
+      tabs.forEach(tab => {
+        const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
+        btn.appendChild(document.createTextNode(tab.label));
+        btn.addEventListener('click', () => {
+          this.view = tab.key;
+          this.editingId = null;
+          this.pendingDetailId = null;
+          App.handleRoute();
+        });
+        tabNav.appendChild(btn);
+      });
+    }
+
+    return tabNav;
+  },
+
   updateBreadcrumb(h1, subpage) {
     if (!h1) h1 = document.getElementById('admin-breadcrumb-h1');
     if (!h1) return;
     this.clearNode(h1);
-    
-    if (this.pendingDetailId || subpage) {
+
+    const sectionLabel = (() => {
+      if (this.pendingDetailId) return 'Review Pending Change';
+      if (subpage) return subpage;
+      switch (this.view) {
+        case 'audit': return 'Audit Log';
+        case 'pending': return 'Pending Approvals';
+        case 'myPending': return 'My Pending Submissions';
+        case 'myRequests': return 'My Requests';
+        default: return 'Admin';
+      }
+    })();
+
+    if (this.view !== 'users' || this.pendingDetailId || subpage) {
       const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Admin' });
       baseLink.addEventListener('click', () => {
         this.pendingDetailId = null;
         this.editingId = null;
+        this.view = 'users';
         this.showUserList();
         App.handleRoute();
       });
       h1.appendChild(baseLink);
       h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-      
-      let label = 'Detail';
-      if (this.pendingDetailId) {
-        label = 'Review Pending Change';
-      } else if (subpage) {
-        label = subpage;
-      }
-      h1.appendChild(document.createTextNode(label));
+      h1.appendChild(document.createTextNode(sectionLabel));
     } else {
-      h1.appendChild(document.createTextNode('Admin'));
+      h1.appendChild(document.createTextNode(sectionLabel));
     }
   },
 
@@ -551,9 +562,456 @@ const Users = {
   },
 
   // ============================================================
-  // Pending Approvals Section (merged: PendingChanges + Disbursement Submissions)
+  // Pending Approvals Section (reference-image category layout)
   // ============================================================
+
+  getPendingCategories() {
+    const entity = Auth.activeEntity;
+    const allPendingChanges = PendingChanges.getAllPending().filter(pc => PendingChanges.canApproveChange(pc));
+
+    const workRequestCreation = [];
+    const wrPhaseRouting = [];
+    const billingToRelease = [];
+    const disbursementToRelease = [];
+    const transmittalSent = [];
+
+    allPendingChanges.forEach(pc => {
+      const isNew = !pc.parentRecordId;
+      const data = pc.proposedData || {};
+      const submitter = DB.getById('users', pc.submittedBy);
+
+      if (pc.table === 'workRequests') {
+        workRequestCreation.push({
+          type: 'change',
+          kind: 'workRequestCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: data.title || 'Work Request',
+          description: data.description || (isNew ? 'New work request awaiting approval' : 'Work request edit awaiting approval'),
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'workRequestPhaseRouting') {
+        const wr = DB.getById('workRequests', pc.parentRecordId);
+        wrPhaseRouting.push({
+          type: 'change',
+          kind: 'wrPhaseRouting',
+          id: pc.id,
+          recordId: pc.parentRecordId,
+          title: wr ? wr.title : 'Work Request',
+          description: `Request to route to ${data.status || 'next phase'}`,
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: wr?.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'invoices') {
+        billingToRelease.push({
+          type: 'change',
+          kind: 'billingInvoiceCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Invoice: ${data.invoiceNumber || data.id || '—'}`,
+          description: isNew ? 'New invoice awaiting approval' : 'Invoice edit awaiting approval',
+          amount: data.total || null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'disbursements') {
+        disbursementToRelease.push({
+          type: 'change',
+          kind: 'disbursementCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Expense: ${data.category || '—'}`,
+          description: isNew ? 'New expense awaiting approval' : 'Expense edit awaiting approval',
+          amount: data.amount || null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'transmittals') {
+        transmittalSent.push({
+          type: 'change',
+          kind: 'transmittalSent',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Transmittal: ${data.trackingNumber || data.transmittalNumber || data.id || '—'}`,
+          description: isNew ? 'New transmittal awaiting approval' : 'Transmittal edit awaiting approval',
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      }
+    });
+
+    // Disbursement submissions awaiting approval
+    DB.getWhere('disbursements', d => d.entity === entity && ['Submitted', 'Under Review'].includes(d.status)).forEach(d => {
+      const submitter = DB.getById('users', d.requestedBy);
+      disbursementToRelease.push({
+        type: 'record',
+        kind: 'disbursementCreation',
+        id: d.id,
+        recordId: d.id,
+        title: `Expense: ${d.category || '—'}`,
+        description: d.description || 'Expense submission awaiting approval',
+        amount: d.amount || null,
+        submittedBy: d.requestedBy,
+        submitter,
+        submittedAt: d.submittedAt || d.createdAt,
+        entity: d.entity,
+        raw: d
+      });
+    });
+
+    // Release-pending disbursements
+    DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Release Pending Approval').forEach(d => {
+      const submitter = DB.getById('users', d.releaseRequestedBy || d.requestedBy);
+      disbursementToRelease.push({
+        type: 'record',
+        kind: 'disbursementRelease',
+        id: d.id,
+        recordId: d.id,
+        title: `Expense: ${d.category || '—'}`,
+        description: 'Disbursement release pending approval',
+        amount: d.amount || null,
+        submittedBy: d.releaseRequestedBy || d.requestedBy,
+        submitter,
+        submittedAt: d.releaseRequestedAt || d.submittedAt || d.createdAt,
+        entity: d.entity,
+        raw: d
+      });
+    });
+
+    // Release-pending invoices (billing release)
+    DB.getWhere('invoices', inv => inv.entity === entity && inv.status === 'Release Pending Approval').forEach(inv => {
+      const submitter = DB.getById('users', inv.releaseRequestedBy || inv.createdBy);
+      billingToRelease.push({
+        type: 'record',
+        kind: 'billingRelease',
+        id: inv.id,
+        recordId: inv.id,
+        title: `Invoice: ${inv.invoiceNumber || inv.id || '—'}`,
+        description: 'Invoice release (mark as sent) pending approval',
+        amount: inv.total || null,
+        submittedBy: inv.releaseRequestedBy || inv.createdBy,
+        submitter,
+        submittedAt: inv.releaseRequestedAt || inv.createdAt,
+        entity: inv.entity,
+        raw: inv
+      });
+    });
+
+    // Release-pending transmittals
+    DB.getWhere('transmittals', t => t.entity === entity && t.status === 'Release Pending Approval').forEach(t => {
+      const submitter = DB.getById('users', t.releaseRequestedBy || t.createdBy);
+      transmittalSent.push({
+        type: 'record',
+        kind: 'transmittalRelease',
+        id: t.id,
+        recordId: t.id,
+        title: `Transmittal: ${t.trackingNumber || t.transmittalNumber || t.id || '—'}`,
+        description: 'Transmittal mark-as-sent pending approval',
+        amount: null,
+        submittedBy: t.releaseRequestedBy || t.createdBy,
+        submitter,
+        submittedAt: t.releaseRequestedAt || t.createdAt,
+        entity: t.entity,
+        raw: t
+      });
+    });
+
+    return {
+      workRequestCreation,
+      wrPhaseRouting,
+      billingToRelease,
+      disbursementToRelease,
+      transmittalSent
+    };
+  },
+
   renderPendingSection() {
+    const wrapper = el('div');
+
+    if (this.pendingDetailId) {
+      wrapper.appendChild(this.renderPendingDetail(this.pendingDetailId));
+      return wrapper;
+    }
+
+    const categories = this.getPendingCategories();
+    const totalPending = Object.values(categories).reduce((sum, arr) => sum + arr.length, 0);
+
+    if (totalPending === 0) {
+      wrapper.appendChild(el('p', { text: 'No pending approvals.', class: 'empty-state' }));
+      return wrapper;
+    }
+
+    const categoryDefs = {
+      workRequestCreation: { label: 'Work Request Creation', keyPrefix: 'WR' },
+      wrPhaseRouting: { label: 'WR Phase Routing', keyPrefix: 'ROUTE' },
+      billingToRelease: { label: 'Billing to Release', keyPrefix: 'BIL' },
+      disbursementToRelease: { label: 'Disbursement to Release', keyPrefix: 'EXP' },
+      transmittalSent: { label: 'Mark Transmittal as Sent', keyPrefix: 'TX' }
+    };
+
+    const self = this;
+
+    // Render each non-empty category as its own card (reference-image layout)
+    Object.keys(categoryDefs).forEach(key => {
+      const items = categories[key];
+      if (!items || items.length === 0) return;
+      const def = categoryDefs[key];
+
+      const card = el('div', { class: 'approval-category-card' });
+
+      // Category header with Approve All
+      const header = el('div', { class: 'approval-category-header' });
+      const title = el('div', { class: 'approval-category-title' });
+      title.appendChild(el('span', { text: def.label }));
+      title.appendChild(el('span', { class: 'count', text: items.length + ' pending' }));
+      header.appendChild(title);
+
+      const approveAllBtn = el('button', { class: 'approve-all-btn' });
+      approveAllBtn.innerHTML = BoardCardIcons.checkCircle + ' Approve All';
+      approveAllBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Approve All', `Approve all ${items.length} items in ${def.label}?`, () => {
+          self.approveAll(key);
+        }, 'success');
+      });
+      header.appendChild(approveAllBtn);
+      card.appendChild(header);
+
+      // Items list
+      const list = el('div', { class: 'approval-items-list' });
+      items.forEach((item, idx) => {
+        list.appendChild(self.renderPendingApprovalItem(item, idx + 1, def.keyPrefix));
+      });
+      card.appendChild(list);
+
+      wrapper.appendChild(card);
+    });
+
+    return wrapper;
+  },
+
+  renderPendingApprovalItem(item, index, keyPrefix) {
+    const submitter = item.submitter;
+    const initials = submitter ? getInitials(submitter.name) : getInitials('System');
+    const roleLabel = submitter ? `${submitter.role} ${item.entity || Auth.activeEntity || ''}` : 'System';
+    const avatarColor = submitter ? groupColor(submitter.name) : '#94a3b8';
+
+    const key = keyPrefix + '-' + String(index).padStart(3, '0');
+
+    const row = el('div', { class: 'approval-item' });
+
+    // Status icon
+    const icon = el('div', { class: 'approval-item-icon' });
+    icon.innerHTML = BoardCardIcons.clock;
+    row.appendChild(icon);
+
+    // Body
+    const body = el('div', { class: 'approval-item-body' });
+    body.appendChild(el('div', { class: 'approval-item-key', text: key }));
+    body.appendChild(el('div', { class: 'approval-item-title', text: item.title }));
+    if (item.description) {
+      body.appendChild(el('div', { class: 'approval-item-desc', text: item.description }));
+    }
+
+    const meta = el('div', { class: 'approval-item-meta' });
+    if (submitter) {
+      const badge = el('span', { class: 'submitter-badge' });
+      const avatar = el('span', { class: 'submitter-avatar', title: submitter.name });
+      avatar.textContent = initials;
+      avatar.style.backgroundColor = avatarColor;
+      if (submitter.avatarUrl) {
+        avatar.style.backgroundImage = `url('${submitter.avatarUrl}')`;
+        avatar.textContent = '';
+      }
+      badge.appendChild(avatar);
+      badge.appendChild(el('span', { class: 'submitter-role', text: roleLabel }));
+      meta.appendChild(badge);
+    }
+
+    const dateEl = el('span', { class: 'approval-item-date' });
+    dateEl.innerHTML = BoardCardIcons.calendar + '<span>' + formatDate(item.submittedAt) + '</span>';
+    meta.appendChild(dateEl);
+
+    if (item.amount !== null && item.amount !== undefined) {
+      meta.appendChild(el('span', { class: 'approval-item-amount', text: formatPHP(item.amount) }));
+    }
+    body.appendChild(meta);
+    row.appendChild(body);
+
+    // Actions reveal on hover
+    const actions = el('div', { class: 'approval-item-actions' });
+    const rejectBtn = el('button', { class: 'btn btn-sm btn-reject', title: 'Reject' });
+    rejectBtn.innerHTML = BoardCardIcons.reject + ' Reject';
+    rejectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.rejectPendingItem(item);
+    });
+
+    const approveBtn = el('button', { class: 'btn btn-sm btn-approve', title: 'Approve' });
+    approveBtn.innerHTML = BoardCardIcons.checkCircle + ' Approve';
+    approveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.approvePendingItem(item);
+    });
+
+    actions.appendChild(rejectBtn);
+    actions.appendChild(approveBtn);
+    row.appendChild(actions);
+
+    return row;
+  },
+
+  approvePendingItem(item) {
+    if (item.kind === 'wrPhaseRouting') {
+      Workflow.showConfirm('Confirm Routing', `Approve routing for ${item.title} to ${item.raw?.proposedData?.status || 'next phase'}?`, () => {
+        const nextPhase = item.raw?.proposedData?.status;
+        if (nextPhase) {
+          DB.update('workRequests', item.recordId, {
+            status: nextPhase,
+            updatedAt: new Date().toISOString()
+          });
+        }
+        PendingChanges.delete(item.id);
+        App.handleRoute();
+      }, 'success');
+      return;
+    }
+    if (item.type === 'change') {
+      Workflow.showConfirm('Confirm Approval', `Approve ${item.title}?`, () => {
+        PendingChanges.approve(item.id);
+        App.handleRoute();
+      }, 'success');
+    } else if (item.kind === 'disbursementCreation') {
+      location.hash = '#disbursement/detail/' + item.id;
+    } else if (item.kind === 'disbursementRelease') {
+      Workflow.showConfirm('Confirm Release', `Approve and release ${item.title}?`, () => {
+        DB.update('disbursements', item.id, {
+          status: 'Released',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+    } else if (item.kind === 'billingRelease') {
+      Workflow.showConfirm('Confirm Release', `Approve and mark ${item.title} as sent?`, () => {
+        DB.update('invoices', item.id, {
+          status: 'Sent',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+    } else if (item.kind === 'transmittalRelease') {
+      Workflow.showConfirm('Confirm Sent', `Approve and mark ${item.title} as sent?`, () => {
+        DB.update('transmittals', item.id, {
+          status: 'Sent',
+          sentBy: Auth.user.id,
+          sentAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+    }
+  },
+
+  rejectPendingItem(item) {
+    const reason = prompt('Enter rejection reason:');
+    if (reason === null) return;
+
+    if (item.type === 'change') {
+      PendingChanges.reject(item.id, reason);
+      App.handleRoute();
+    } else if (item.kind === 'disbursementCreation') {
+      DB.update('disbursements', item.id, {
+        status: 'Rejected',
+        rejectedBy: Auth.user.id,
+        rejectionReason: reason
+      });
+      App.handleRoute();
+    } else if (item.kind === 'disbursementRelease') {
+      DB.update('disbursements', item.id, {
+        status: 'Approved',
+        releaseRejectedBy: Auth.user.id,
+        releaseRejectionReason: reason
+      });
+      App.handleRoute();
+    } else if (item.kind === 'billingRelease') {
+      DB.update('invoices', item.id, {
+        status: 'Approved',
+        releaseRejectedBy: Auth.user.id,
+        releaseRejectionReason: reason
+      });
+      App.handleRoute();
+    } else if (item.kind === 'transmittalRelease') {
+      DB.update('transmittals', item.id, {
+        status: 'Draft',
+        releaseRejectedBy: Auth.user.id,
+        releaseRejectionReason: reason
+      });
+      App.handleRoute();
+    }
+  },
+
+  approveAll(categoryKey) {
+    const categories = this.getPendingCategories();
+    const items = categories[categoryKey] || [];
+    if (items.length === 0) return;
+
+    let processed = 0;
+    items.forEach(item => {
+      if (item.type === 'change') {
+        PendingChanges.approve(item.id);
+        processed++;
+      } else if (item.kind === 'disbursementRelease') {
+        DB.update('disbursements', item.id, {
+          status: 'Released',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        processed++;
+      } else if (item.kind === 'billingRelease') {
+        DB.update('invoices', item.id, {
+          status: 'Sent',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        processed++;
+      } else if (item.kind === 'transmittalRelease') {
+        DB.update('transmittals', item.id, {
+          status: 'Sent',
+          sentBy: Auth.user.id,
+          sentAt: new Date().toISOString()
+        });
+        processed++;
+      }
+    });
+
+    if (processed > 0) {
+      App.handleRoute();
+    } else {
+      Workflow.showMessage('Approve All', 'Some items require individual review and cannot be bulk-approved.', 'warning');
+    }
+  },
+
+  // Legacy board/table/list views kept for possible future toggles / backwards compatibility
+  renderPendingSectionLegacy() {
     const wrapper = el('div');
 
     if (this.pendingDetailId) {
