@@ -1318,7 +1318,8 @@ class SidePane {
       this.onExpandCallback();
     } else if (this.fullPageRoute) {
       location.hash = this.fullPageRoute;
-      if (window.App && typeof App.handleRoute === 'function') App.handleRoute();
+      const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
+      if (appRef && typeof appRef.handleRoute === 'function') appRef.handleRoute();
     } else {
       console.warn('SidePane: full-page requested but no route or onExpand provided.');
     }
@@ -1529,7 +1530,8 @@ function openFormPanel({ icon, title, formContent, formId, actions, mode, viewCo
     if (route) {
       if (mode === PaneMode.FULL_PAGE) {
         location.hash = route;
-        if (window.App && typeof App.handleRoute === 'function') App.handleRoute();
+        const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
+        if (appRef && typeof appRef.handleRoute === 'function') appRef.handleRoute();
       } else {
         window.open(location.origin + location.pathname + route, '_blank', 'noopener,noreferrer');
       }
@@ -1625,8 +1627,9 @@ function closeFormPanelAndRoute(hash, messageConfig) {
     if (hash) {
       location.hash = hash;
     }
-    if (window.App && typeof window.App.handleRoute === 'function') {
-      window.App.handleRoute();
+    const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
+    if (appRef && typeof appRef.handleRoute === 'function') {
+      appRef.handleRoute();
     }
   }
 }

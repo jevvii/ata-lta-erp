@@ -634,6 +634,9 @@ const App = {
   }
 };
 
+// Expose App globally so helpers loaded earlier (e.g. js/utils.js) can invoke routing.
+window.App = App;
+
 // Login form wiring
 document.addEventListener('DOMContentLoaded', () => {
   App.initTheme();
