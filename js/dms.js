@@ -236,6 +236,7 @@ const DMS = {
       if (d.status === 'Archived' || d.archived === true) return false;
       return true;
     });
+    const hasDocs = docs.length > 0;
 
     if (activeFilters && activeFilters.workRequest && activeFilters.workRequest.size > 0) {
       docs = docs.filter(d => activeFilters.workRequest.has(d.workRequestId));
@@ -276,8 +277,18 @@ const DMS = {
 
     docs.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
 
+    const hasActiveFilters = activeFilters && Object.values(activeFilters).some(s => s && s.size > 0);
+
     if (docs.length === 0) {
-      container.appendChild(renderEmptyState('No documents found', null, { variant: 'zero-state' }));
+      if (hasActiveFilters && hasDocs) {
+        container.appendChild(renderFilterEmptyState(
+          'No documents match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('documents'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No documents found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 

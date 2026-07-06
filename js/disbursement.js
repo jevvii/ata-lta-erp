@@ -504,6 +504,7 @@ const Disbursement = {
 
     items = items.filter(d => Auth.canViewDisbursement(d));
     items = items.filter(d => d.status !== 'Cancelled' && !(d.status === 'Funded' && d.archived));
+    const hasItems = items.length > 0;
 
     if (activeFilters.workRequest && activeFilters.workRequest.size > 0) {
       items = items.filter(d => activeFilters.workRequest.has(d.linkedWorkRequestId));
@@ -555,8 +556,18 @@ const Disbursement = {
     }
     items.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
-    if (items.length === 0 && (viewMode !== 'board' || groupBy === 'none')) {
-      container.appendChild(renderEmptyState('No expenses found', null, { variant: 'zero-state' }));
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
+    if (items.length === 0) {
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No expenses match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('disbursement'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No expenses found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 

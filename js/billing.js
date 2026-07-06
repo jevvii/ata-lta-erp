@@ -383,7 +383,7 @@ const Billing = {
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
-      let invoices = DB.getWhere('invoices', inv => {
+      const baseInvoices = DB.getWhere('invoices', inv => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
         return matchesEntity && inv.status !== 'Cancelled' && !inv.archived;
       });
@@ -402,7 +402,8 @@ const Billing = {
         return inv;
       });
 
-      invoices = [...invoices, ...pendingInvs];
+      const hasInvoices = baseInvoices.length > 0 || pendingInvs.length > 0;
+      let invoices = [...baseInvoices, ...pendingInvs];
 
       if (activeFilters.workRequest.size > 0) {
         invoices = invoices.filter(inv => activeFilters.workRequest.has(inv.workRequestId));
@@ -446,9 +447,21 @@ const Billing = {
         });
       }
 
-      if (viewMode === 'table') this.refreshTable(contentContainer, invoices);
-      else if (viewMode === 'board') this.refreshBoard(contentContainer, invoices, groupBy, groupOptions, stickyContainer);
-      else this.refreshListCompact(contentContainer, invoices);
+      const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
+      if (invoices.length === 0 && hasActiveFilters && hasInvoices) {
+        contentContainer.appendChild(renderFilterEmptyState(
+          'No invoices match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('billing'); App.handleRoute(); } }]
+        ));
+      } else if (viewMode === 'table') {
+        this.refreshTable(contentContainer, invoices);
+      } else if (viewMode === 'board') {
+        this.refreshBoard(contentContainer, invoices, groupBy, groupOptions, stickyContainer);
+      } else {
+        this.refreshListCompact(contentContainer, invoices);
+      }
     };
 
     refresh();

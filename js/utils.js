@@ -236,6 +236,24 @@ function renderEmptyState(title, body, opts = {}) {
 }
 
 /**
+ * Render a consistent "no filter results" empty-state with a search icon
+ * and optional clear-filters action.
+ * @param {string} title - e.g. "No invoices match your filters"
+ * @param {string} [body]
+ * @param {Array} [actions] - renderEmptyStateV2 actions array; default none.
+ * @returns {HTMLElement}
+ */
+function renderFilterEmptyState(title, body, actions = []) {
+  return renderEmptyStateV2({
+    variant: 'filtered-empty',
+    icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
+    title,
+    body: body || 'Try adjusting or clearing the active filters to see more results.',
+    actions
+  });
+}
+
+/**
  * Compact board-card icons used across Operations, Billing, Disbursement,
  * and Transmittal boards to match the Jira-style reference card.
  */

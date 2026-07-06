@@ -2745,22 +2745,11 @@ const Workflow = {
       const hasWorkRequests = allWrs.length > 0;
 
       if (hasWorkRequests && hasActiveFilters) {
-        container.appendChild(renderEmptyStateV2({
-          variant: 'filtered-empty',
-          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-          title: 'No work requests match your filters',
-          body: 'Try adjusting or clearing the active filters to see more results.',
-          actions: [
-            {
-              text: 'Clear filters',
-              className: 'btn btn-primary btn-sm',
-              onClick: () => {
-                App.clearSavedFilters('operations');
-                App.handleRoute();
-              }
-            }
-          ]
-        }));
+        container.appendChild(renderFilterEmptyState(
+          'No work requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('operations'); App.handleRoute(); } }]
+        ));
       } else {
         const actions = [];
         if (canEdit) {
@@ -2940,22 +2929,11 @@ const Workflow = {
       const hasWorkRequests = allWrs.length > 0;
 
       if (hasWorkRequests && hasActiveFilters) {
-        container.appendChild(renderEmptyStateV2({
-          variant: 'filtered-empty',
-          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-          title: 'No work requests match your filters',
-          body: 'Try adjusting or clearing the active filters to see more results.',
-          actions: [
-            {
-              text: 'Clear filters',
-              className: 'btn btn-primary btn-sm',
-              onClick: () => {
-                App.clearSavedFilters('operations');
-                App.handleRoute();
-              }
-            }
-          ]
-        }));
+        container.appendChild(renderFilterEmptyState(
+          'No work requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('operations'); App.handleRoute(); } }]
+        ));
       } else {
         const canEdit = Auth.can('workflow:edit');
         const actions = [];
@@ -3496,22 +3474,11 @@ const Workflow = {
       const hasWorkRequests = allWrs.length > 0;
 
       if (hasWorkRequests && hasActiveFilters) {
-        container.appendChild(renderEmptyStateV2({
-          variant: 'filtered-empty',
-          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-          title: 'No work requests match your filters',
-          body: 'Try adjusting or clearing the active filters to see more results.',
-          actions: [
-            {
-              text: 'Clear filters',
-              className: 'btn btn-primary btn-sm',
-              onClick: () => {
-                App.clearSavedFilters('operations');
-                App.handleRoute();
-              }
-            }
-          ]
-        }));
+        container.appendChild(renderFilterEmptyState(
+          'No work requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('operations'); App.handleRoute(); } }]
+        ));
       } else {
         const actions = [];
         if (canEdit) {
@@ -6342,17 +6309,13 @@ const Workflow = {
             ...(container.employeeFilter ? [`employee: ${container.employeeFilter}`] : []),
             ...activeFilters
           ];
-          listWrapper.appendChild(renderEmptyStateV2({
-            variant: 'filtered-empty',
-            icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-            title: 'No tasks match your filters',
-            body: filterNames.length > 0
+          listWrapper.appendChild(renderFilterEmptyState(
+            'No tasks match your filters',
+            filterNames.length > 0
               ? `Active filters: ${filterNames.join(', ')}. Clear them to see all ${tasks.length} tasks.`
               : 'Adjust your search or filters to find tasks.',
-            actions: [
-              { text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: clearTaskFilters }
-            ]
-          }));
+            [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: clearTaskFilters }]
+          ));
         } else {
           listWrapper.appendChild(renderEmptyStateV2({
             variant: 'zero-state',

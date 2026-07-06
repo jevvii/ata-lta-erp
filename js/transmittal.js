@@ -460,6 +460,7 @@ const Transmittal = {
 
     let items = DB.getWhere('transmittals', t => (entity === 'ALL' ? Auth.user.entities.includes(t.entity) : t.entity === entity));
     items = items.filter(t => t.status !== 'Cancelled' && !(t.status === 'Acknowledged' && t.archived));
+    const hasItems = items.length > 0;
 
     if (activeFilters.workRequest && activeFilters.workRequest.size > 0) {
       items = items.filter(t => activeFilters.workRequest.has(t.workRequestId));
@@ -507,8 +508,18 @@ const Transmittal = {
       return new Date(db) - new Date(da);
     });
 
-    if (items.length === 0 && (this.listViewMode !== 'board' || groupBy === 'none')) {
-      container.appendChild(renderEmptyState('No transmittals found', null, { variant: 'zero-state' }));
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
+    if (items.length === 0) {
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No transmittals match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('transmittals'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No transmittals found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 

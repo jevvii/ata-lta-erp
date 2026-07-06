@@ -497,6 +497,7 @@ const Users = {
   refreshAuditLog(container, activeFilters) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
+    const hasLogs = logs.length > 0;
 
     if (activeFilters && activeFilters.user && activeFilters.user.size > 0) {
       logs = logs.filter(l => activeFilters.user.has(l.userName || (DB.getById('users', l.userId)?.name)));
@@ -533,8 +534,18 @@ const Users = {
     // Sort newest first
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+    const hasActiveFilters = activeFilters && Object.values(activeFilters).some(s => s && s.size > 0);
+
     if (logs.length === 0) {
-      container.appendChild(renderEmptyState('No audit log entries found', null, { variant: 'zero-state' }));
+      if (hasActiveFilters && hasLogs) {
+        container.appendChild(renderFilterEmptyState(
+          'No audit log entries match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('audit'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No audit log entries found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 
