@@ -870,6 +870,81 @@ const Disbursement = {
       return menu;
     };
 
+    const boardDrag = {
+      enabled: true,
+      canDrag: d => canEdit && !d.pendingChangeId,
+      canDrop: ({ item, targetStatus }) => {
+        if (item.status === targetStatus) return true;
+        // Map pre-approval statuses to the canonical Pending step.
+        const preApproval = ['Submitted', 'Under Review', 'Pending'];
+        const effectiveStatus = preApproval.includes(item.status) ? 'Pending' : item.status;
+        const flow = ['Draft', 'Pending', 'Approved', 'Released', 'Funded'];
+        const currentIdx = flow.indexOf(effectiveStatus);
+        const targetIdx = flow.indexOf(targetStatus);
+        if (currentIdx === -1 || targetIdx === -1) return false;
+        return targetIdx > currentIdx;
+      },
+      orderField: 'boardOrder',
+      onDrop({ item, targetStatus, newOrder, fromStatus }) {
+        if (fromStatus === targetStatus) {
+          DB.update('disbursements', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+          return;
+        }
+
+        // Permission gate: Approved requires disbursement:approve
+        if (targetStatus === 'Approved' && !Auth.can('disbursement:approve')) {
+          Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve disbursements.', 'danger');
+          return;
+        }
+
+        // Permission gate: Released requires mark_released or approve
+        if (targetStatus === 'Released' && !Auth.can('disbursement:mark_released') && !Auth.can('disbursement:approve')) {
+          Workflow.showMessage('Permission Denied', 'You do not have permission to release disbursements.', 'danger');
+          return;
+        }
+
+        // Block if pending admin approval
+        if (item.pendingChangeId) {
+          Workflow.showMessage('Pending Approval', 'This disbursement is pending administrative approval and cannot be moved.', 'warning');
+          return;
+        }
+
+        // Block Draft → beyond Pending if no amount
+        if (fromStatus === 'Draft' && targetStatus !== 'Pending' && (!item.amount || item.amount <= 0)) {
+          Workflow.showMessage('Incomplete Disbursement', 'Cannot advance — disbursement has no amount specified.', 'warning');
+          return;
+        }
+
+        const label = item.category + ' — ' + formatPHP(item.amount);
+        const isAdmin = Auth.user?.role === 'Admin';
+        const applyMove = () => {
+          // Non-Admin marking as Released must submit for admin approval.
+          const nextStatus = (targetStatus === 'Released' && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+          const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
+          if (nextStatus === 'Release Pending Approval') {
+            changes.releaseRequestedBy = Auth.user.id;
+            changes.releaseRequestedAt = new Date().toISOString();
+          }
+          DB.update('disbursements', item.id, changes);
+          App.handleRoute();
+        };
+
+        // Confirm critical transitions
+        if (['Approved', 'Released', 'Funded'].includes(targetStatus)) {
+          const msgs = {
+            'Approved': `Approve disbursement "${label}"?`,
+            'Released': isAdmin ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
+            'Funded': `Mark disbursement "${label}" as Funded? This confirms funds have been credited.`
+          };
+          Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
+          return;
+        }
+
+        applyMove();
+      }
+    };
+
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
       cardNumber = 1;
@@ -882,7 +957,8 @@ const Disbursement = {
         groupOptions,
         renderCard,
         cardMenuItems,
-        storageKey: 'erp_disbursement_grouped_collapsed'
+        storageKey: 'erp_disbursement_grouped_collapsed',
+        drag: boardDrag
       });
       return;
     }
@@ -895,80 +971,7 @@ const Disbursement = {
       columns: makeColumns(),
       renderCard,
       cardMenuItems,
-      drag: {
-        enabled: true,
-        canDrag: d => canEdit && !d.pendingChangeId,
-        canDrop: ({ item, targetStatus }) => {
-          if (item.status === targetStatus) return true;
-          // Map pre-approval statuses to the canonical Pending step.
-          const preApproval = ['Submitted', 'Under Review', 'Pending'];
-          const effectiveStatus = preApproval.includes(item.status) ? 'Pending' : item.status;
-          const flow = ['Draft', 'Pending', 'Approved', 'Released', 'Funded'];
-          const currentIdx = flow.indexOf(effectiveStatus);
-          const targetIdx = flow.indexOf(targetStatus);
-          if (currentIdx === -1 || targetIdx === -1) return false;
-          return targetIdx > currentIdx;
-        },
-        orderField: 'boardOrder',
-        onDrop({ item, targetStatus, newOrder, fromStatus }) {
-          if (fromStatus === targetStatus) {
-            DB.update('disbursements', item.id, { boardOrder: newOrder });
-            App.handleRoute();
-            return;
-          }
-
-          // Permission gate: Approved requires disbursement:approve
-          if (targetStatus === 'Approved' && !Auth.can('disbursement:approve')) {
-            Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve disbursements.', 'danger');
-            return;
-          }
-
-          // Permission gate: Released requires mark_released or approve
-          if (targetStatus === 'Released' && !Auth.can('disbursement:mark_released') && !Auth.can('disbursement:approve')) {
-            Workflow.showMessage('Permission Denied', 'You do not have permission to release disbursements.', 'danger');
-            return;
-          }
-
-          // Block if pending admin approval
-          if (item.pendingChangeId) {
-            Workflow.showMessage('Pending Approval', 'This disbursement is pending administrative approval and cannot be moved.', 'warning');
-            return;
-          }
-
-          // Block Draft → beyond Pending if no amount
-          if (fromStatus === 'Draft' && targetStatus !== 'Pending' && (!item.amount || item.amount <= 0)) {
-            Workflow.showMessage('Incomplete Disbursement', 'Cannot advance — disbursement has no amount specified.', 'warning');
-            return;
-          }
-
-          const label = item.category + ' — ' + formatPHP(item.amount);
-          const isAdmin = Auth.user?.role === 'Admin';
-          const applyMove = () => {
-            // Non-Admin marking as Released must submit for admin approval.
-            const nextStatus = (targetStatus === 'Released' && !isAdmin) ? 'Release Pending Approval' : targetStatus;
-            const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
-            if (nextStatus === 'Release Pending Approval') {
-              changes.releaseRequestedBy = Auth.user.id;
-              changes.releaseRequestedAt = new Date().toISOString();
-            }
-            DB.update('disbursements', item.id, changes);
-            App.handleRoute();
-          };
-
-          // Confirm critical transitions
-          if (['Approved', 'Released', 'Funded'].includes(targetStatus)) {
-            const msgs = {
-              'Approved': `Approve disbursement "${label}"?`,
-              'Released': isAdmin ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
-              'Funded': `Mark disbursement "${label}" as Funded? This confirms funds have been credited.`
-            };
-            Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
-            return;
-          }
-
-          applyMove();
-        }
-      }
+      drag: boardDrag
     });
   },
 

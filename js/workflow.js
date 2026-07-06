@@ -462,14 +462,68 @@ const Workflow = {
    */
   getRoutingHint(blockerMessage) {
     const msg = blockerMessage.toLowerCase();
-    if (msg.includes('invoice')) return { text: 'Go to Billing module to create and link an invoice.', route: '#billing' };
-    if (msg.includes('disbursement') || msg.includes('expense') || msg.includes('reimburse')) return { text: 'Go to Disbursement module to file and link an expense.', route: '#disbursement' };
-    if (msg.includes('task') && msg.includes('completed')) return { text: 'Mark all tasks as Completed in the task list below.', route: null };
-    if (msg.includes('requirement')) return { text: 'Complete the requirement gathering tasks below.', route: null };
-    if (msg.includes('client assignment')) return { text: 'Edit the work request and assign a client.', route: null };
-    if (msg.includes('employee assignment')) return { text: 'Edit the work request and assign an employee.', route: null };
-    if (msg.includes('released')) return { text: 'Wait for admin to approve and release all linked disbursements.', route: '#disbursement' };
+    if (msg.includes('invoice')) return { text: 'Go to Billing', route: '#billing', action: 'billing' };
+    if (msg.includes('disbursement') || msg.includes('expense') || msg.includes('reimburse')) return { text: 'Go to Disbursement', route: '#disbursement', action: 'disbursement' };
+    if (msg.includes('task') && msg.includes('completed')) return { text: 'Open Tasks', route: null, action: 'tasks' };
+    if (msg.includes('requirement')) return { text: 'Open Tasks', route: null, action: 'tasks' };
+    if (msg.includes('client assignment')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
+    if (msg.includes('employee assignment')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
+    if (msg.includes('released')) return { text: 'View Disbursements', route: '#disbursement', action: 'disbursement' };
     return null;
+  },
+
+  /**
+   * Show a dedicated routing blocker modal with actionable next steps and a cancel button.
+   * @param {string} title
+   * @param {string|string[]} blockers - blocker message(s)
+   * @param {Object} [ctx] - optional context { wrId }
+   */
+  showRoutingBlocker(title, blockers, ctx = {}) {
+    const messages = Array.isArray(blockers) ? blockers : [blockers];
+    const wrapper = el('div', { class: 'modal-message-wrapper type-warning' });
+    const icon = el('div', { class: 'modal-icon-v2', html: SignalIcons.warning });
+    wrapper.appendChild(icon);
+
+    const body = el('div', { class: 'modal-text', style: 'text-align:left; width:100%;' });
+    body.appendChild(el('p', { text: 'Resolve the following before routing:', style: 'margin-bottom:8px; font-weight:600;' }));
+    const list = el('ul', { class: 'routing-blocker-list', style: 'margin:0 0 12px 0; padding-left:20px; line-height:1.5;' });
+    messages.forEach(m => list.appendChild(el('li', { text: m })));
+    body.appendChild(list);
+    wrapper.appendChild(body);
+
+    const footer = el('div', { class: 'modal-footer', style: 'justify-content:flex-end; gap:8px;' });
+    const cancelBtn = el('button', { class: 'btn modal-btn-cancel', text: 'Cancel' });
+    footer.appendChild(cancelBtn);
+
+    const hints = [];
+    messages.forEach(m => {
+      const hint = this.getRoutingHint(m);
+      if (hint && !hints.some(h => h.action === hint.action)) hints.push(hint);
+    });
+
+    const overlay = this.showModal(title, wrapper);
+
+    hints.forEach(hint => {
+      const actionBtn = el('button', {
+        class: 'btn btn-primary modal-btn-action',
+        text: hint.text
+      });
+      actionBtn.addEventListener('click', () => {
+        overlay.remove();
+        if (hint.route) {
+          location.hash = hint.route;
+        } else if (hint.action === 'edit_wr' && ctx.wrId) {
+          location.hash = '#workflow/edit/' + ctx.wrId;
+        } else if (hint.action === 'tasks' && ctx.wrId) {
+          location.hash = '#workflow/detail/' + ctx.wrId;
+        }
+      });
+      footer.appendChild(actionBtn);
+    });
+
+    cancelBtn.addEventListener('click', () => overlay.remove());
+
+    wrapper.appendChild(footer);
   },
 
   canRequestPhaseRouting() {
@@ -502,7 +556,8 @@ const Workflow = {
   transitionWorkRequest(wrId) {
     const status = this.getPhaseTransitionStatus(wrId);
     if (!status || !status.canTransition) {
-      this.showMessage('Routing Error', 'Cannot transition phase:\n- ' + (status?.missing.join('\n- ') || 'Requirements not met'), 'danger');
+      const blockers = status?.missing?.length ? status.missing : ['Requirements not met'];
+      this.showRoutingBlocker('Routing Blocked', blockers, { wrId: wrId });
       return;
     }
 
@@ -3107,13 +3162,23 @@ const Workflow = {
         return;
       }
 
+      const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
+
+      // Detect backward routing before checking transition requirements.
+      const currentPhaseIdx = boardPhases.findIndex(p => p.statuses.includes(wr.status));
+      const targetPhaseIdx = boardPhases.findIndex(p => p.targetStatus === targetStatus);
+      const isBackward = currentPhaseIdx !== -1 && targetPhaseIdx !== -1 && targetPhaseIdx < currentPhaseIdx;
+      if (isBackward) {
+        self.showRoutingBlocker('Backward Routing Not Allowed', [`Work Requests cannot be moved back to "${targetPhaseLabel}" once advanced.`], { wrId: wr.id });
+        return;
+      }
+
       const transitionStatus = self.getPhaseTransitionStatus(wr.id);
       if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
-        const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
         const blockers = transitionStatus?.missing?.length
-          ? transitionStatus.missing.join('\n- ')
-          : `This Work Request cannot be routed to "${targetPhaseLabel}" yet.`;
-        self.showMessage('Routing Blocked', `Cannot move "${wr.title}" to ${targetPhaseLabel}:\n- ${blockers}`, 'warning');
+          ? transitionStatus.missing
+          : [`This Work Request cannot be routed to "${targetPhaseLabel}" yet.`];
+        self.showRoutingBlocker('Routing Blocked', blockers, { wrId: wr.id });
         return;
       }
 

@@ -710,6 +710,103 @@ const Billing = {
       return items;
     };
 
+    const boardDrag = {
+      enabled: true,
+      canDrag: inv => canEdit && !inv.pendingChangeId,
+      canDrop: ({ item, targetStatus }) => {
+        if (item.status === targetStatus) return true;
+        const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
+        const currentIdx = flow.indexOf(item.status);
+        const targetIdx = flow.indexOf(targetStatus);
+        if (currentIdx === -1 || targetIdx === -1) return false;
+        if (targetIdx <= currentIdx) return false;
+
+        // Payment status transitions require recorded payments that match the target.
+        const paid = self.getPaidAmount(item);
+        if (targetStatus === 'Partially Paid') {
+          return paid > 0 && paid < item.total;
+        }
+        if (targetStatus === 'Paid') {
+          return item.total > 0 && paid >= item.total;
+        }
+        return true;
+      },
+      orderField: 'boardOrder',
+      onDropDenied({ item, targetStatus }) {
+        if (targetStatus !== 'Partially Paid' && targetStatus !== 'Paid') return;
+        const paid = self.getPaidAmount(item);
+        if (targetStatus === 'Partially Paid') {
+          if (paid <= 0) {
+            Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Partially Paid — no payments have been recorded.`, 'warning');
+          } else if (paid >= item.total) {
+            Workflow.showMessage('Already Fully Paid', `Invoice "${item.invoiceNumber}" has payments totaling ${formatPHP(paid)}. Use the Paid status instead.`, 'warning');
+          }
+        } else if (targetStatus === 'Paid') {
+          if (item.total <= 0) {
+            Workflow.showMessage('Invalid Invoice', `Invoice "${item.invoiceNumber}" has no billable amount and cannot be marked Paid.`, 'warning');
+          } else if (paid <= 0) {
+            Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Paid — no payments have been recorded.`, 'warning');
+          } else if (paid < item.total) {
+            const balance = item.total - paid;
+            Workflow.showMessage('Balance Remaining', `Invoice "${item.invoiceNumber}" still has a balance of ${formatPHP(balance)}. Record the remaining payment before marking Paid.`, 'warning');
+          }
+        }
+      },
+      onDrop({ item, targetStatus, newOrder, fromStatus }) {
+        if (fromStatus === targetStatus) {
+          DB.update('invoices', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+          return;
+        }
+
+        // Permission gate: only billing:approve can move to Approved
+        if (targetStatus === 'Approved' && !Auth.can('billing:approve')) {
+          Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve invoices.', 'danger');
+          return;
+        }
+
+        // Block if pending admin approval
+        if (item.pendingChangeId) {
+          Workflow.showMessage('Pending Approval', `Invoice "${item.invoiceNumber}" is pending administrative approval and cannot be moved.`, 'warning');
+          return;
+        }
+
+        // Block Draft → beyond Pending if no line items
+        if (fromStatus === 'Draft' && targetStatus !== 'Pending') {
+          const hasItems = item.items && item.items.length > 0;
+          if (!hasItems && (!item.total || item.total <= 0)) {
+            Workflow.showMessage('Incomplete Invoice', 'Cannot advance — invoice has no line items or amount.', 'warning');
+            return;
+          }
+        }
+
+        const applyMove = () => {
+          const isRelease = targetStatus === 'Sent';
+          const isAdmin = Auth.user?.role === 'Admin';
+          const nextStatus = (isRelease && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+          const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
+          DB.update('invoices', item.id, changes);
+          App.handleRoute();
+        };
+
+        // Confirm critical transitions
+        if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
+          const isRelease = targetStatus === 'Sent';
+          const isAdmin = Auth.user?.role === 'Admin';
+          const labels = {
+            'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
+            'Sent': { msg: isAdmin ? `Release invoice "${item.invoiceNumber}" to client?` : `Submit invoice "${item.invoiceNumber}" for release approval?`, type: 'success' },
+            'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
+          };
+          const cfg = labels[targetStatus];
+          Workflow.showConfirm('Confirm Status Change', cfg.msg, applyMove, cfg.type);
+          return;
+        }
+
+        applyMove();
+      }
+    };
+
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
       cardNumber = 1;
@@ -722,7 +819,8 @@ const Billing = {
         groupOptions,
         renderCard,
         cardMenuItems,
-        storageKey: 'erp_billing_grouped_collapsed'
+        storageKey: 'erp_billing_grouped_collapsed',
+        drag: boardDrag
       });
       return;
     }
@@ -735,102 +833,7 @@ const Billing = {
       columns: makeColumns(),
       renderCard,
       cardMenuItems,
-      drag: {
-        enabled: true,
-        canDrag: inv => canEdit && !inv.pendingChangeId,
-        canDrop: ({ item, targetStatus }) => {
-          if (item.status === targetStatus) return true;
-          const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
-          const currentIdx = flow.indexOf(item.status);
-          const targetIdx = flow.indexOf(targetStatus);
-          if (currentIdx === -1 || targetIdx === -1) return false;
-          if (targetIdx <= currentIdx) return false;
-
-          // Payment status transitions require recorded payments that match the target.
-          const paid = self.getPaidAmount(item);
-          if (targetStatus === 'Partially Paid') {
-            return paid > 0 && paid < item.total;
-          }
-          if (targetStatus === 'Paid') {
-            return item.total > 0 && paid >= item.total;
-          }
-          return true;
-        },
-        orderField: 'boardOrder',
-        onDropDenied({ item, targetStatus }) {
-          if (targetStatus !== 'Partially Paid' && targetStatus !== 'Paid') return;
-          const paid = self.getPaidAmount(item);
-          if (targetStatus === 'Partially Paid') {
-            if (paid <= 0) {
-              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Partially Paid — no payments have been recorded.`, 'warning');
-            } else if (paid >= item.total) {
-              Workflow.showMessage('Already Fully Paid', `Invoice "${item.invoiceNumber}" has payments totaling ${formatPHP(paid)}. Use the Paid status instead.`, 'warning');
-            }
-          } else if (targetStatus === 'Paid') {
-            if (item.total <= 0) {
-              Workflow.showMessage('Invalid Invoice', `Invoice "${item.invoiceNumber}" has no billable amount and cannot be marked Paid.`, 'warning');
-            } else if (paid <= 0) {
-              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Paid — no payments have been recorded.`, 'warning');
-            } else if (paid < item.total) {
-              const balance = item.total - paid;
-              Workflow.showMessage('Balance Remaining', `Invoice "${item.invoiceNumber}" still has a balance of ${formatPHP(balance)}. Record the remaining payment before marking Paid.`, 'warning');
-            }
-          }
-        },
-        onDrop({ item, targetStatus, newOrder, fromStatus }) {
-          if (fromStatus === targetStatus) {
-            DB.update('invoices', item.id, { boardOrder: newOrder });
-            App.handleRoute();
-            return;
-          }
-
-          // Permission gate: only billing:approve can move to Approved
-          if (targetStatus === 'Approved' && !Auth.can('billing:approve')) {
-            Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve invoices.', 'danger');
-            return;
-          }
-
-          // Block if pending admin approval
-          if (item.pendingChangeId) {
-            Workflow.showMessage('Pending Approval', `Invoice "${item.invoiceNumber}" is pending administrative approval and cannot be moved.`, 'warning');
-            return;
-          }
-
-          // Block Draft → beyond Pending if no line items
-          if (fromStatus === 'Draft' && targetStatus !== 'Pending') {
-            const hasItems = item.items && item.items.length > 0;
-            if (!hasItems && (!item.total || item.total <= 0)) {
-              Workflow.showMessage('Incomplete Invoice', 'Cannot advance — invoice has no line items or amount.', 'warning');
-              return;
-            }
-          }
-
-          const applyMove = () => {
-            const isRelease = targetStatus === 'Sent';
-            const isAdmin = Auth.user?.role === 'Admin';
-            const nextStatus = (isRelease && !isAdmin) ? 'Release Pending Approval' : targetStatus;
-            const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
-            DB.update('invoices', item.id, changes);
-            App.handleRoute();
-          };
-
-          // Confirm critical transitions
-          if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
-            const isRelease = targetStatus === 'Sent';
-            const isAdmin = Auth.user?.role === 'Admin';
-            const labels = {
-              'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
-              'Sent': { msg: isAdmin ? `Release invoice "${item.invoiceNumber}" to client?` : `Submit invoice "${item.invoiceNumber}" for release approval?`, type: 'success' },
-              'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
-            };
-            const cfg = labels[targetStatus];
-            Workflow.showConfirm('Confirm Status Change', cfg.msg, applyMove, cfg.type);
-            return;
-          }
-
-          applyMove();
-        }
-      }
+      drag: boardDrag
     });
   },
 

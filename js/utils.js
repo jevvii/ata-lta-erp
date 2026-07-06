@@ -2009,7 +2009,8 @@ function renderGroupedKanbanBoard(config = {}) {
     toolbarContainer,
     groupBy,
     groupOptions = [],
-    storageKey = 'erp_grouped_collapsed'
+    storageKey = 'erp_grouped_collapsed',
+    drag = null
   } = config;
 
   if (!container || !columns.length) return;
@@ -2166,6 +2167,7 @@ function renderGroupedKanbanBoard(config = {}) {
       } else {
         colItems.forEach(item => {
           const card = renderCard(item, column);
+          if (card && item?.id) card.dataset.itemId = item.id;
           const items = cardMenuItems ? cardMenuItems(item) : [];
           if (items.length > 0 && typeof KanbanBoard !== 'undefined') {
             KanbanBoard.attachCardMenu(card, items);
@@ -2180,6 +2182,19 @@ function renderGroupedKanbanBoard(config = {}) {
   });
 
   container.appendChild(groupedBoard);
+
+  // Attach the same drag-and-drop mechanics available on ungrouped KanbanBoard.render()
+  // so grouped swimlanes can reorder within a column and move across columns/groups.
+  if (drag && typeof KanbanBoard !== 'undefined' && typeof KanbanBoard.attachDrag === 'function') {
+    KanbanBoard.attachDrag({
+      root: groupedBoard,
+      items,
+      drag,
+      columnSelector: '.board-group-column',
+      cardContainerSelector: '.board-group-column',
+      cardSelector: '.board-card-v2.compact'
+    });
+  }
 }
 
 /**
