@@ -322,7 +322,6 @@ const Disbursement = {
 
     const groupOptions = [
       { key: 'none', label: 'None' },
-      { key: 'status', label: 'Status', getName: d => d.status || 'No Status' },
       { key: 'employee', label: 'Employee', getName: d => {
         const u = DB.getById('users', this.getEmployeeId(d));
         return u?.name || 'Unassigned';

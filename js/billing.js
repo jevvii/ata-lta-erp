@@ -344,7 +344,6 @@ const Billing = {
 
     const groupOptions = [
       { key: 'none', label: 'None' },
-      { key: 'status', label: 'Status', getName: inv => inv.status || 'No Status' },
       { key: 'client', label: 'Client', getName: inv => {
         const client = DB.getById('clients', inv.clientId);
         return client?.name || 'No Client';

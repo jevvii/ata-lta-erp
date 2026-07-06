@@ -237,6 +237,7 @@ const Transmittal = {
   // List View
   // ============================================================
   renderList() {
+    const self = this;
     const entity = Auth.activeEntity;
 
     const wrapper = el('div');
@@ -349,7 +350,6 @@ const Transmittal = {
     let groupBy = App.restoreGroupBy('transmittals') || 'none';
     const groupOptions = [
       { key: 'none', label: 'None' },
-      { key: 'status', label: 'Status', getName: t => t.status || 'No Status' },
       { key: 'client', label: 'Client', getName: t => self.getClientName(t.clientId) },
       { key: 'employee', label: 'Employee', getName: t => {
         const creator = t.createdBy ? DB.getById('users', t.createdBy) : null;

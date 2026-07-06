@@ -12356,6 +12356,7 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Group dropdown (simple list) */
 .jira-group-dropdown {
   min-width: 180px;
+  border-radius: 12px;
 }
 
 .jira-group-dropdown .jira-dropdown-body {

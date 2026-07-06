@@ -1563,9 +1563,11 @@ function createJiraFilterToolbar(config) {
   const container = el('div', { class: 'jira-toolbar-sticky-container filters-bar' });
   const toolbar = el('div', { class: 'jira-toolbar' });
 
+  let activeViewMode = viewMode || 'table';
+  let groupWrap = null;
+
   // 1. View Mode Toggle
   if (viewMode && onViewModeChange) {
-    let activeViewMode = viewMode || 'table';
     const vmToggle = el('div', { class: 'view-mode-toggle' });
     const modes = [
       { key: 'table', label: 'Table', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.table : '' },
@@ -1587,6 +1589,7 @@ function createJiraFilterToolbar(config) {
         activeViewMode = m.key;
         onViewModeChange(m.key);
         renderViewModeToggle();
+        if (groupWrap) groupWrap.classList.toggle('hidden', activeViewMode !== 'board');
       });
       vmButtons.push(btn);
       vmToggle.appendChild(btn);
@@ -1859,8 +1862,9 @@ function createJiraFilterToolbar(config) {
   // Grouping Dropdown
   if (groupByOptions && onGroupByChange) {
     let activeGroupKey = currentGroupBy || 'none';
-    const groupWrap = el('div', { class: 'jira-group-wrap' });
-    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+    groupWrap = el('div', { class: 'jira-group-wrap' });
+    groupWrap.classList.toggle('hidden', !!(viewMode && activeViewMode !== 'board'));
+    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
     const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     const groupTrigger = el('button', { type: 'button', class: 'jira-group-trigger' });
     const groupOptionsAll = [
