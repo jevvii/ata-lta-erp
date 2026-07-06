@@ -429,9 +429,13 @@ const App = {
       } else if (pathParts[1] === 'form') {
         Billing.view = 'form';
         Billing.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
-      } else if (!Billing.view || Billing.view === 'detail' || Billing.view === 'form') {
+      } else if (pathParts[1] === 'templateForm') {
+        Billing.view = 'templateForm';
+        Billing.templateEditingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else if (!Billing.view || Billing.view === 'detail' || Billing.view === 'form' || Billing.view === 'templateForm') {
         Billing.view = 'list';
         Billing.detailId = null;
+        Billing.templateEditingId = null;
       }
     } else if (baseHash === '#disbursement') {
       if (pathParts[1] === 'detail' && pathParts[2]) {
@@ -440,9 +444,13 @@ const App = {
       } else if (pathParts[1] === 'form') {
         Disbursement.view = 'form';
         Disbursement.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
-      } else if (!Disbursement.view || Disbursement.view === 'detail' || Disbursement.view === 'form') {
+      } else if (pathParts[1] === 'templateForm') {
+        Disbursement.view = 'templateForm';
+        Disbursement.templateEditingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else if (!Disbursement.view || Disbursement.view === 'detail' || Disbursement.view === 'form' || Disbursement.view === 'templateForm') {
         Disbursement.view = 'list';
         Disbursement.detailId = null;
+        Disbursement.templateEditingId = null;
       }
     } else if (baseHash === '#transmittal') {
       if (pathParts[1] === 'detail' && pathParts[2]) {

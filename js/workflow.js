@@ -8621,12 +8621,14 @@ const Workflow = {
     templateGroup.appendChild(templateSel);
     form.appendChild(templateGroup);
 
-    // Task Title
-    const titleInput = el('input', { type: 'text', name: 'title', required: true });
-    form.appendChild(el('div', { class: 'form-group' }, [
-      el('label', { text: 'Task Title *' }),
-      titleInput
-    ]));
+    // ── Task Title free-form ──
+    const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    const titleInput = el('input', {
+      type: 'text', name: 'title', class: 'notion-freeform-input notion-title-input',
+      placeholder: 'New Task', required: true
+    });
+    titleSection.appendChild(titleInput);
+    form.appendChild(titleSection);
 
     // Checklist builder
     const checklistGroup = el('div', { class: 'form-group' });
@@ -8980,7 +8982,7 @@ const Workflow = {
     const fullPageRoute = '#operations/addTask/' + wrId;
     openFormPanel({
       icon: '✅',
-      title: 'Add New Task',
+      title: null,
       formContent: form,
       formId: 'add-task-form',
       viewContext: 'add-task-form',

@@ -5,8 +5,9 @@
  */
 
 const Billing = {
-  view: 'list', // 'list' | 'form' | 'detail' | 'aging' | 'templates'
+  view: 'list', // 'list' | 'form' | 'detail' | 'aging' | 'templates' | 'templateForm'
   detailId: null,
+  templateEditingId: null,
   pendingPrefill: null, // { clientId, workRequestId } — set when generating billing from a WR
 
   getInvoiceById(id) {
@@ -72,6 +73,18 @@ const Billing = {
           { text: '← Back to Invoices', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
         ]
       }));
+    } else if (this.view === 'templateForm') {
+      container.classList.add('billing-tab-page');
+      const isNew = !this.templateEditingId;
+      const template = isNew ? null : DB.getById('billingTemplates', this.templateEditingId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Billing',
+        baseHash: '#billing',
+        currentText: isNew ? 'New Billing Template' : (template?.name || 'Edit Template'),
+        actions: [
+          { text: '← Back to Billing', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
+        ]
+      }));
     } else {
       container.classList.add('billing-tab-page');
       // Tab views: list, templates, aging, archive
@@ -89,6 +102,7 @@ const Billing = {
     else if (this.view === 'aging') container.appendChild(this.renderAging());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
     else if (this.view === 'archive') container.appendChild(this.renderArchive());
+    else if (this.view === 'templateForm') container.appendChild(this.renderTemplateForm());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -2829,29 +2843,39 @@ const Billing = {
     while (container.firstChild) container.removeChild(container.firstChild);
   },
 
-  showTemplateForm(existing = null) {
+  renderTemplateForm() {
     const entity = Auth.activeEntity;
-    const container = el('div');
+    const template = this.templateEditingId ? DB.getById('billingTemplates', this.templateEditingId) : null;
+    const container = el('div', { class: 'page' });
 
-    // Notion-style icon header (title is now the inline borderless title field)
-    const titleSec = el('div', { class: 'side-pane-form-title' });
-    titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📋' }));
-    container.appendChild(titleSec);
+    const form = el('form', { id: 'billing-tpl-form', class: 'form-stacked notion-form' });
 
-    const formWrap = el('div', { class: 'side-pane-form-content' });
-    const form = el('form', { class: 'form-stacked notion-form', id: 'billing-tpl-form' });
-    
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const topActions = el('div', { class: 'form-actions-top' });
+    topActions.appendChild(el('button', { type: 'submit', form: 'billing-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
+    if (template) {
+      const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
+      delBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${template.name}"?`, () => {
+          DB.delete('billingTemplates', template.id);
+          this.view = 'templates';
+          this.templateEditingId = null;
+          closeFormPanelAndRoute('#billing');
+        }, 'danger');
+      });
+      topActions.appendChild(delBtn);
+    }
+    headerBar.appendChild(topActions);
+    form.appendChild(headerBar);
+
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
     titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Template Name' }));
     const nameInput = el('input', {
       type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input',
-      placeholder: 'New Billing Template', required: true, value: existing?.name || ''
+      placeholder: 'New Billing Template', required: true, value: template?.name || ''
     });
     titleSection.appendChild(nameInput);
-    if (!existing) {
-      setTimeout(() => { nameInput.focus(); }, 60);
-    }
     form.appendChild(titleSection);
 
     const clientGroup = el('div', { class: 'form-group' });
@@ -2860,7 +2884,7 @@ const Billing = {
     clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
       const opt = el('option', { value: c.id, text: c.name });
-      if (existing && existing.clientId === c.id) opt.selected = true;
+      if (template && template.clientId === c.id) opt.selected = true;
       clientSel.appendChild(opt);
     });
     clientGroup.appendChild(clientSel);
@@ -2871,13 +2895,16 @@ const Billing = {
     const schedSel = el('select', { name: 'schedule', required: true });
     ['monthly', 'quarterly'].forEach(s => {
       const opt = el('option', { value: s, text: s });
-      if (existing && existing.schedule === s) opt.selected = true;
+      if (template && template.schedule === s) opt.selected = true;
       schedSel.appendChild(opt);
     });
     schedGroup.appendChild(schedSel);
     form.appendChild(schedGroup);
 
-    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Professional Fee Amount *' }), el('input', { type: 'number', name: 'pfAmount', min: 0, step: 0.01, required: true, value: existing?.pfAmount || '' })]));
+    form.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Professional Fee Amount *' }),
+      el('input', { type: 'number', name: 'pfAmount', min: 0, step: 0.01, required: true, value: template?.pfAmount || '' })
+    ]));
 
     form.addEventListener('submit', e => {
       e.preventDefault();
@@ -2894,35 +2921,38 @@ const Billing = {
         updatedAt: new Date().toISOString()
       };
 
-      if (existing) {
-        DB.update('billingTemplates', existing.id, record);
+      if (template) {
+        DB.update('billingTemplates', template.id, record);
       } else {
         record.id = generateId('bt');
         record.createdAt = new Date().toISOString();
         DB.insert('billingTemplates', record);
       }
       this.view = 'templates';
+      this.templateEditingId = null;
       closeFormPanelAndRoute('#billing');
     });
 
-    formWrap.appendChild(form);
-    container.appendChild(formWrap);
+    container.appendChild(form);
+    return container;
+  },
 
-    // Sticky footer
-    const footer = el('div', { class: 'side-pane-form-footer' });
-    footer.appendChild(el('button', { type: 'submit', form: 'billing-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#billing'));
-    footer.appendChild(cancelBtn);
-    container.appendChild(footer);
-
-    if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
-      window.SidePaneInstance.open({
-        title: existing ? 'Edit Billing Template' : 'New Billing Template',
-        content: container,
-        viewContext: 'billing-template-form'
-      });
-    }
+  showTemplateForm(existing = null) {
+    this.templateEditingId = existing ? existing.id : null;
+    const fullPageRoute = this.templateEditingId ? `#billing/templateForm/${this.templateEditingId}` : '#billing/templateForm/new';
+    openFormPanel({
+      icon: '📋',
+      title: ' ',
+      formContent: this.renderTemplateForm(),
+      formId: 'billing-tpl-form',
+      viewContext: 'billing-template-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      actions: [
+        { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'billing-tpl-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#billing') }
+      ]
+    });
   },
 
   generateFromTemplate(t) {

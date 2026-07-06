@@ -9520,8 +9520,8 @@ tbody tr:hover {
   position: fixed;
   top: 0;
   right: 0;
-  width: 50vw;
-  max-width: 90vw;
+  width: min(50vw, 760px);
+  min-width: 320px;
   height: 100vh;
   background: var(--color-surface);
   box-shadow: -8px 0 30px rgba(0, 0, 0, 0.12);
@@ -9844,6 +9844,7 @@ tbody tr:hover {
   .side-pane {
     width: 100vw;
     max-width: 100vw;
+    min-width: 0;
   }
 }
 
