@@ -1673,6 +1673,35 @@ tbody tr:hover {
   color: var(--color-primary);
 }
 
+/* Modern content section spacing — separates page content from the navbar/toolbar
+   without altering the toolbar-to-navbar gap on list/board pages. */
+.page-content-section {
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.module-tab-nav + .page-content-section {
+  padding: 24px var(--spacing-lg) var(--spacing-lg) !important;
+}
+
+.toolbar-sticky-container + .page-content-section,
+.module-tab-nav + .toolbar-sticky-container + .page-content-section {
+  padding-top: var(--spacing-sm);
+}
+
+.page-content-section > .page-section-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.page-content-section > .page-section-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-md);
+}
+
 /* Card Grid */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--spacing-lg); }
 .wr-card { display: flex; flex-direction: column; background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-lg); box-shadow: var(--shadow-card); }
@@ -13454,4 +13483,214 @@ html.loading-active #loading-screen:not(.hidden) {
 
 [data-theme="dark"] .board-group-body {
   background: var(--color-bg);
+}
+
+/* ── Jira-style Backlog Component ──────────── */
+.jira-backlog-container {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface);
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+}
+
+.jira-backlog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--color-bg-light, #fafafa);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.jira-backlog-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.jira-backlog-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+  transform: rotate(-90deg);
+  color: var(--color-text-muted);
+}
+
+.jira-backlog-chevron.active {
+  transform: rotate(0deg);
+}
+
+.jira-backlog-title-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.jira-backlog-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+}
+
+.jira-backlog-subtitle {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.jira-backlog-count-badge {
+  background: var(--color-bg-muted, #f1f5f9);
+  color: var(--color-text-muted);
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.jira-backlog-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jira-backlog-body {
+  transition: max-height 0.2s ease-in-out;
+  max-height: 2000px;
+  overflow: hidden;
+}
+
+.jira-backlog-body.collapsed {
+  max-height: 0 !important;
+}
+
+.jira-backlog-list {
+  background: var(--color-surface);
+}
+
+.jira-backlog-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s ease;
+  font-size: 0.84rem;
+  color: var(--color-text);
+  min-height: 38px;
+}
+
+.jira-backlog-row:last-child {
+  border-bottom: none;
+}
+
+.jira-backlog-row:hover {
+  background: var(--color-bg-light, #fafafa);
+}
+
+.jira-backlog-row.selected {
+  background: color-mix(in oklab, var(--color-primary), transparent 94%);
+}
+
+.jira-backlog-row-checkbox-wrap {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+.jira-backlog-row-checkbox {
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.1s ease;
+  width: 13px;
+  height: 13px;
+  accent-color: var(--color-primary);
+}
+
+.jira-backlog-row:hover .jira-backlog-row-checkbox,
+.jira-backlog-row-checkbox:checked {
+  opacity: 1;
+}
+
+.jira-backlog-row-icon {
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
+  color: var(--color-primary);
+}
+
+.jira-backlog-row-key {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-right: 12px;
+  width: 75px;
+  flex-shrink: 0;
+}
+
+.jira-backlog-row-title {
+  flex-grow: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jira-backlog-row-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  margin-right: 12px;
+}
+
+.jira-backlog-tag {
+  background: var(--color-bg-muted, #f1f5f9);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.jira-backlog-tag.tag-primary {
+  background: color-mix(in oklab, var(--color-primary), transparent 90%);
+  border-color: color-mix(in oklab, var(--color-primary), transparent 75%);
+  color: var(--color-primary);
+}
+
+.jira-backlog-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.jira-backlog-row:hover .jira-backlog-row-actions {
+  opacity: 1;
+}
+
+/* Dark mode overrides for Jira backlog */
+[data-theme="dark"] .jira-backlog-header {
+  background: var(--color-bg-light);
+}
+
+[data-theme="dark"] .jira-backlog-count-badge {
+  background: var(--color-bg-muted);
+}
+
+[data-theme="dark"] .jira-backlog-row:hover {
+  background: var(--color-bg-light);
+}
+
+[data-theme="dark"] .jira-backlog-tag {
+  background: var(--color-bg-muted);
 }

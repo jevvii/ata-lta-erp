@@ -70,9 +70,11 @@ const Reports = {
     });
     container.appendChild(tabs);
 
+    const content = el('div', { class: 'page-content-section' });
+
     if (this.tab === 'analytics') {
       const entities = this.getAccessibleEntities();
-      container.appendChild(el('div', { class: 'bento-grid' }, [
+      content.appendChild(el('div', { class: 'bento-grid' }, [
         this.renderWorkRequestVolume(entities),
         this.renderTaskCompletion(entities),
         this.renderBillingSummary(entities),
@@ -80,12 +82,14 @@ const Reports = {
         this.renderEntityPL(entities)
       ]));
     } else if (this.tab === 'daily') {
-      container.appendChild(this.renderDailyReport());
+      content.appendChild(this.renderDailyReport());
     } else if (this.tab === 'weekly') {
-      container.appendChild(this.renderWeeklySummary());
+      content.appendChild(this.renderWeeklySummary());
     } else {
-      container.appendChild(this.renderMonthlyPending());
+      content.appendChild(this.renderMonthlyPending());
     }
+
+    container.appendChild(content);
 
     return container;
   },

@@ -2252,53 +2252,71 @@ const Disbursement = {
     const entity = Auth.activeEntity;
     const templates = DB.getWhere('disbursementTemplates', t => t.entity === entity);
 
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
 
-    const actions = el('div', { class: 'actions-bar' });
-    const newTemplateBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ New Template' });
-    newTemplateBtn.addEventListener('click', () => this.showTemplateForm());
-    actions.appendChild(newTemplateBtn);
-
-    wrapper.appendChild(actions);
-
-    if (templates.length === 0) {
-      wrapper.appendChild(renderEmptyState('No templates found', null, { variant: 'zero-state' }));
-      return wrapper;
-    }
-
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Name', 'Category', 'Amount', 'Fund Source', 'Schedule', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    templates.forEach(t => {
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.name }));
-      tr.appendChild(el('td', { text: t.category }));
-      tr.appendChild(el('td', { text: formatPHP(t.amount) }));
-      tr.appendChild(el('td', { text: t.fundSource }));
-      tr.appendChild(el('td', { text: t.schedule || '—' }));
-      const tdAct = el('td');
-      const genBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Next Period' });
-      genBtn.addEventListener('click', () => this.generateFromTemplate(t));
-      tdAct.appendChild(genBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const backlogItems = templates.map(t => {
+      return {
+        id: t.id,
+        name: t.name,
+        iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary);"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+        tags: [
+          { text: t.category },
+          { text: t.fundSource, className: 'tag-primary' },
+          { text: t.schedule || '—', style: 'text-transform: capitalize;' },
+          { text: formatPHP(t.amount || 0) }
+        ]
+      };
     });
-    table.appendChild(tbody);
-    wrapper.appendChild(table);
 
+    const backlog = JiraBacklogList.render({
+      title: 'Disbursement Templates',
+      subtitle: 'recurring expense presets, fund source categories, and schedule billing configurations',
+      items: backlogItems,
+      emptyText: 'No templates found',
+      rowIdPrefix: 'DT',
+      headerActions: [
+        {
+          text: '+ New Template',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => this.showTemplateForm()
+        }
+      ],
+      rowActions: (item) => {
+        const t = templates.find(temp => temp.id === item.id);
+        return [
+          {
+            text: 'Generate',
+            className: 'btn btn-primary btn-xs',
+            onClick: () => this.generateFromTemplate(t)
+          },
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showTemplateForm(t)
+          },
+          {
+            text: 'Delete',
+            className: 'btn btn-danger btn-xs',
+            onClick: () => {
+              Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${t.name}"?`, () => {
+                DB.delete('disbursementTemplates', t.id);
+                App.handleRoute();
+              }, 'danger');
+            }
+          }
+        ];
+      }
+    });
+
+    wrapper.appendChild(backlog);
     return wrapper;
   },
 
-  showTemplateForm() {
+  showTemplateForm(existing = null) {
     const entity = Auth.activeEntity;
     const container = el('div');
 
-    // Notion-style icon header (title is now the inline borderless title field)
+    // Notion-style icon header
     const titleSec = el('div', { class: 'side-pane-form-title' });
     titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📋' }));
     container.appendChild(titleSec);
@@ -2328,7 +2346,8 @@ const Disbursement = {
 
     const amtGroup = el('div', { class: 'form-group' });
     amtGroup.appendChild(el('label', { text: 'Amount (₱) *' }));
-    amtGroup.appendChild(el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true }));
+    const amtInput = el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true });
+    amtGroup.appendChild(amtInput);
     form.appendChild(amtGroup);
 
     const fundGroup = el('div', { class: 'form-group' });
@@ -2347,12 +2366,14 @@ const Disbursement = {
 
     const scheduleGroup = el('div', { class: 'form-group' });
     scheduleGroup.appendChild(el('label', { text: 'Schedule' }));
-    scheduleGroup.appendChild(el('input', { type: 'text', name: 'schedule', placeholder: 'e.g. Monthly, Weekly, Quarterly' }));
+    const schedInput = el('input', { type: 'text', name: 'schedule', placeholder: 'e.g. Monthly, Weekly, Quarterly' });
+    scheduleGroup.appendChild(schedInput);
     form.appendChild(scheduleGroup);
 
     const descGroup = el('div', { class: 'form-group' });
     descGroup.appendChild(el('label', { text: 'Description' }));
-    descGroup.appendChild(el('textarea', { name: 'description', rows: 3 }));
+    const descInput = el('textarea', { name: 'description', rows: 3 });
+    descGroup.appendChild(descInput);
     form.appendChild(descGroup);
 
     const wrGroup = el('div', { class: 'form-group' });
@@ -2377,12 +2398,25 @@ const Disbursement = {
     invGroup.appendChild(invSel);
     form.appendChild(invGroup);
 
+    if (existing) {
+      nameInput.value = existing.name || '';
+      catSel.value = existing.category || '';
+      amtInput.value = existing.amount || 0;
+      form.querySelectorAll('input[name="fundSource"]').forEach(r => {
+        r.checked = r.value === existing.fundSource;
+      });
+      schedInput.value = existing.schedule || '';
+      descInput.value = existing.description || '';
+      wrSel.value = existing.linkedWorkRequestId || '';
+      invSel.value = existing.linkedInvoiceId || '';
+    }
+
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;
       const data = Object.fromEntries(new FormData(form).entries());
-      const template = {
-        id: generateId('dtpl'),
+      const templateData = {
+        id: existing ? existing.id : generateId('dtpl'),
         entity: entity,
         name: data.name.trim(),
         category: data.category,
@@ -2392,10 +2426,14 @@ const Disbursement = {
         description: data.description || '',
         linkedWorkRequestId: data.linkedWorkRequestId || null,
         linkedInvoiceId: data.linkedInvoiceId || null,
-        createdAt: new Date().toISOString(),
-        createdBy: Auth.user.id
+        createdAt: existing ? existing.createdAt : new Date().toISOString(),
+        createdBy: existing ? existing.createdBy : Auth.user.id
       };
-      DB.insert('disbursementTemplates', template);
+      if (existing) {
+        DB.update('disbursementTemplates', existing.id, templateData);
+      } else {
+        DB.insert('disbursementTemplates', templateData);
+      }
       this.view = 'templates';
       closeFormPanelAndRoute();
     });
@@ -2413,7 +2451,7 @@ const Disbursement = {
 
     if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
       window.SidePaneInstance.open({
-        title: 'New Disbursement Template',
+        title: existing ? 'Edit Disbursement Template' : 'New Disbursement Template',
         content: container,
         viewContext: 'disbursement-template-form'
       });

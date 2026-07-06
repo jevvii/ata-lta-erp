@@ -9489,74 +9489,84 @@ const Workflow = {
     const entity = Auth.activeEntity;
     const templates = DB.getWhere('retainerTemplates', t => t.entity === entity);
 
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
 
-    const actions = el('div', { class: 'actions-bar' });
-    const addBtn = el('button', { class: 'btn btn-primary', text: 'Create Template' });
-    addBtn.addEventListener('click', () => {
-      this.templateEditingId = null;
-      const fullPageRoute = '#operations/templateForm/new';
-      openFormPanel({
-        icon: '📋', title: ' ',
-        formContent: this.renderTemplateForm(), formId: 'template-form',
-        viewContext: 'retainer-template-form',
-        fullPageRoute,
-        newTabRoute: fullPageRoute,
-        actions: [
-          { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-          { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
-        ]
-      });
-    });
-    actions.appendChild(addBtn);
-    wrapper.appendChild(actions);
-
-    if (templates.length === 0) {
-      wrapper.appendChild(renderEmptyState('No retainer templates found', null, { variant: 'zero-state' }));
-      return wrapper;
-    }
-
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Template', 'Client', 'Schedule', 'Professional Fee Amount', 'Tasks', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    templates.forEach(t => {
+    const backlogItems = templates.map(t => {
       const client = DB.getById('clients', t.clientId);
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.name }));
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: t.schedule || '—' }));
-      tr.appendChild(el('td', { text: formatPHP(t.pfAmount || 0) }));
-      tr.appendChild(el('td', { text: String((t.tasks || []).length) }));
-      const tdAct = el('td');
-
-      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-      editBtn.addEventListener('click', () => {
-        this.templateEditingId = t.id;
-        const tpl = DB.getById('retainerTemplates', t.id);
-        const fullPageRoute = `#operations/templateForm/${this.templateEditingId || 'new'}`;
-        openFormPanel({
-          icon: '📋', title: ' ',
-          formContent: this.renderTemplateForm(), formId: 'template-form',
-          viewContext: 'retainer-template-form',
-          fullPageRoute,
-          newTabRoute: fullPageRoute,
-          actions: [
-            { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-            { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
-          ]
-        });
-      });
-      tdAct.appendChild(editBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+      return {
+        id: t.id,
+        name: t.name,
+        iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        tags: [
+          { text: client?.name || 'No Client' },
+          { text: t.schedule || '—', className: 'tag-primary', style: 'text-transform: capitalize;' },
+          { text: formatPHP(t.pfAmount || 0) },
+          { text: `${(t.tasks || []).length} tasks` }
+        ]
+      };
     });
-    table.appendChild(tbody);
-    wrapper.appendChild(table);
+
+    const backlog = JiraBacklogList.render({
+      title: 'Retainer Templates',
+      subtitle: 'recurring client service agreements, task schedules, and professional fee presets',
+      items: backlogItems,
+      emptyText: 'No retainer templates found',
+      rowIdPrefix: 'RT',
+      headerActions: [
+        {
+          text: '+ Create Template',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => {
+            this.templateEditingId = null;
+            const fullPageRoute = '#operations/templateForm/new';
+            openFormPanel({
+              icon: '📋', title: ' ',
+              formContent: this.renderTemplateForm(), formId: 'template-form',
+              viewContext: 'retainer-template-form',
+              fullPageRoute,
+              newTabRoute: fullPageRoute,
+              actions: [
+                { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
+                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
+              ]
+            });
+          }
+        }
+      ],
+      rowActions: (item) => [
+        {
+          text: 'Edit',
+          className: 'btn btn-secondary btn-xs',
+          onClick: () => {
+            this.templateEditingId = item.id;
+            const fullPageRoute = `#operations/templateForm/${item.id}`;
+            openFormPanel({
+              icon: '📋', title: ' ',
+              formContent: this.renderTemplateForm(), formId: 'template-form',
+              viewContext: 'retainer-template-form',
+              fullPageRoute,
+              newTabRoute: fullPageRoute,
+              actions: [
+                { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
+                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
+              ]
+            });
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-xs',
+          onClick: () => {
+            this.showConfirm('Delete Template', `Are you sure you want to delete "${item.name}"?`, () => {
+              DB.delete('retainerTemplates', item.id);
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ]
+    });
+
+    wrapper.appendChild(backlog);
     return wrapper;
   },
 

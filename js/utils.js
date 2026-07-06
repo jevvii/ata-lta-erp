@@ -2503,3 +2503,142 @@ const ArchivePage = {
   }
 };
 
+const JiraBacklogList = {
+  render(options = {}) {
+    const {
+      title,
+      subtitle,
+      items = [],
+      emptyText = 'No templates found',
+      headerActions = [],
+      rowActions = () => [],
+      rowIdPrefix = 'TPL'
+    } = options;
+
+    const container = el('div', { class: 'jira-backlog-container' });
+
+    // Header
+    const header = el('div', { class: 'jira-backlog-header' });
+    
+    // Left side info
+    const headerLeft = el('div', { class: 'jira-backlog-header-left' });
+    const chevron = el('span', {
+      class: 'jira-backlog-chevron active',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    });
+    headerLeft.appendChild(chevron);
+    
+    const titleText = el('div', { class: 'jira-backlog-title-text' });
+    titleText.appendChild(el('span', { class: 'jira-backlog-title', text: title }));
+    if (subtitle) {
+      titleText.appendChild(el('span', { class: 'jira-backlog-subtitle', text: subtitle }));
+    }
+    headerLeft.appendChild(titleText);
+    
+    const countBadge = el('span', { class: 'jira-backlog-count-badge', text: `${items.length} ${items.length === 1 ? 'template' : 'templates'}` });
+    headerLeft.appendChild(countBadge);
+    header.appendChild(headerLeft);
+
+    // Right side actions
+    const headerRight = el('div', { class: 'jira-backlog-header-right' });
+    headerActions.forEach(act => {
+      const btn = el('button', {
+        class: act.className || 'btn btn-secondary btn-sm',
+        text: act.text
+      });
+      if (act.onClick) btn.addEventListener('click', act.onClick);
+      headerRight.appendChild(btn);
+    });
+    header.appendChild(headerRight);
+    container.appendChild(header);
+
+    // Body
+    const body = el('div', { class: 'jira-backlog-body' });
+    
+    let isCollapsed = false;
+    headerLeft.addEventListener('click', () => {
+      isCollapsed = !isCollapsed;
+      chevron.classList.toggle('active', !isCollapsed);
+      body.classList.toggle('collapsed', isCollapsed);
+    });
+
+    if (items.length === 0) {
+      body.appendChild(renderEmptyState(emptyText, null, { variant: 'compact' }));
+      container.appendChild(body);
+      return container;
+    }
+
+    const list = el('div', { class: 'jira-backlog-list' });
+
+    items.forEach((item, index) => {
+      const row = el('div', { class: 'jira-backlog-row', 'data-item-id': item.id });
+      
+      // Checkbox container (shows on hover)
+      const checkboxWrap = el('div', { class: 'jira-backlog-row-checkbox-wrap' });
+      const chk = el('input', { type: 'checkbox', class: 'jira-backlog-row-checkbox' });
+      chk.addEventListener('change', () => {
+        row.classList.toggle('selected', chk.checked);
+      });
+      checkboxWrap.addEventListener('click', (e) => {
+        if (e.target !== chk) {
+          e.stopPropagation();
+          chk.checked = !chk.checked;
+          chk.dispatchEvent(new Event('change'));
+        }
+      });
+      checkboxWrap.appendChild(chk);
+      row.appendChild(checkboxWrap);
+
+      // Icon (Jira backlog icon)
+      const iconWrap = el('div', { class: 'jira-backlog-row-icon', html: item.iconHtml || `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` });
+      row.appendChild(iconWrap);
+
+      // Unique Key/ID
+      const keyIndex = String(index + 1).padStart(2, '0');
+      const keyVal = item.keyText || `${rowIdPrefix}-${keyIndex}`;
+      const keyNode = el('div', { class: 'jira-backlog-row-key', text: keyVal });
+      row.appendChild(keyNode);
+
+      // Primary Title
+      const titleNode = el('div', { class: 'jira-backlog-row-title', text: item.name });
+      row.appendChild(titleNode);
+
+      // Metadata / Tags
+      const tagsNode = el('div', { class: 'jira-backlog-row-tags' });
+      if (item.tags && item.tags.length > 0) {
+        item.tags.forEach(tag => {
+          const tNode = el('div', { class: 'jira-backlog-tag ' + (tag.className || ''), text: tag.text });
+          if (tag.style) tNode.setAttribute('style', tag.style);
+          tagsNode.appendChild(tNode);
+        });
+      }
+      row.appendChild(tagsNode);
+
+      // Actions on the far right
+      const rowActionsList = rowActions(item);
+      if (rowActionsList && rowActionsList.length > 0) {
+        const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
+        rowActionsList.forEach(act => {
+          const btn = el('button', {
+            class: act.className || 'btn btn-secondary btn-xs',
+            html: act.html || act.text
+          });
+          if (act.title) btn.setAttribute('title', act.title);
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            act.onClick(item);
+          });
+          actionsNode.appendChild(btn);
+        });
+        row.appendChild(actionsNode);
+      }
+
+      list.appendChild(row);
+    });
+
+    body.appendChild(list);
+    container.appendChild(body);
+    return container;
+  }
+};
+

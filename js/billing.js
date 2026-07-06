@@ -2708,72 +2708,71 @@ const Billing = {
   // ============================================================
   renderTemplates() {
     const entity = Auth.activeEntity;
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
 
-    const actions = el('div', { class: 'actions-bar' });
-    const addBtn = el('button', { class: 'btn btn-primary', text: '+ New Template' });
-    addBtn.addEventListener('click', () => this.showTemplateForm());
-    actions.appendChild(addBtn);
-    wrapper.appendChild(actions);
+    const templates = DB.getWhere('billingTemplates', t => t.entity === entity);
 
-    const listContainer = el('div');
-    wrapper.appendChild(listContainer);
-    this.refreshTemplateList(listContainer);
+    const backlogItems = templates.map(t => {
+      const client = DB.getById('clients', t.clientId);
+      return {
+        id: t.id,
+        name: t.name,
+        iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary);"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+        tags: [
+          { text: client?.name || 'No Client' },
+          { text: t.schedule || '—', className: 'tag-primary', style: 'text-transform: capitalize;' },
+          { text: formatPHP(t.pfAmount || 0) }
+        ]
+      };
+    });
+
+    const backlog = JiraBacklogList.render({
+      title: 'Billing Templates',
+      subtitle: 'recurring professional fee billing and invoice schedules',
+      items: backlogItems,
+      emptyText: 'No billing templates found',
+      rowIdPrefix: 'BL',
+      headerActions: [
+        {
+          text: '+ New Template',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => this.showTemplateForm()
+        }
+      ],
+      rowActions: (item) => {
+        const t = templates.find(temp => temp.id === item.id);
+        return [
+          {
+            text: 'Generate',
+            className: 'btn btn-primary btn-xs',
+            onClick: () => this.generateFromTemplate(t)
+          },
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showTemplateForm(t)
+          },
+          {
+            text: 'Delete',
+            className: 'btn btn-danger btn-xs',
+            onClick: () => {
+              Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${t.name}"?`, () => {
+                DB.delete('billingTemplates', t.id);
+                App.handleRoute();
+              }, 'danger');
+            }
+          }
+        ];
+      }
+    });
+
+    wrapper.appendChild(backlog);
     return wrapper;
   },
 
   refreshTemplateList(container) {
+    // Legacy method preserved for compatibility/no-op
     while (container.firstChild) container.removeChild(container.firstChild);
-    const entity = Auth.activeEntity;
-    const templates = DB.getWhere('billingTemplates', t => t.entity === entity);
-    if (templates.length === 0) {
-      container.appendChild(renderEmptyState('No billing templates found', null, { variant: 'zero-state' }));
-      return;
-    }
-    
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    thead.appendChild(el('tr', {}, [
-      el('th', { text: 'Template Name' }),
-      el('th', { text: 'Client' }),
-      el('th', { text: 'Schedule' }),
-      el('th', { text: 'Fee' }),
-      el('th', { text: 'Actions' })
-    ]));
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    templates.forEach(t => {
-      const client = DB.getById('clients', t.clientId);
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.name, style: 'font-weight:600;' }));
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: t.schedule, style: 'text-transform:capitalize;' }));
-      tr.appendChild(el('td', { text: formatPHP(t.pfAmount) }));
-      
-      const tdAct = el('td');
-      const genBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate' });
-      genBtn.addEventListener('click', () => this.generateFromTemplate(t));
-      tdAct.appendChild(genBtn);
-      
-      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
-      editBtn.addEventListener('click', () => this.showTemplateForm(t));
-      tdAct.appendChild(editBtn);
-
-      const delBtn = el('button', { class: 'btn btn-danger btn-sm', text: '×', style: 'margin-left:4px;' });
-      delBtn.addEventListener('click', () => {
-        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${t.name}"?`, () => {
-          DB.delete('billingTemplates', t.id);
-          App.handleRoute();
-        }, 'danger');
-      });
-      tdAct.appendChild(delBtn);
-
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    container.appendChild(table);
   },
 
   showTemplateForm(existing = null) {
@@ -3096,6 +3095,8 @@ const Billing = {
     const today = new Date();
     const invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Paid' && inv.status !== 'Cancelled' && !inv.archived);
 
+    const container = el('div', { class: 'page-content-section' });
+
     const buckets = { '0-30': [], '31-60': [], '61-90': [], '90+': [] };
     invoices.forEach(inv => {
       const days = Math.floor((today - new Date(inv.dueDate)) / (1000 * 60 * 60 * 24));
@@ -3104,8 +3105,6 @@ const Billing = {
       else if (days <= 90) buckets['61-90'].push(inv);
       else buckets['90+'].push(inv);
     });
-
-    const container = el('div');
 
     const grid = el('div', { class: 'kpi-grid' });
     Object.entries(buckets).forEach(([label, invs]) => {

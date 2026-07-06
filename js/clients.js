@@ -47,17 +47,21 @@ const Clients = {
     stickyContainer.appendChild(filters);
     container.appendChild(stickyContainer);
 
+    const content = el('div', { class: 'page-content-section' });
+
     const listContainer = el('div', { class: 'list-container' + (this.activeTab === 'archived' ? ' hidden' : '') });
-    container.appendChild(listContainer);
+    content.appendChild(listContainer);
     if (this.activeTab === 'active') {
       this.renderList(listContainer, '');
     }
 
     const archiveContainer = el('div', { class: 'archive-container' + (this.activeTab === 'active' ? ' hidden' : '') });
-    container.appendChild(archiveContainer);
+    content.appendChild(archiveContainer);
     if (this.activeTab === 'archived') {
       archiveContainer.appendChild(this.renderArchive(''));
     }
+
+    container.appendChild(content);
 
     search.addEventListener('input', debounce(() => {
       const q = search.value.trim();
