@@ -6,16 +6,16 @@ const Users = {
   view: 'users', // 'users' | 'audit' | 'pending'
   editingId: null,
   pendingDetailId: null,
-  pendingCategory: sessionStorage.getItem('admin_pending_category') || 'workRequestCreation',
+  pendingCategory: sessionStorage.getItem('admin_pending_category') || 'all',
 
   render() {
     const container = el('div', { class: 'page' });
 
+    // Keep the main "Admin" page header but drop the nested breadcrumb
     const titleBar = el('div', { class: 'page-title-bar-v2' });
-    const h1 = el('h1', { id: 'admin-breadcrumb-h1', class: 'breadcrumb-h1' });
+    const h1 = el('h1', { class: 'page-title-h1', text: 'Admin' });
     titleBar.appendChild(h1);
     container.appendChild(titleBar);
-    this.updateBreadcrumb(h1);
 
     const canManageUsers = Auth.can('users:view');
 
@@ -755,11 +755,6 @@ const Users = {
     const categories = this.getPendingCategories();
     const totalPending = Object.values(categories).reduce((sum, arr) => sum + arr.length, 0);
 
-    if (totalPending === 0) {
-      wrapper.appendChild(el('p', { text: 'No pending approvals.', class: 'empty-state' }));
-      return wrapper;
-    }
-
     const categoryDefs = {
       workRequestCreation: { label: 'Work Request Creation', keyPrefix: 'WR' },
       wrPhaseRouting: { label: 'WR Phase Routing', keyPrefix: 'ROUTE' },
@@ -768,10 +763,19 @@ const Users = {
       transmittalSent: { label: 'Mark Transmittal as Sent', keyPrefix: 'TX' }
     };
 
+    if (totalPending === 0) {
+      wrapper.appendChild(el('p', { text: 'No pending approvals.', class: 'empty-state' }));
+      return wrapper;
+    }
+
     const self = this;
 
-    // Render each non-empty category as its own card (reference-image layout)
+    // Category filter pills (reference-image layout)
+    wrapper.appendChild(this.renderPendingPills(categories, categoryDefs, totalPending));
+
+    // Render each non-empty category as its own card
     Object.keys(categoryDefs).forEach(key => {
+      if (self.pendingCategory !== 'all' && self.pendingCategory !== key) return;
       const items = categories[key];
       if (!items || items.length === 0) return;
       const def = categoryDefs[key];
@@ -806,6 +810,44 @@ const Users = {
     });
 
     return wrapper;
+  },
+
+  renderPendingPills(categories, categoryDefs, totalPending) {
+    const pillsWrap = el('div', { class: 'approval-filter-pills' });
+
+    const addPill = (key, label, count, isActive, disabled) => {
+      const btn = el('button', {
+        class: 'approval-filter-pill' + (isActive ? ' active' : '') + (disabled ? ' disabled' : ''),
+        title: label,
+        disabled: disabled ? true : false
+      });
+      btn.appendChild(document.createTextNode(label));
+      if (count !== undefined) {
+        const badge = el('span', { class: 'approval-filter-pill-count', text: String(count) });
+        btn.appendChild(document.createTextNode(' '));
+        btn.appendChild(badge);
+      }
+      if (!disabled) {
+        btn.addEventListener('click', () => {
+          this.pendingCategory = key;
+          sessionStorage.setItem('admin_pending_category', key);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        });
+      }
+      pillsWrap.appendChild(btn);
+    };
+
+    addPill('all', 'All', totalPending, this.pendingCategory === 'all', false);
+
+    Object.keys(categoryDefs).forEach(key => {
+      const items = categories[key] || [];
+      const count = items.length;
+      const isSelected = this.pendingCategory === key;
+      addPill(key, categoryDefs[key].label, count, isSelected, count === 0);
+    });
+
+    return pillsWrap;
   },
 
   renderPendingApprovalItem(item, index, keyPrefix) {

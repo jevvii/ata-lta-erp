@@ -2004,6 +2004,64 @@ tbody tr:hover {
 }
 .approval-category-card:last-child { margin-bottom: 0; }
 
+.approval-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--spacing-md);
+}
+.approval-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.approval-filter-pill:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.approval-filter-pill.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.approval-filter-pill.active .approval-filter-pill-count {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+.approval-filter-pill.disabled,
+.approval-filter-pill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.approval-filter-pill.disabled:hover,
+.approval-filter-pill:disabled:hover {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+.approval-filter-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .approval-category-header {
   display: flex;
   align-items: center;
@@ -4117,11 +4175,17 @@ tbody tr:hover {
   z-index: 30;
 }
 
-.breadcrumb-h1 {
+.breadcrumb-h1,
+.page-title-h1 {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 1.75rem;
+}
+
+.page-title-h1 {
+  color: var(--color-text);
+  font-weight: 700;
 }
 
 .breadcrumb-base {
