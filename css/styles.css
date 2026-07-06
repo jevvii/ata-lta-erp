@@ -3587,11 +3587,13 @@ tbody tr:hover {
 }
 
 .board-card-v2.compact .card-v2-priority-high,
-.board-card-v2.compact .card-v2-priority-urgent,
-.board-card-v2.compact .card-v2-priority-priority { color: var(--color-danger); }
+.board-card-v2.compact .card-v2-priority-urgent { color: var(--color-danger); }
+.board-card-v2.compact .card-v2-priority-priority { color: #f97316; }
 .board-card-v2.compact .card-v2-priority-medium { color: var(--color-warning); }
 .board-card-v2.compact .card-v2-priority-low { color: var(--color-success); }
 .board-card-v2.compact .card-v2-priority-normal { color: var(--color-text-muted); }
+
+[data-theme="dark"] .board-card-v2.compact .card-v2-priority-priority { color: #fb923c; }
 
 /* 5. Footer Row: avatars left, badges + counts right */
 .board-card-v2.compact .card-v2-footer {
@@ -13316,6 +13318,12 @@ html.loading-active #loading-screen:not(.hidden) {
   margin-bottom: 0;
 }
 
+.board-group-column.drag-over {
+  background: color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 92%);
+  border-color: var(--column-phase-color, var(--color-primary));
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 70%);
+}
+
 /* Dark mode overrides */
 [data-theme="dark"] .jira-toolbar .jira-group-trigger,
 [data-theme="dark"] .jira-toolbar .jira-filter-trigger {
@@ -13425,6 +13433,11 @@ html.loading-active #loading-screen:not(.hidden) {
 [data-theme="dark"] .board-group-phase-header,
 [data-theme="dark"] .board-group-column {
   border-color: var(--color-border);
+}
+
+[data-theme="dark"] .board-group-column.drag-over {
+  background: color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 88%);
+  border-color: var(--column-phase-color, var(--color-primary));
 }
 
 [data-theme="dark"] .board-group-name {

@@ -687,6 +687,298 @@ const KanbanBoard = {
     });
   },
 
+  /**
+   * Wire drag-and-drop for an external board layout (e.g. grouped Operations board
+   * columns) using the same midpoint boardOrder and placeholder behavior as
+   * KanbanBoard.render. The caller provides the root element, item array, and a
+   * drag config with canDrag/canDrop/onDrop callbacks.
+   */
+  attachDrag(config = {}) {
+    const {
+      root,
+      items = [],
+      drag = {},
+      columnSelector = '.board-group-column',
+      cardContainerSelector = '.board-group-column',
+      cardSelector = '.board-card-v2.compact'
+    } = config;
+
+    const dragConfig = {
+      enabled: true,
+      canDrag: () => true,
+      canDrop: () => true,
+      orderField: 'boardOrder',
+      onDropDenied: () => {},
+      ...drag
+    };
+
+    if (!dragConfig.enabled || !root) return;
+
+    const itemLookup = new Map();
+    items.forEach(item => itemLookup.set(item.id, item));
+
+    let dragSrcId = null;
+    let autoScrollContainer = null;
+    let autoScrollDir = 0;
+    let autoScrollRaf = null;
+    let autoScrollDist = Infinity;
+    const SCROLL_MARGIN = 80;
+    const SCROLL_SPEED = 20;
+    const SCROLL_MAX_SPEED = 55;
+
+    const columns = Array.from(root.querySelectorAll(columnSelector));
+
+    const getCardContainerCards = container =>
+      Array.from(container.querySelectorAll(cardSelector)).filter(c =>
+        !c.classList.contains('dragging') &&
+        !c.classList.contains('drag-placeholder') &&
+        !c.classList.contains('add-card')
+      );
+
+    const clearDragIndicators = () => {
+      columns.forEach(c => c.classList.remove('drag-over'));
+      root.querySelectorAll('.board-card-v2.drag-placeholder').forEach(p => p.remove());
+    };
+
+    const getDragPlaceholder = () => {
+      let placeholder = root.querySelector('.board-card-v2.drag-placeholder');
+      if (!placeholder) {
+        placeholder = el('div', { class: 'board-card-v2 compact drag-placeholder' });
+      }
+      return placeholder;
+    };
+
+    const updatePlaceholder = (cardContainer, y) => {
+      const draggedId = dragSrcId;
+      const cards = getCardContainerCards(cardContainer);
+      const placeholder = getDragPlaceholder();
+
+      if (cards.length === 0) {
+        cardContainer.appendChild(placeholder);
+        return;
+      }
+
+      let targetCard = null;
+      for (const card of cards) {
+        if (card.dataset.itemId === draggedId) continue;
+        const rect = card.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        if (y < mid) {
+          targetCard = card;
+          break;
+        }
+      }
+      if (targetCard) cardContainer.insertBefore(placeholder, targetCard);
+      else cardContainer.appendChild(placeholder);
+    };
+
+    const computeDropOrder = (cardContainer) => {
+      const orderField = dragConfig.orderField;
+      const cards = getCardContainerCards(cardContainer);
+      if (cards.length === 0) return 1000;
+
+      const placeholder = cardContainer.querySelector('.board-card-v2.drag-placeholder');
+      let targetIndex = cards.length;
+      if (placeholder) {
+        let index = 0;
+        for (const card of cards) {
+          if (placeholder.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            targetIndex = index;
+            break;
+          }
+          index++;
+        }
+      }
+
+      const getOrder = id => {
+        const item = itemLookup.get(id);
+        return typeof item?.[orderField] === 'number' ? item[orderField] : null;
+      };
+
+      if (targetIndex === 0) {
+        const firstOrder = getOrder(cards[0].dataset.itemId);
+        return (firstOrder ?? 1000) / 2;
+      }
+      if (targetIndex >= cards.length) {
+        const lastOrder = getOrder(cards[cards.length - 1].dataset.itemId);
+        return (lastOrder ?? cards.length * 1000) + 1000;
+      }
+      const beforeOrder = getOrder(cards[targetIndex - 1].dataset.itemId) ?? targetIndex * 1000;
+      const afterOrder = getOrder(cards[targetIndex].dataset.itemId) ?? (targetIndex + 1) * 1000;
+      return (beforeOrder + afterOrder) / 2;
+    };
+
+    const resolveCardItems = (cardContainer) => {
+      const cards = getCardContainerCards(cardContainer);
+      const placeholder = cardContainer.querySelector('.board-card-v2.drag-placeholder');
+      let beforeItem = null;
+      let afterItem = null;
+
+      if (placeholder) {
+        let index = 0;
+        for (const card of cards) {
+          const isAfter = placeholder.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING;
+          if (isAfter) {
+            afterItem = itemLookup.get(card.dataset.itemId) || null;
+            if (index > 0) {
+              beforeItem = itemLookup.get(cards[index - 1].dataset.itemId) || null;
+            }
+            break;
+          }
+          index++;
+        }
+        if (!afterItem && cards.length > 0) {
+          beforeItem = itemLookup.get(cards[cards.length - 1].dataset.itemId) || null;
+        }
+      }
+      return { beforeItem, afterItem };
+    };
+
+    const beginDragAutoScroll = () => {
+      const step = () => {
+        if (!autoScrollDir || !autoScrollContainer) {
+          autoScrollRaf = null;
+          return;
+        }
+        const speed = Math.min(SCROLL_MAX_SPEED, SCROLL_SPEED + (autoScrollDist / SCROLL_MARGIN) * 10);
+        autoScrollContainer.scrollTop += autoScrollDir * speed;
+        autoScrollRaf = requestAnimationFrame(step);
+      };
+      autoScrollRaf = requestAnimationFrame(step);
+    };
+
+    const updateDragAutoScroll = (clientY, container) => {
+      const rect = container.getBoundingClientRect();
+      const distTop = clientY - rect.top;
+      const distBottom = rect.bottom - clientY;
+      let dir = 0;
+      let dist = Infinity;
+      if (distTop < SCROLL_MARGIN) { dir = -1; dist = distTop; }
+      else if (distBottom < SCROLL_MARGIN) { dir = 1; dist = distBottom; }
+
+      autoScrollContainer = container;
+      autoScrollDir = dir;
+      autoScrollDist = dist;
+      if (dir && !autoScrollRaf) beginDragAutoScroll();
+      else if (!dir && autoScrollRaf) { cancelAnimationFrame(autoScrollRaf); autoScrollRaf = null; }
+    };
+
+    const endDragAutoScroll = () => {
+      autoScrollDir = 0;
+      autoScrollDist = Infinity;
+      autoScrollContainer = null;
+      if (autoScrollRaf) { cancelAnimationFrame(autoScrollRaf); autoScrollRaf = null; }
+    };
+
+    const handleDragStart = function(e) {
+      dragSrcId = this.dataset.itemId;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragSrcId);
+    };
+
+    const handleDragEnd = function() {
+      this.classList.remove('dragging');
+      clearDragIndicators();
+      dragSrcId = null;
+      endDragAutoScroll();
+    };
+
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const column = e.currentTarget;
+      const cardContainer = column.querySelector(cardContainerSelector) || column;
+      if (!column.classList.contains('drag-over')) {
+        clearDragIndicators();
+        column.classList.add('drag-over');
+      }
+      updatePlaceholder(cardContainer, e.clientY);
+      updateDragAutoScroll(e.clientY, cardContainer);
+    };
+
+    const handleDragLeave = (e) => {
+      const column = e.currentTarget;
+      if (!column.contains(e.relatedTarget)) {
+        column.classList.remove('drag-over');
+        column.querySelectorAll('.board-card-v2.drag-placeholder').forEach(p => p.remove());
+      }
+    };
+
+    const handleDrop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      endDragAutoScroll();
+      const column = e.currentTarget;
+      const cardContainer = column.querySelector(cardContainerSelector) || column;
+      column.classList.remove('drag-over');
+
+      const itemId = e.dataTransfer.getData('text/plain') || dragSrcId;
+      const targetStatus = column.dataset.targetStatus;
+      const item = itemLookup.get(itemId);
+      if (!item || !targetStatus) return;
+
+      const newOrder = computeDropOrder(cardContainer);
+      const { beforeItem, afterItem } = resolveCardItems(cardContainer);
+
+      if (typeof dragConfig.canDrop === 'function') {
+        const allowed = dragConfig.canDrop({
+          item,
+          targetColumn: column,
+          targetStatus,
+          beforeItem,
+          afterItem,
+          fromStatus: item.status
+        });
+        if (!allowed) {
+          clearDragIndicators();
+          if (typeof dragConfig.onDropDenied === 'function') {
+            dragConfig.onDropDenied({
+              item,
+              targetColumn: column,
+              targetStatus,
+              beforeItem,
+              afterItem,
+              fromStatus: item.status
+            });
+          }
+          return;
+        }
+      }
+
+      clearDragIndicators();
+      dragConfig.onDrop({
+        item,
+        targetColumn: column,
+        targetStatus,
+        beforeItem,
+        afterItem,
+        newOrder,
+        fromStatus: item.status
+      });
+    };
+
+    columns.forEach(column => {
+      column.addEventListener('dragover', handleDragOver);
+      column.addEventListener('dragleave', handleDragLeave);
+      column.addEventListener('drop', handleDrop);
+    });
+
+    root.querySelectorAll(cardSelector).forEach(card => {
+      const itemId = card.dataset.itemId;
+      if (!itemId) return;
+      const canDragItem = typeof dragConfig.canDrag === 'function'
+        ? dragConfig.canDrag(itemLookup.get(itemId), card.closest(columnSelector))
+        : true;
+      if (canDragItem) {
+        card.draggable = true;
+        card.style.cursor = 'grab';
+        card.addEventListener('dragstart', handleDragStart);
+        card.addEventListener('dragend', handleDragEnd);
+      }
+    });
+  },
+
   closeAllMenus,
   toggleMenu,
   renderEmptyStateV2

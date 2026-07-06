@@ -2115,7 +2115,7 @@ const Workflow = {
     };
 
     const getPriorityOptions = () => {
-      const defaultPriorities = ['Urgent', 'Priority', 'Normal', 'Low Priority'];
+      const defaultPriorities = ['Urgent', 'Priority', 'Low Priority'];
       const set = new Set(defaultPriorities);
       DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
@@ -2220,7 +2220,7 @@ const Workflow = {
 
     // Group dropdown
     const groupWrap = el('div', { class: 'jira-group-wrap' });
-    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+    const groupIconSvg = ViewIcons.group;
     const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     const groupTrigger = el('button', {
       type: 'button',
@@ -2513,6 +2513,7 @@ const Workflow = {
     filterTrigger.addEventListener('click', (e) => {
       toggleFilterDropdown(e);
     });
+    filterTrigger._toggleFilterDropdown = toggleFilterDropdown;
 
     filterWrap.appendChild(filterTrigger);
     filterWrap.appendChild(filterDropdown);
@@ -2548,17 +2549,22 @@ const Workflow = {
     if (!this._jiraToolbarKeydownListener) {
       this._jiraToolbarKeydownListener = (e) => {
         if (e.shiftKey && (e.key === 'F' || e.key === 'f')) {
-          const activeTag = document.activeElement ? document.activeElement.tagName : '';
-          const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag) || document.activeElement?.isContentEditable;
-          const isFilterSearch = document.activeElement?.classList?.contains('jira-filter-search');
-          if (isInput && !isFilterSearch) return;
+          const activeEl = document.activeElement;
+          const activeTag = activeEl ? activeEl.tagName : '';
+          const isTypingInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag) || activeEl?.isContentEditable;
+          const isInsideFilterDropdown = activeEl?.closest('.jira-filter-dropdown');
+          if (isTypingInput && !activeEl?.classList?.contains('jira-filter-search') && !isInsideFilterDropdown) return;
 
           const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
           const activeFilterWrap = operationsContainer ? operationsContainer.querySelector('.jira-filter-wrap') : null;
           if (activeFilterWrap) {
             e.preventDefault();
             const trigger = activeFilterWrap.querySelector('.jira-filter-trigger');
-            if (trigger) trigger.click();
+            if (trigger && typeof trigger._toggleFilterDropdown === 'function') {
+              trigger._toggleFilterDropdown(e);
+            } else if (trigger) {
+              trigger.click();
+            }
           }
         }
       };
@@ -2927,11 +2933,11 @@ const Workflow = {
       const client = DB.getById('clients', wr.clientId);
       const priorityConfig = {
         'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
-        'Priority': { label: 'Priority', cls: 'card-v2-priority-urgent' },
+        'Priority': { label: 'Priority', cls: 'card-v2-priority-priority' },
         'High': { label: 'High', cls: 'card-v2-priority-urgent' },
         'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
         'Low': { label: 'Low', cls: 'card-v2-priority-low' }
-      }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
+      }[wr.priority] || { label: wr.priority || 'Priority', cls: 'card-v2-priority-normal' };
 
       const allChecklistItems = tasks.flatMap(t => t.checklist || []);
       const documentItems = allChecklistItems.filter(c => c.category === 'document');
@@ -3030,46 +3036,48 @@ const Workflow = {
       return items;
     };
 
+    const handleBoardDrop = ({ item, targetStatus, newOrder }) => {
+      const wr = item;
+      const isPhaseChange = wr.status !== targetStatus;
+      if (isPhaseChange && !canApprove) {
+        self.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
+        return;
+      }
+
+      const applyMove = () => {
+        const changes = { boardOrder: newOrder };
+        if (isPhaseChange) {
+          changes.status = targetStatus;
+          changes.updatedAt = new Date().toISOString();
+        }
+        DB.update('workRequests', wr.id, changes);
+        App.handleRoute();
+      };
+
+      if (!isPhaseChange) {
+        applyMove();
+        return;
+      }
+
+      const transitionStatus = self.getPhaseTransitionStatus(wr.id);
+      if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
+        const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
+        const blockers = transitionStatus?.missing?.length
+          ? transitionStatus.missing.join('\n- ')
+          : `This Work Request cannot be routed to "${targetPhaseLabel}" yet.`;
+        self.showMessage('Routing Blocked', `Cannot move "${wr.title}" to ${targetPhaseLabel}:\n- ${blockers}`, 'warning');
+        return;
+      }
+
+      self.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
+    };
+
     const dragConfig = {
       enabled: true,
       canDrag: () => canApprove,
       canDrop: () => true,
       orderField: 'boardOrder',
-      onDrop({ item, targetStatus, newOrder }) {
-        const wr = item;
-        const isPhaseChange = wr.status !== targetStatus;
-        if (isPhaseChange && !canApprove) {
-          self.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
-          return;
-        }
-
-        const applyMove = () => {
-          const changes = { boardOrder: newOrder };
-          if (isPhaseChange) {
-            changes.status = targetStatus;
-            changes.updatedAt = new Date().toISOString();
-          }
-          DB.update('workRequests', wr.id, changes);
-          App.handleRoute();
-        };
-
-        if (!isPhaseChange) {
-          applyMove();
-          return;
-        }
-
-        const transitionStatus = self.getPhaseTransitionStatus(wr.id);
-        if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
-          const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
-          const blockers = transitionStatus?.missing?.length
-            ? transitionStatus.missing.join('\n- ')
-            : `This Work Request cannot be routed to "${targetPhaseLabel}" yet.`;
-          self.showMessage('Routing Blocked', `Cannot move "${wr.title}" to ${targetPhaseLabel}:\n- ${blockers}`, 'warning');
-          return;
-        }
-
-        self.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
-      }
+      onDrop: handleBoardDrop
     };
 
     if (groupBy === 'none') {
@@ -3148,6 +3156,29 @@ const Workflow = {
         if (a === specialLast) return 1;
         if (b === specialLast) return -1;
         return a.localeCompare(b);
+      });
+
+      // Normalize boardOrder within each group-phase so midpoint drops stay clean.
+      groupNames.forEach(name => {
+        const groupWrs = groupMap.get(name);
+        boardPhases.forEach(phase => {
+          const phaseWrs = groupWrs.filter(wr => phase.statuses.includes(wr.status));
+          phaseWrs.sort((a, b) => {
+            const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+            const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+            if (oa !== null && ob !== null) return oa - ob;
+            if (oa !== null) return -1;
+            if (ob !== null) return 1;
+            return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+          });
+          phaseWrs.forEach((wr, idx) => {
+            const newOrder = (idx + 1) * 1000;
+            if (wr.boardOrder !== newOrder) {
+              wr.boardOrder = newOrder;
+              DB.update('workRequests', wr.id, { boardOrder: newOrder });
+            }
+          });
+        });
       });
 
       const COLLAPSED_KEY = 'erp_operations_collapsed_groups';
@@ -3291,6 +3322,7 @@ const Workflow = {
           } else {
             phaseWrs.forEach(wr => {
               const card = renderBoardCard(wr, phase);
+              card.dataset.itemId = wr.id;
               const items = renderCardMenuItems(wr);
               if (items.length > 0) KanbanBoard.attachCardMenu(card, items);
               col.appendChild(card);
@@ -3303,6 +3335,19 @@ const Workflow = {
       });
 
       container.appendChild(groupedBoard);
+
+      // Enable drag-and-drop for grouped board columns using the same rules as ungrouped.
+      KanbanBoard.attachDrag({
+        root: groupedBoard,
+        items: wrs,
+        drag: {
+          enabled: true,
+          canDrag: () => canApprove,
+          canDrop: () => true,
+          orderField: 'boardOrder',
+          onDrop: handleBoardDrop
+        }
+      });
     }
   },
 
@@ -4557,17 +4602,17 @@ const Workflow = {
     const priorityGroup = el('div', { class: 'notion-prop' });
     priorityGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Priority' }));
     const prioritySel = el('select', { name: 'priority', class: 'notion-prop-select', required: true });
-    prioritySel.appendChild(el('option', { value: 'Normal', text: 'Normal' }));
     ['Urgent', 'Priority', 'Low Priority'].forEach(p => {
       const opt = el('option', { value: p, text: p });
       if (wr && wr.priority === p) opt.selected = true;
       prioritySel.appendChild(opt);
     });
-    if (wr && wr.priority && !['Normal','Urgent','Priority','Low Priority'].includes(wr.priority)) {
+    if (wr && wr.priority && !['Urgent','Priority','Low Priority'].includes(wr.priority)) {
       const fallbackOpt = el('option', { value: wr.priority, text: wr.priority });
       fallbackOpt.selected = true;
       prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
     }
+    if (!wr) prioritySel.value = 'Priority';
     priorityGroup.appendChild(prioritySel);
     propsGrid.appendChild(priorityGroup);
 
@@ -4671,7 +4716,7 @@ const Workflow = {
               }
 
               if (clientSel && template.clientId) clientSel.value = template.clientId;
-              if (prioritySel) prioritySel.value = 'Normal';
+              if (prioritySel) prioritySel.value = 'Priority';
 
               // Load template tasks
               this.loadTemplateTasks(templateId, tasksList);
@@ -6285,11 +6330,11 @@ const Workflow = {
             const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
             const priorityConfig = {
               'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
-              'Priority': { label: 'Priority', cls: 'card-v2-priority-urgent' },
+              'Priority': { label: 'Priority', cls: 'card-v2-priority-priority' },
               'High': { label: 'High', cls: 'card-v2-priority-urgent' },
               'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
               'Low': { label: 'Low', cls: 'card-v2-priority-low' }
-            }[t.priority] || { label: t.priority || 'Normal', cls: 'card-v2-priority-normal' };
+            }[t.priority] || { label: t.priority || 'Priority', cls: 'card-v2-priority-normal' };
 
             const counts = [];
             if (comp.total > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${comp.percent}%` });
@@ -8694,9 +8739,10 @@ const Workflow = {
     const priorityGroup = el('div', { class: 'form-group' });
     priorityGroup.appendChild(el('label', { text: 'Priority' }));
     const prioritySel = el('select', { name: 'priority' });
-    ['Normal', 'Low Priority', 'Priority', 'Urgent'].forEach(p => {
+    ['Priority', 'Low Priority', 'Urgent'].forEach(p => {
       prioritySel.appendChild(el('option', { value: p, text: p }));
     });
+    prioritySel.value = 'Priority';
     priorityGroup.appendChild(prioritySel);
     form.appendChild(priorityGroup);
 
@@ -8824,7 +8870,7 @@ const Workflow = {
         assigneeName: res.name,
         coAssignees: isDraft ? coAssignees.filter(Boolean) : [],
         status: (groundWorkerName || coAssignees.length > 0) ? 'Assigned' : 'Draft',
-        priority: data.priority || 'Normal',
+        priority: data.priority || 'Priority',
         dueDate: data.dueDate || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -8943,11 +8989,15 @@ const Workflow = {
     const priorityGroup = el('div', { class: 'form-group' });
     priorityGroup.appendChild(el('label', { text: 'Priority' }));
     const prioritySel = el('select', { name: 'priority' });
-    ['Normal', 'Low Priority', 'Priority', 'Urgent'].forEach(p => {
+    ['Priority', 'Low Priority', 'Urgent'].forEach(p => {
       const opt = el('option', { value: p, text: p });
       if (p === task.priority) opt.selected = true;
       prioritySel.appendChild(opt);
     });
+    if (task.priority && !['Priority', 'Low Priority', 'Urgent'].includes(task.priority)) {
+      const fallbackOpt = el('option', { value: task.priority, text: task.priority, selected: true });
+      prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
+    }
     priorityGroup.appendChild(prioritySel);
     form.appendChild(priorityGroup);
 
@@ -9074,7 +9124,7 @@ const Workflow = {
         assigneeId: res.id,
         assigneeName: res.name,
         coAssignees: isDraft ? coAssignees.filter(Boolean) : task.coAssignees || [],
-        priority: data.priority || 'Normal',
+        priority: data.priority || 'Priority',
         dueDate: data.dueDate || '',
         predecessors: predecessors,
         updatedAt: new Date().toISOString()
@@ -9734,7 +9784,7 @@ const Workflow = {
       title: `${template.name} (${titleSuffix})`,
       description: template.description || '',
       clientId: template.clientId,
-      priority: 'Normal',
+      priority: 'Priority',
       dueDate: dueDate.toISOString().slice(0, 10),
       entity: template.entity,
       status: 'Draft',

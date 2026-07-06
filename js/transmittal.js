@@ -345,30 +345,6 @@ const Transmittal = {
 
 
 
-    // Pending operations requests banner
-    if (Auth.can('transmittal:create')) {
-      const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'transmittal');
-      if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:var(--color-bg-muted);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:var(--color-text);margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
-        bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Transmittal Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
-        banner.appendChild(bannerTitle);
-        pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid var(--color-border);' });
-          const client = DB.getById('clients', req.clientId);
-          const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:var(--color-text);' });
-          info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
-          row.appendChild(info);
-          const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
-          fulfillBtn.addEventListener('click', () => { Transmittal.prefilledWrId = req.workRequestId; Transmittal.prefilledClientId = req.clientId; Transmittal.prefilledRequestId = req.id; location.hash = '#transmittal/form'; });
-          row.appendChild(fulfillBtn);
-          banner.appendChild(row);
-        });
-        wrapper.appendChild(banner);
-      }
-    }
-
     // Jira Filter Toolbar & Active Filters State
     const activeFilters = {
       workRequest: new Set(),
