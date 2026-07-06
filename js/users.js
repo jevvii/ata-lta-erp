@@ -1085,29 +1085,25 @@ const Users = {
         tr.appendChild(el('td', { text: pc.status }));
 
         const tdAct = el('td');
-        const actionsDiv = el('div', { class: 'inline-actions' });
-
-        const reviewLink = el('button', { class: 'action-link action-link-review', text: 'Review' });
-        reviewLink.addEventListener('click', () => {
+        
+        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
+        reviewBtn.addEventListener('click', () => {
           this.pendingDetailId = pc.id;
           App.handleRoute();
         });
-        actionsDiv.appendChild(reviewLink);
+        tdAct.appendChild(reviewBtn);
 
         if (pc.status === 'pending') {
-          actionsDiv.appendChild(el('span', { class: 'action-separator', text: '|' }));
-
-          const withdrawLink = el('button', { class: 'action-link action-link-danger', text: 'Withdraw' });
-          withdrawLink.addEventListener('click', () => {
+          const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
+          withdrawBtn.addEventListener('click', () => {
             Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => {
               PendingChanges.delete(pc.id);
               App.handleRoute();
             }, 'danger');
           });
-          actionsDiv.appendChild(withdrawLink);
+          tdAct.appendChild(withdrawBtn);
         }
 
-        tdAct.appendChild(actionsDiv);
         tr.appendChild(tdAct);
         tbody.appendChild(tr);
       });
@@ -1133,38 +1129,24 @@ const Users = {
         tr.appendChild(el('td', { text: pc.rejectionReason || '—', style: 'color:var(--color-danger);font-weight:600;word-break:break-word;' }));
 
         const tdAct = el('td');
-        const actionsDiv = el('div', { class: 'inline-actions' });
-
-        const reviewLink = el('button', { class: 'action-link action-link-review', text: 'Review' });
-        reviewLink.addEventListener('click', () => {
+        
+        // Keep only Review (blue) and Dismiss (red) buttons inline in the table
+        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
+        reviewBtn.addEventListener('click', () => {
           this.pendingDetailId = pc.id;
           App.handleRoute();
         });
-        actionsDiv.appendChild(reviewLink);
+        tdAct.appendChild(reviewBtn);
 
-        actionsDiv.appendChild(el('span', { class: 'action-separator', text: '|' }));
-
-        const resubmitLink = el('button', { class: 'action-link action-link-resubmit', text: 'Resubmit' });
-        resubmitLink.addEventListener('click', () => {
-          Workflow.showConfirm('Confirm Resubmission', 'Are you sure you want to resubmit this request for approval?', () => {
-            PendingChanges.resubmit(pc.id);
-            App.handleRoute();
-          }, 'warning');
-        });
-        actionsDiv.appendChild(resubmitLink);
-
-        actionsDiv.appendChild(el('span', { class: 'action-separator', text: '|' }));
-
-        const dismissLink = el('button', { class: 'action-link action-link-danger', text: 'Dismiss' });
-        dismissLink.addEventListener('click', () => {
+        const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
+        dismissBtn.addEventListener('click', () => {
           Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
             PendingChanges.delete(pc.id);
             App.handleRoute();
           }, 'danger');
         });
-        actionsDiv.appendChild(dismissLink);
+        tdAct.appendChild(dismissBtn);
 
-        tdAct.appendChild(actionsDiv);
         tr.appendChild(tdAct);
         tbody.appendChild(tr);
       });
