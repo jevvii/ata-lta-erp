@@ -1362,15 +1362,29 @@ const Users = {
       });
       actions.appendChild(withdrawBtn);
     } else if (isSubmitter && pc.status === 'rejected') {
-      const resubmitBtn = el('button', { class: 'btn btn-warning', text: 'Resubmit' });
-      resubmitBtn.addEventListener('click', () => {
-        Workflow.showConfirm('Confirm Resubmission', 'Are you sure you want to resubmit this request for approval?', () => {
-          PendingChanges.resubmit(pc.id);
-          this.pendingDetailId = null;
-          App.handleRoute();
-        }, 'warning');
+      const editResubmitBtn = el('button', { class: 'btn btn-warning', text: 'Edit & Resubmit' });
+      editResubmitBtn.addEventListener('click', () => {
+        PendingChanges.editingPendingId = pc.id;
+        this.pendingDetailId = null;
+
+        if (pc.table === 'invoices') {
+          location.hash = `#billing/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'disbursements') {
+          location.hash = `#disbursement/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'transmittals') {
+          location.hash = `#transmittal/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'clients') {
+          location.hash = `#clients/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'workRequests') {
+          location.hash = `#operations/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'tasks') {
+          App.handleRoute(); // navigate back to wherever they were
+          Workflow.showEditTaskModal(pc.proposedData.id, () => {
+            App.handleRoute();
+          });
+        }
       });
-      actions.appendChild(resubmitBtn);
+      actions.appendChild(editResubmitBtn);
 
       const dismissBtn = el('button', { class: 'btn btn-danger', text: 'Dismiss Submission' });
       dismissBtn.addEventListener('click', () => {

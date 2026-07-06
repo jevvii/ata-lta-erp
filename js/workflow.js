@@ -8379,7 +8379,11 @@ const Workflow = {
     const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Changes' });
     form.appendChild(submitBtn);
 
-    const overlay = this.showModal('Edit Task', form, null);
+    const overlay = this.showModal('Edit Task', form, () => {
+      if (typeof PendingChanges !== 'undefined') {
+        PendingChanges.editingPendingId = null;
+      }
+    });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;

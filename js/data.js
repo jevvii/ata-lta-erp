@@ -1887,6 +1887,12 @@ const DB = {
   },
 
   getById(table, id) {
+    if (typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId) {
+      const pc = this.getAll('pendingChanges').find(p => p.id === PendingChanges.editingPendingId);
+      if (pc && pc.table === table && (pc.parentRecordId === id || (pc.proposedData && pc.proposedData.id === id))) {
+        return pc.proposedData;
+      }
+    }
     return this.getAll(table).find(r => r.id === id);
   },
 
@@ -1910,6 +1916,24 @@ const DB = {
   },
 
   update(table, id, changes) {
+    if (typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId) {
+      const pc = this.getById('pendingChanges', PendingChanges.editingPendingId);
+      if (pc && pc.table === table) {
+        const pendingId = PendingChanges.editingPendingId;
+        PendingChanges.editingPendingId = null; // Reset
+
+        const updatedData = { ...pc.proposedData, ...changes };
+        this.update('pendingChanges', pendingId, {
+          proposedData: updatedData,
+          submittedAt: new Date().toISOString(),
+          status: 'pending',
+          rejectionReason: '',
+          reviewedBy: '',
+          reviewedAt: ''
+        });
+        return;
+      }
+    }
     this._pendingWrIdsCache = null;
     const all = this.getAll(table);
     const idx = all.findIndex(r => r.id === id);

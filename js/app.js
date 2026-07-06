@@ -448,6 +448,12 @@ const App = {
   handleRoute() {
     if (window.SidePaneInstance) window.SidePaneInstance.close();
     const rawHash = location.hash || '#dashboard';
+
+    // Clear editingPendingId when leaving form routes
+    const hasFormInHash = rawHash.includes('/form/') || rawHash.includes('/templateForm/');
+    if (!hasFormInHash && typeof PendingChanges !== 'undefined') {
+      PendingChanges.editingPendingId = null;
+    }
     const parts = rawHash.split('?');
     const pathParts = parts[0].split('/');
     const baseHash = pathParts[0];

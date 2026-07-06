@@ -6,6 +6,8 @@
  */
 
 const PendingChanges = {
+  editingPendingId: null,
+
   /**
    * Submit a structural change for review.
    * Admin bypasses the gate for everything.
@@ -22,6 +24,21 @@ const PendingChanges = {
         DB.update(table, cleanRecord.id, cleanRecord);
       }
       return { approved: true };
+    }
+
+    if (PendingChanges.editingPendingId) {
+      const pendingId = PendingChanges.editingPendingId;
+      PendingChanges.editingPendingId = null; // Reset
+
+      DB.update('pendingChanges', pendingId, {
+        proposedData: deepClone(record),
+        submittedAt: new Date().toISOString(),
+        status: 'pending',
+        rejectionReason: '',
+        reviewedBy: '',
+        reviewedAt: ''
+      });
+      return { approved: false, pendingId };
     }
 
     const pc = {
