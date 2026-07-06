@@ -1564,19 +1564,30 @@ function createJiraFilterToolbar(config) {
 
   // 1. View Mode Toggle
   if (viewMode && onViewModeChange) {
+    let activeViewMode = viewMode || 'table';
     const vmToggle = el('div', { class: 'view-mode-toggle' });
     const modes = [
       { key: 'table', label: 'Table', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.table : '' },
       { key: 'board', label: 'Board', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.board : '' },
       { key: 'list', label: 'List', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.list : '' }
     ];
+    const vmButtons = [];
+    const renderViewModeToggle = () => {
+      vmButtons.forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-mode') === activeViewMode));
+    };
     modes.forEach(m => {
       const btn = el('button', {
         type: 'button',
         html: m.icon + ' ' + m.label,
-        class: viewMode === m.key ? 'active' : ''
+        class: activeViewMode === m.key ? 'active' : '',
+        'data-mode': m.key
       });
-      btn.addEventListener('click', () => onViewModeChange(m.key));
+      btn.addEventListener('click', () => {
+        activeViewMode = m.key;
+        onViewModeChange(m.key);
+        renderViewModeToggle();
+      });
+      vmButtons.push(btn);
       vmToggle.appendChild(btn);
     });
     toolbar.appendChild(vmToggle);
