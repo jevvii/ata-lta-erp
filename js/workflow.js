@@ -468,6 +468,9 @@ const Workflow = {
     if (msg.includes('requirement')) return { text: 'Open Tasks', route: null, action: 'tasks' };
     if (msg.includes('client assignment')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
     if (msg.includes('employee assignment')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
+    if (msg.includes('all tasks must be assigned')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
+    if (msg.includes('at least one task')) return { text: 'Open Tasks', route: null, action: 'tasks' };
+    if (msg.includes('no tasks defined')) return { text: 'Open Tasks', route: null, action: 'tasks' };
     if (msg.includes('released')) return { text: 'View Disbursements', route: '#disbursement', action: 'disbursement' };
     return null;
   },
@@ -491,17 +494,16 @@ const Workflow = {
     body.appendChild(list);
     wrapper.appendChild(body);
 
-    const footer = el('div', { class: 'modal-footer', style: 'justify-content:flex-end; gap:8px;' });
-    const cancelBtn = el('button', { class: 'btn modal-btn-cancel', text: 'Cancel' });
-    footer.appendChild(cancelBtn);
-
+    // Build actionable hints from blocker messages so each blocker can offer a next step.
     const hints = [];
     messages.forEach(m => {
       const hint = this.getRoutingHint(m);
       if (hint && !hints.some(h => h.action === hint.action)) hints.push(hint);
     });
 
-    const overlay = this.showModal(title, wrapper);
+    // Footer is centered via CSS (.modal-message-wrapper .modal-footer); keep it unstyled
+    // so the action + cancel buttons line up in the middle of the modal.
+    const footer = el('div', { class: 'modal-footer' });
 
     hints.forEach(hint => {
       const actionBtn = el('button', {
@@ -509,7 +511,8 @@ const Workflow = {
         text: hint.text
       });
       actionBtn.addEventListener('click', () => {
-        overlay.remove();
+        const overlay = actionBtn.closest('.modal-overlay');
+        if (overlay) overlay.remove();
         if (hint.route) {
           location.hash = hint.route;
         } else if (hint.action === 'edit_wr' && ctx.wrId) {
@@ -521,9 +524,22 @@ const Workflow = {
       footer.appendChild(actionBtn);
     });
 
-    cancelBtn.addEventListener('click', () => overlay.remove());
+    const cancelBtn = el('button', { class: 'btn modal-btn-cancel', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => {
+      const overlay = cancelBtn.closest('.modal-overlay');
+      if (overlay) overlay.remove();
+    });
+    footer.appendChild(cancelBtn);
 
     wrapper.appendChild(footer);
+
+    // Dismiss any existing modal with the same title so fresh blocker content is always shown.
+    document.querySelectorAll('.modal-overlay').forEach(o => {
+      const titleEl = o.querySelector('.modal-title');
+      if (titleEl && titleEl.textContent.trim() === title.trim()) o.remove();
+    });
+
+    this.showModal(title, wrapper);
   },
 
   canRequestPhaseRouting() {
@@ -3164,15 +3180,6 @@ const Workflow = {
 
       const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
 
-      // Detect backward routing before checking transition requirements.
-      const currentPhaseIdx = boardPhases.findIndex(p => p.statuses.includes(wr.status));
-      const targetPhaseIdx = boardPhases.findIndex(p => p.targetStatus === targetStatus);
-      const isBackward = currentPhaseIdx !== -1 && targetPhaseIdx !== -1 && targetPhaseIdx < currentPhaseIdx;
-      if (isBackward) {
-        self.showRoutingBlocker('Backward Routing Not Allowed', [`Work Requests cannot be moved back to "${targetPhaseLabel}" once advanced.`], { wrId: wr.id });
-        return;
-      }
-
       const transitionStatus = self.getPhaseTransitionStatus(wr.id);
       if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
         const blockers = transitionStatus?.missing?.length
@@ -3188,7 +3195,18 @@ const Workflow = {
     const dragConfig = {
       enabled: true,
       canDrag: () => canApprove,
-      canDrop: () => true,
+      canDrop: ({ item, targetStatus }) => {
+        if (item.status === targetStatus) return true;
+        const currentPhaseIdx = boardPhases.findIndex(p => p.statuses.includes(item.status));
+        const targetPhaseIdx = boardPhases.findIndex(p => p.targetStatus === targetStatus);
+        if (currentPhaseIdx === -1 || targetPhaseIdx === -1) return false;
+        // Only allow forward progression; backward moves are rejected and trigger the blocker.
+        return targetPhaseIdx > currentPhaseIdx;
+      },
+      onDropDenied: ({ item, targetStatus }) => {
+        const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
+        self.showRoutingBlocker('Backward Routing Not Allowed', [`Work Requests cannot be moved back to "${targetPhaseLabel}" once advanced.`], { wrId: item.id });
+      },
       orderField: 'boardOrder',
       onDrop: handleBoardDrop
     };
@@ -3463,13 +3481,7 @@ const Workflow = {
       KanbanBoard.attachDrag({
         root: groupedBoard,
         items: wrs,
-        drag: {
-          enabled: true,
-          canDrag: () => canApprove,
-          canDrop: () => true,
-          orderField: 'boardOrder',
-          onDrop: handleBoardDrop
-        }
+        drag: dragConfig
       });
     }
   },
