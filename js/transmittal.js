@@ -61,6 +61,10 @@ const Transmittal = {
               this.showAcknowledgeDialog(t.id);
             });
             actions.appendChild(ackBtn);
+          } else if (t.status === 'Acknowledged' && !t.archived) {
+            const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-right:8px;' });
+            archiveBtn.addEventListener('click', () => this.archiveTransmittal(t.id));
+            actions.appendChild(archiveBtn);
           }
         }
 
@@ -89,7 +93,7 @@ const Transmittal = {
           ]
         }));
       }
-    } else if (this.view === 'list') {
+    } else if (['list', 'archive'].includes(this.view)) {
       container.classList.add('transmittal-tab-page');
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       titleBar.appendChild(el('h1', { text: 'Transmittal' }));
@@ -100,6 +104,7 @@ const Transmittal = {
     if (this.view === 'list') container.appendChild(this.renderList());
     else if (this.view === 'form') container.appendChild(this.renderForm());
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
+    else if (this.view === 'archive') container.appendChild(this.renderArchive());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -117,26 +122,43 @@ const Transmittal = {
     const tabNav = el('div', { class: 'module-tab-nav' });
 
     const entity = Auth.activeEntity;
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
     const count = DB.getWhere('transmittals', t => {
-      const tEnt = (t.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(tEnt);
-      }
-      return tEnt === entity.toUpperCase();
+      if (!entFilter(t.entity)) return false;
+      return t.status !== 'Cancelled' && !(t.status === 'Acknowledged' && t.archived);
+    }).length;
+
+    const archiveCount = DB.getWhere('transmittals', t => {
+      if (!entFilter(t.entity)) return false;
+      if (t.status === 'Cancelled') return true;
+      if (t.status === 'Acknowledged' && t.archived) return true;
+      return false;
+    }).length + DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'transmittal' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      return true;
     }).length;
 
     const tabs = [
-      { key: 'list', label: 'Transmittals', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: count }
+      { key: 'list', label: 'Transmittals', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: count },
+      { key: 'archive', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
     tabs.forEach(tab => {
-      const btn = el('button', { class: 'module-tab-link active' });
+      const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
       btn.appendChild(parseHTML(tab.icon));
       btn.appendChild(document.createTextNode(' ' + tab.label));
       if (tab.count !== undefined) {
         btn.appendChild(document.createTextNode(' '));
         btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
       }
+      btn.addEventListener('click', () => { this.view = tab.key; App.handleRoute(); });
       tabNav.appendChild(btn);
     });
 
@@ -437,6 +459,7 @@ const Transmittal = {
     const entity = Auth.activeEntity;
 
     let items = DB.getWhere('transmittals', t => (entity === 'ALL' ? Auth.user.entities.includes(t.entity) : t.entity === entity));
+    items = items.filter(t => t.status !== 'Cancelled' && !(t.status === 'Acknowledged' && t.archived));
 
     if (activeFilters.workRequest && activeFilters.workRequest.size > 0) {
       items = items.filter(t => activeFilters.workRequest.has(t.workRequestId));
@@ -524,6 +547,11 @@ const Transmittal = {
         const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
         tdAct.appendChild(editBtn);
+      }
+      if (t.status === 'Acknowledged' && !t.archived) {
+        const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
+        archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveTransmittal(t.id); });
+        tdAct.appendChild(archiveBtn);
       }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
@@ -668,6 +696,14 @@ const Transmittal = {
           className: 'primary',
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
           onClick: () => self.showAcknowledgeDialog(t.id)
+        });
+      }
+      if (t.status === 'Acknowledged' && !t.archived) {
+        menu.push({
+          label: 'Archive',
+          className: 'primary',
+          icon: ArchivePage.icons.archive,
+          onClick: () => self.archiveTransmittal(t.id)
         });
       }
       return menu;
@@ -1838,5 +1874,126 @@ const Transmittal = {
 
     win.focus();
     setTimeout(() => win.print(), 300);
+  },
+
+  archiveTransmittal(id) {
+    const t = DB.getById('transmittals', id);
+    if (!t || t.status !== 'Acknowledged' || t.archived) return;
+    DB.update('transmittals', id, { archived: true, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
+
+  unarchiveTransmittal(id) {
+    const t = DB.getById('transmittals', id);
+    if (!t || t.status !== 'Acknowledged' || !t.archived) return;
+    DB.update('transmittals', id, { archived: false, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
+
+  permanentDeleteTransmittal(id) {
+    const t = DB.getById('transmittals', id);
+    if (!t) return;
+    if (Auth.user?.role !== 'Admin') {
+      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete transmittals.', 'danger');
+      return;
+    }
+    Workflow.showConfirm('Permanently Delete Transmittal',
+      `Are you sure you want to permanently delete transmittal "${t.trackingNumber}"? This action cannot be undone.`,
+      () => {
+        DB.delete('transmittals', id);
+        App.handleRoute();
+        Workflow.showMessage('Deleted', 'Transmittal has been permanently deleted.', 'success');
+      },
+      'danger'
+    );
+  },
+
+  renderArchive() {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
+
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    const acknowledged = DB.getWhere('transmittals', t => entFilter(t.entity) && t.status === 'Acknowledged' && t.archived === true);
+    const cancelled = DB.getWhere('transmittals', t => entFilter(t.entity) && t.status === 'Cancelled');
+
+    const rejectedTransmittalRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'transmittal' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const buildItem = (t, category) => {
+      const wrTitle = this.getWorkRequestTitle(t.workRequestId);
+      return {
+        id: t.id,
+        category,
+        title: t.trackingNumber || '(no tracking)',
+        meta: [
+          { icon: ArchivePage.icons.client, text: this.getClientName(t.clientId) },
+          { icon: ArchivePage.icons.status, text: wrTitle },
+          { icon: ArchivePage.icons.date, text: formatDate(t.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+          },
+          ...(category === 'accomplished' ? [{
+            label: 'Unarchive',
+            icon: ArchivePage.icons.unarchive,
+            className: 'primary',
+            onClick: () => self.unarchiveTransmittal(t.id)
+          }] : []),
+          ...(isAdmin ? [{
+            label: 'Delete Permanently',
+            icon: ArchivePage.icons.delete,
+            className: 'danger',
+            onClick: () => self.permanentDeleteTransmittal(t.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = r => {
+      const data = r || {};
+      const wrTitle = this.getWorkRequestTitle(r.workRequestId);
+      return {
+        id: r.id,
+        category: 'rejected',
+        title: `Transmittal Request ${wrTitle ? '— ' + wrTitle : ''}`,
+        meta: [
+          { icon: ArchivePage.icons.client, text: this.getClientName(r.clientId) },
+          { icon: ArchivePage.icons.date, text: formatDate(r.reviewedAt || r.updatedAt || r.requestedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${r.rejectionReason || 'Rejected'}` }
+        ],
+        actions: [
+          ...(r.workRequestId ? [{
+            label: 'View Related WR',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#operations/detail/' + r.workRequestId; }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'transmittal',
+      categoryLabels: { accomplished: 'Acknowledged', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: acknowledged.map(t => buildItem(t, 'accomplished')),
+        cancelled: cancelled.map(t => buildItem(t, 'cancelled')),
+        rejected: rejectedTransmittalRequests.map(buildRejectedItem)
+      },
+      emptyText: 'Archive is empty.',
+      renderCallback: () => self.renderArchive()
+    });
   }
 };

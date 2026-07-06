@@ -533,6 +533,10 @@ const Workflow = {
   },
 
   cancelWorkRequest(wrId) {
+    if (Auth.user?.role !== 'Admin') {
+      this.showMessage('Permission Denied', 'Only Admin can cancel work requests.', 'danger');
+      return;
+    }
     const wr = DB.getById('workRequests', wrId);
     if (!wr) return;
     if (wr.status === 'Completed' || wr.status === 'Cancelled') {
@@ -556,6 +560,7 @@ const Workflow = {
 
         DB.update('workRequests', wrId, {
           status: 'Cancelled',
+          archived: true,
           updatedAt: now
         });
 
@@ -567,6 +572,22 @@ const Workflow = {
       },
       'danger'
     );
+  },
+
+  archiveWorkRequest(wrId) {
+    const wr = DB.getById('workRequests', wrId);
+    if (!wr || wr.status !== 'Completed') return;
+    DB.update('workRequests', wrId, { archived: true, updatedAt: new Date().toISOString() });
+    this.showMessage('Archived', 'Work Request has been archived.', 'success');
+    App.handleRoute();
+  },
+
+  unarchiveWorkRequest(wrId) {
+    const wr = DB.getById('workRequests', wrId);
+    if (!wr) return;
+    DB.update('workRequests', wrId, { archived: false, updatedAt: new Date().toISOString() });
+    this.showMessage('Restored', 'Work Request has been restored to the active list.', 'success');
+    App.handleRoute();
   },
 
   /**
@@ -1972,7 +1993,7 @@ const Workflow = {
     const wrCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
-      return matchesEntity && wr.status !== 'Cancelled' && Auth.canViewWrWithTasks(wr, taskMap);
+      return matchesEntity && !wr.archived && wr.status !== 'Cancelled' && Auth.canViewWrWithTasks(wr, taskMap);
     }).length;
 
     const templateCount = DB.getWhere('retainerTemplates', t => {
@@ -1983,11 +2004,29 @@ const Workflow = {
       return tEnt === entity.toUpperCase();
     }).length;
 
-    const archiveCount = DB.getWhere('workRequests', wr => {
+    const archiveWrCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
-      return matchesEntity && wr.status === 'Cancelled' && Auth.canViewWrWithTasks(wr, taskMap);
+      if (!matchesEntity || !Auth.canViewWrWithTasks(wr, taskMap)) return false;
+      if (wr.status === 'Cancelled') return true;
+      if (wr.status === 'Completed' && wr.archived) return true;
+      return false;
     }).length;
+
+    const rejectedCount = DB.getWhere('pendingChanges', pc => {
+      if (pc.status !== 'rejected') return false;
+      if (!['workRequests', 'tasks'].includes(pc.table)) return false;
+      const data = pc.proposedData || {};
+      const wrId = pc.table === 'tasks' ? data.workRequestId : data.id;
+      const wr = wrId ? DB.getById('workRequests', wrId) : null;
+      const ent = (wr?.entity || data.entity || '').toUpperCase();
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent) : ent === entity.toUpperCase());
+      if (!matchesEntity) return false;
+      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    }).length;
+
+    const archiveCount = archiveWrCount + rejectedCount;
 
     const tabs = [
       { key: 'list', label: 'Work Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: wrCount }
@@ -2119,7 +2158,7 @@ const Workflow = {
       const set = new Set(defaultPriorities);
       DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       }).forEach(r => {
         if (r.priority) set.add(r.priority);
       });
@@ -2620,7 +2659,7 @@ const Workflow = {
 
       let wrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
 
       wrs = wrs.concat(pendingWrs.filter(r => {
@@ -2654,7 +2693,7 @@ const Workflow = {
       const entity = Auth.activeEntity;
       const allWrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
       const savedHasFilters = App.hasSavedFilters('operations');
       hasActiveFilters = hasActiveFilters || savedHasFilters;
@@ -2810,6 +2849,32 @@ const Workflow = {
             tdAct.appendChild(blockerBadge);
           }
         }
+
+        if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+          const cancelBtn = el('button', {
+            class: 'btn btn-danger btn-sm',
+            text: 'Cancel',
+            style: 'margin-left: 4px;'
+          });
+          cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.cancelWorkRequest(wr.id);
+          });
+          tdAct.appendChild(cancelBtn);
+        }
+
+        if (wr.status === 'Completed' && !wr.archived) {
+          const archiveBtn = el('button', {
+            class: 'btn btn-primary btn-sm',
+            text: 'Archive',
+            style: 'margin-left: 4px;'
+          });
+          archiveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.archiveWorkRequest(wr.id);
+          });
+          tdAct.appendChild(archiveBtn);
+        }
       }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
@@ -2823,7 +2888,7 @@ const Workflow = {
       const entity = Auth.activeEntity;
       const allWrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
       const savedHasFilters = App.hasSavedFilters('operations');
       hasActiveFilters = hasActiveFilters || savedHasFilters;
@@ -3011,12 +3076,21 @@ const Workflow = {
         });
       }
 
-      if (wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+      if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
         items.push({
           label: 'Cancel',
           className: 'danger',
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
           onClick: () => self.cancelWorkRequest(wr.id)
+        });
+      }
+
+      if (wr.status === 'Completed' && !wr.archived) {
+        items.push({
+          label: 'Archive',
+          className: 'primary',
+          icon: ArchivePage.icons.archive,
+          onClick: () => self.archiveWorkRequest(wr.id)
         });
       }
 
@@ -3358,7 +3432,7 @@ const Workflow = {
       const entity = Auth.activeEntity;
       const allWrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
       const savedHasFilters = App.hasSavedFilters('operations');
       hasActiveFilters = hasActiveFilters || savedHasFilters;
@@ -5425,7 +5499,8 @@ const Workflow = {
     
     const ts = this.getPhaseTransitionStatus(wr.id);
     const showRouteButton = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
-    const canCancel = canApprove && wr.status !== 'Completed' && wr.status !== 'Cancelled';
+    const isAdmin = Auth.user?.role === 'Admin';
+    const canCancel = isAdmin && wr.status !== 'Completed' && wr.status !== 'Cancelled';
     const phaseColors = {
       'Draft': '#6b6b6b',
       'Pre-processing': '#2f6feb',
@@ -5447,6 +5522,19 @@ const Workflow = {
         this.cancelWorkRequest(wr.id);
       });
       lifecycleActions.appendChild(cancelWrBtn);
+    }
+
+    if (wr.status === 'Completed' && !wr.archived) {
+      const archiveBtn = el('button', {
+        class: 'btn btn-sm btn-primary',
+        text: 'Archive Work Request',
+        style: 'font-weight: 600; cursor: pointer; margin-right: 8px;'
+      });
+      archiveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.archiveWorkRequest(wr.id);
+      });
+      lifecycleActions.appendChild(archiveBtn);
     }
 
     if (showRouteButton) {
@@ -9666,59 +9754,103 @@ const Workflow = {
 
   renderArchive() {
     const entity = Auth.activeEntity;
-    const canApprove = Auth.can('workflow:approve');
-    const archived = DB.getWhere('workRequests', wr => {
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
+
+    const wrFilter = wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
       return matchesEntity && Auth.canViewWr(wr);
-    }).filter(wr => wr.status === 'Cancelled');
+    };
 
-    const container = el('div');
+    const accomplished = DB.getWhere('workRequests', wr => wrFilter(wr) && wr.status === 'Completed' && wr.archived === true);
+    const cancelled = DB.getWhere('workRequests', wr => wrFilter(wr) && wr.status === 'Cancelled');
 
-    if (archived.length === 0) {
-      container.appendChild(el('p', { text: 'Archive is empty.', class: 'empty-state' }));
-      return container;
-    }
-
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Title', 'Client', 'Priority', 'Status', 'Cancelled At', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    archived.forEach(wr => {
-      const client = DB.getById('clients', wr.clientId);
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: wr.title }));
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: wr.priority || '—' }));
-      tr.appendChild(el('td')).appendChild(this.statusBadge(wr.status));
-      tr.appendChild(el('td', { text: formatDate(wr.updatedAt) }));
-      const tdAct = el('td');
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#operations/detail/' + wr.id; });
-      tdAct.appendChild(viewBtn);
-      if (canApprove) {
-        const restoreBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Restore', style: 'margin-left:4px;' });
-        restoreBtn.addEventListener('click', () => {
-          this.showConfirm('Restore Work Request',
-            `Restore "${wr.title}" to Draft? All tasks will remain Cancelled and must be reassigned manually.`,
-            () => {
-              DB.update('workRequests', wr.id, { status: 'Draft', updatedAt: new Date().toISOString() });
-              App.handleRoute();
-            }, 'warning');
-        });
-        tdAct.appendChild(restoreBtn);
-      }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const rejectedRecords = DB.getWhere('pendingChanges', pc => {
+      if (pc.status !== 'rejected') return false;
+      if (pc.table === 'workRequests') return true;
+      if (pc.table === 'tasks' && pc.proposedData && pc.proposedData.workRequestId) return true;
+      return false;
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
 
-    return container;
+    const buildWrItem = (wr, category) => {
+      const client = DB.getById('clients', wr.clientId);
+      return {
+        id: wr.id,
+        category,
+        title: wr.title || '(untitled)',
+        meta: [
+          { icon: ArchivePage.icons.client, text: client?.name || '—' },
+          { icon: ArchivePage.icons.status, text: wr.status || '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(wr.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#operations/detail/' + wr.id; }
+          },
+          ...(category === 'accomplished' ? [{
+            label: 'Unarchive',
+            icon: ArchivePage.icons.unarchive,
+            className: 'primary',
+            onClick: () => self.unarchiveWorkRequest(wr.id)
+          }] : []),
+          ...(category === 'cancelled' && isAdmin ? [{
+            label: 'Restore to Draft',
+            icon: ArchivePage.icons.restore,
+            className: 'primary',
+            onClick: () => {
+              self.showConfirm('Restore Work Request',
+                `Restore "${wr.title}" to Draft? Tasks will remain Cancelled and must be reassigned manually.`,
+                () => {
+                  DB.update('workRequests', wr.id, { status: 'Draft', archived: false, updatedAt: new Date().toISOString() });
+                  App.handleRoute();
+                }, 'warning');
+            }
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = pc => {
+      const isTask = pc.table === 'tasks';
+      const data = pc.proposedData || {};
+      const wrId = isTask ? data.workRequestId : data.id;
+      const wr = DB.getById('workRequests', wrId);
+      const title = isTask ? `Task: ${data.title || '(untitled)'}` : `Work Request: ${data.title || '(untitled)'}`;
+      return {
+        id: pc.id,
+        category: 'rejected',
+        title: title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: wr ? (DB.getById('clients', wr.clientId)?.name || '—') : '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(pc.reviewedAt || pc.updatedAt || pc.requestedAt) },
+          { icon: ArchivePage.icons.status, text: pc.rejectionReason ? `Reason: ${pc.rejectionReason}` : 'Rejected' }
+        ],
+        actions: [
+          {
+            label: 'View Request',
+            icon: ArchivePage.icons.view,
+            onClick: () => {
+              if (wr) location.hash = '#operations/detail/' + wr.id;
+            }
+          }
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'operations',
+      categoryLabels: { accomplished: 'Completed', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: accomplished.map(wr => buildWrItem(wr, 'accomplished')),
+        cancelled: cancelled.map(wr => buildWrItem(wr, 'cancelled')),
+        rejected: rejectedRecords.map(buildRejectedItem)
+      },
+      emptyText: 'Archive is empty.',
+      renderCallback: () => self.renderArchive()
+    });
   },
 
   generateFromTemplate(templateId) {

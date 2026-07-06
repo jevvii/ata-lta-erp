@@ -74,7 +74,7 @@ const Billing = {
       }));
     } else {
       container.classList.add('billing-tab-page');
-      // Tab views: list, templates, aging, trash
+      // Tab views: list, templates, aging, archive
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       titleBar.appendChild(el('h1', { text: 'Billing' }));
       container.appendChild(titleBar);
@@ -88,7 +88,7 @@ const Billing = {
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'aging') container.appendChild(this.renderAging());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
-    else if (this.view === 'trash') container.appendChild(this.renderTrash());
+    else if (this.view === 'archive') container.appendChild(this.renderArchive());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -108,21 +108,43 @@ const Billing = {
 
     const invoiceCount = DB.getWhere('invoices', inv => {
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
-      return matchesEntity && inv.status !== 'Cancelled';
+      return matchesEntity && inv.status !== 'Cancelled' && !inv.archived;
     }).length + DB.getWhere('pendingChanges', pc => pc.table === 'invoices' && pc.status === 'pending').length;
 
     const templateCount = (DB.getAll('billingTemplates') || []).length;
 
-    const trashCount = DB.getWhere('invoices', inv => {
+    const archiveInvCount = DB.getWhere('invoices', inv => {
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
-      return matchesEntity && inv.status === 'Cancelled';
+      if (!matchesEntity) return false;
+      if (inv.status === 'Cancelled') return true;
+      if (inv.status === 'Paid' && inv.archived) return true;
+      return false;
     }).length;
+
+    const rejectedCount = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'invoices' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      const ent = data.entity || '';
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(ent) : ent === entity);
+      if (!matchesEntity) return false;
+      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    }).length + DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'billing' || r.status !== 'rejected') return false;
+      const ent = (r.entity || '').toUpperCase();
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent) : ent === entity.toUpperCase());
+      if (!matchesEntity) return false;
+      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    }).length;
+
+    const archiveCount = archiveInvCount + rejectedCount;
 
     const tabs = [
       { key: 'list', label: 'Invoices', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: invoiceCount },
       { key: 'templates', label: 'Templates', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>', count: templateCount },
       { key: 'aging', label: 'Aging Report', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' },
-      { key: 'trash', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: trashCount }
+      { key: 'archive', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
     tabs.forEach(tab => {
@@ -363,7 +385,7 @@ const Billing = {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
       let invoices = DB.getWhere('invoices', inv => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
-        return matchesEntity && inv.status !== 'Cancelled';
+        return matchesEntity && inv.status !== 'Cancelled' && !inv.archived;
       });
 
       const pendingInvs = DB.getWhere('pendingChanges', pc => {
@@ -496,6 +518,15 @@ const Billing = {
           this.trashInvoice(inv.id);
         });
         tdAct.appendChild(trashBtn);
+      }
+
+      if (inv.status === 'Paid' && !inv.archived) {
+        const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
+        archiveBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.archiveInvoice(inv.id);
+        });
+        tdAct.appendChild(archiveBtn);
       }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
@@ -665,6 +696,15 @@ const Billing = {
           className: 'danger',
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
           onClick: () => self.trashInvoice(inv.id)
+        });
+      }
+
+      if (inv.status === 'Paid' && !inv.archived) {
+        items.push({
+          label: 'Archive',
+          className: 'primary',
+          icon: ArchivePage.icons.archive,
+          onClick: () => self.archiveInvoice(inv.id)
         });
       }
       return items;
@@ -1787,6 +1827,10 @@ const Billing = {
         App.handleRoute();
       });
       actions.appendChild(sentBtn);
+    } else if (inv.status === 'Paid' && !inv.archived) {
+      const archiveBtn = el('button', { class: 'btn btn-primary', text: 'Archive Invoice', style: 'margin-right:8px;' });
+      archiveBtn.addEventListener('click', () => this.archiveInvoice(inv.id));
+      actions.appendChild(archiveBtn);
     }
     container.appendChild(actions);
 
@@ -2867,7 +2911,7 @@ const Billing = {
   restoreInvoice(id) {
     const inv = DB.getById('invoices', id);
     if (!inv || inv.status !== 'Cancelled') return;
-    DB.update('invoices', id, { status: 'Draft', updatedAt: new Date().toISOString() });
+    DB.update('invoices', id, { status: 'Draft', archived: false, updatedAt: new Date().toISOString() });
     if (inv.workRequestId) {
       const wr = DB.getById('workRequests', inv.workRequestId);
       if (wr) {
@@ -2877,59 +2921,156 @@ const Billing = {
     App.handleRoute();
   },
 
-  renderTrash() {
-    const entity = Auth.activeEntity;
-    const trashed = DB.getWhere('invoices', inv => {
-      const invEnt = (inv.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(invEnt);
-      }
-      return invEnt === entity.toUpperCase();
-    }).filter(inv => inv.status === 'Cancelled');
+  archiveInvoice(id) {
+    const inv = DB.getById('invoices', id);
+    if (!inv || inv.status !== 'Paid' || inv.archived) return;
+    DB.update('invoices', id, { archived: true, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
 
-    const container = el('div');
-    const topActions = el('div', { class: 'form-header-bar', style: 'margin-bottom: var(--spacing-lg);' });
-    topActions.appendChild(el('h2', { text: 'Archived Invoices' }));
-    container.appendChild(topActions);
+  unarchiveInvoice(id) {
+    const inv = DB.getById('invoices', id);
+    if (!inv || inv.status !== 'Paid' || !inv.archived) return;
+    DB.update('invoices', id, { archived: false, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
 
-    if (trashed.length === 0) {
-      container.appendChild(el('p', { text: 'Archive is empty.', class: 'empty-state' }));
-      return container;
+  permanentDeleteInvoice(id) {
+    const inv = DB.getById('invoices', id);
+    if (!inv) return;
+    if (Auth.user?.role !== 'Admin') {
+      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete invoices.', 'danger');
+      return;
     }
+    Workflow.showConfirm('Permanently Delete Invoice',
+      `Are you sure you want to permanently delete invoice "${inv.invoiceNumber}"? This action cannot be undone.`,
+      () => {
+        if (inv.workRequestId) {
+          const wr = DB.getById('workRequests', inv.workRequestId);
+          if (wr && wr.linkedInvoiceId === inv.id) {
+            DB.update('workRequests', wr.id, { linkedInvoiceId: null });
+          }
+        }
+        DB.delete('invoices', id);
+        App.handleRoute();
+      },
+      'danger'
+    );
+  },
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Invoice #', 'Client', 'Issue Date', 'Total', 'Archived At', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
+  renderArchive() {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
 
-    const tbody = el('tbody');
-    trashed.forEach(inv => {
-      const client = DB.getById('clients', inv.clientId);
-      const tr = el('tr');
-      const tdInvoice = el('td');
-      tdInvoice.appendChild(el('span', { text: inv.invoiceNumber }));
-      if (inv.fromTemplate) tdInvoice.appendChild(this.recurringBadge(inv));
-      tr.appendChild(tdInvoice);
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: formatDate(inv.issueDate) }));
-      tr.appendChild(el('td', { text: formatPHP(inv.total) }));
-      tr.appendChild(el('td', { text: formatDate(inv.updatedAt) }));
-      const tdAct = el('td');
-      const restoreBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Restore' });
-      restoreBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.restoreInvoice(inv.id);
-      });
-      tdAct.appendChild(restoreBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const entFilter = ent => {
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent.toUpperCase());
+      return ent.toUpperCase() === entity.toUpperCase();
+    };
+
+    const paid = DB.getWhere('invoices', inv => entFilter(inv.entity || '') && inv.status === 'Paid' && inv.archived === true);
+    const cancelled = DB.getWhere('invoices', inv => entFilter(inv.entity || '') && inv.status === 'Cancelled');
+
+    const rejectedInvoiceChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'invoices' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity || '')) return false;
+      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      return true;
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
 
-    return container;
+    const rejectedBillingRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'billing' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity || '')) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const buildInvItem = (inv, category) => {
+      const client = DB.getById('clients', inv.clientId);
+      return {
+        id: inv.id,
+        category,
+        title: inv.invoiceNumber || '(no number)',
+        meta: [
+          { icon: ArchivePage.icons.client, text: client?.name || '—' },
+          { icon: ArchivePage.icons.amount, text: formatPHP(inv.total) },
+          { icon: ArchivePage.icons.date, text: formatDate(inv.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+          },
+          ...(category === 'accomplished' ? [{
+            label: 'Unarchive',
+            icon: ArchivePage.icons.unarchive,
+            className: 'primary',
+            onClick: () => self.unarchiveInvoice(inv.id)
+          }] : []),
+          ...(category === 'cancelled' ? [{
+            label: 'Restore to Draft',
+            icon: ArchivePage.icons.restore,
+            className: 'primary',
+            onClick: () => self.restoreInvoice(inv.id)
+          }] : []),
+          ...(isAdmin ? [{
+            label: 'Delete Permanently',
+            icon: ArchivePage.icons.delete,
+            className: 'danger',
+            onClick: () => self.permanentDeleteInvoice(inv.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = (record) => {
+      const isOpReq = record.hasOwnProperty('requestedBy');
+      const pc = isOpReq ? null : record;
+      const r = isOpReq ? record : null;
+      const data = pc ? (pc.proposedData || {}) : r;
+      const clientName = (DB.getById('clients', data.clientId) || DB.getById('clients', r?.clientId))?.name || '—';
+      const title = isOpReq
+        ? `Billing Request ${r.workRequestId ? 'for WR' : ''}`
+        : `Invoice Change: ${data.invoiceNumber || '(untitled)'}`;
+      const reason = data.rejectionReason || r?.rejectionReason || 'Rejected';
+      return {
+        id: record.id,
+        category: 'rejected',
+        title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: clientName },
+          { icon: ArchivePage.icons.date, text: formatDate(pc?.reviewedAt || pc?.updatedAt || r?.requestedAt || r?.updatedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${reason}` }
+        ],
+        actions: [
+          ...(data.id || r?.workRequestId ? [{
+            label: 'View Related',
+            icon: ArchivePage.icons.view,
+            onClick: () => {
+              if (data.id) location.hash = '#billing/detail/' + data.id;
+              else if (r?.workRequestId) location.hash = '#operations/detail/' + r.workRequestId;
+            }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'billing',
+      categoryLabels: { accomplished: 'Paid', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: paid.map(inv => buildInvItem(inv, 'accomplished')),
+        cancelled: cancelled.map(inv => buildInvItem(inv, 'cancelled')),
+        rejected: [
+          ...rejectedInvoiceChanges.map(buildRejectedItem),
+          ...rejectedBillingRequests.map(buildRejectedItem)
+        ]
+      },
+      emptyText: 'Archive is empty.',
+      renderCallback: () => self.renderArchive()
+    });
   },
 
   // ============================================================
@@ -2938,7 +3079,7 @@ const Billing = {
   renderAging() {
     const entity = Auth.activeEntity;
     const today = new Date();
-    const invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Paid' && inv.status !== 'Cancelled');
+    const invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Paid' && inv.status !== 'Cancelled' && !inv.archived);
 
     const buckets = { '0-30': [], '31-60': [], '61-90': [], '90+': [] };
     invoices.forEach(inv => {

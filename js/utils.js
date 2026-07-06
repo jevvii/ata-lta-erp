@@ -2174,4 +2174,208 @@ function renderGroupedKanbanBoard(config = {}) {
   container.appendChild(groupedBoard);
 }
 
+/**
+ * Shared archive page layout (pill-filtered categories with hover actions).
+ * Modeled on the Admin Pending Approvals page.
+ */
+const ArchivePage = {
+  icons: {
+    accomplished: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    cancelled: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    rejected: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+    client: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    status: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/></svg>',
+    date: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    amount: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    view: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+    archive: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
+    unarchive: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><path d="M12 12v6"/><path d="M8 14l4-4 4 4"/></svg>',
+    restore: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+    delete: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
+  },
+
+  /**
+   * Render a full archive page.
+   * @param {string} opts.module - unique module key (e.g. 'workflow', 'billing').
+   * @param {Array} opts.categories - category definitions with { key, label, items, renderItem }.
+   * @param {string} [opts.emptyText] - message shown when archive is empty.
+   * @returns {HTMLElement}
+   */
+  render({ module, categoryLabels = {}, categories, emptyText = 'Archive is empty.' }) {
+    const wrapper = el('div');
+    const storageKey = 'erp_archive_category_' + (typeof module === 'string' ? module : (module?.constructor?.name || 'module'));
+    let selected = sessionStorage.getItem(storageKey) || 'all';
+
+    const categoryList = Array.isArray(categories)
+      ? categories
+      : Object.entries(categories || {}).map(([key, items]) => ({
+          key,
+          label: categoryLabels[key] || key,
+          items: items || [],
+          renderItem: (item) => ArchivePage.renderSimpleItem(item)
+        }));
+
+    const total = categoryList.reduce((sum, cat) => sum + (cat.items || []).length, 0);
+    if (total === 0) {
+      wrapper.appendChild(el('p', { text: emptyText, class: 'empty-state' }));
+      return wrapper;
+    }
+
+    const selectCategory = (key) => {
+      sessionStorage.setItem(storageKey, key);
+      selected = key;
+      App.handleRoute();
+    };
+
+    wrapper.appendChild(this.renderPills(categoryList, total, selected, selectCategory));
+
+    categoryList.forEach(cat => {
+      const items = cat.items || [];
+      if (items.length === 0) return;
+      if (selected !== 'all' && selected !== cat.key) return;
+      wrapper.appendChild(this.renderCategoryCard(cat));
+    });
+
+    return wrapper;
+  },
+
+  renderSimpleItem(item) {
+    const iconKey = item.icon || (item.category === 'cancelled' ? 'cancelled' : item.category === 'rejected' ? 'rejected' : 'accomplished');
+    const metaNodes = (item.meta || []).map(m => ArchivePage.metaNode(m.icon || '', m.text, m.className || ''));
+    const actionButtons = (item.actions || []).map(a => ({
+      label: a.label,
+      iconHtml: a.icon || a.iconHtml || '',
+      className: a.className || '',
+      onClick: a.onClick
+    }));
+    return ArchivePage.renderItemRow({
+      iconHtml: item.iconHtml || ArchivePage.icons[iconKey],
+      keyText: item.keyText,
+      title: item.title,
+      description: item.description,
+      metaNodes,
+      actions: actionButtons
+    });
+  },
+
+  renderPills(categories, total, selected, onSelect) {
+    const wrap = el('div', { class: 'approval-filter-pills' });
+
+    const add = (key, label, count, isActive, disabled) => {
+      const btn = el('button', {
+        class: 'approval-filter-pill' + (isActive ? ' active' : '') + (disabled ? ' disabled' : ''),
+        title: label,
+        disabled: disabled ? true : false
+      });
+      btn.appendChild(document.createTextNode(label));
+      if (count !== undefined) {
+        btn.appendChild(document.createTextNode(' '));
+        btn.appendChild(el('span', { class: 'approval-filter-pill-count', text: String(count) }));
+      }
+      if (!disabled) {
+        btn.addEventListener('click', () => onSelect(key));
+      }
+      wrap.appendChild(btn);
+    };
+
+    add('all', 'All', total, selected === 'all', false);
+    categories.forEach(cat => {
+      const count = (cat.items || []).length;
+      if (count === 0) return;
+      add(cat.key, cat.label, count, selected === cat.key, false);
+    });
+
+    return wrap;
+  },
+
+  renderCategoryCard(category) {
+    const card = el('div', { class: 'approval-category-card' });
+
+    const header = el('div', { class: 'approval-category-header' });
+    const title = el('div', { class: 'approval-category-title' });
+    title.appendChild(el('span', { text: category.label }));
+    const countText = category.items.length + (category.items.length === 1 ? ' item' : ' items');
+    title.appendChild(el('span', { class: 'count', text: countText }));
+    header.appendChild(title);
+    card.appendChild(header);
+
+    const list = el('div', { class: 'approval-items-list' });
+    category.items.forEach((item, idx) => {
+      list.appendChild(category.renderItem(item, idx));
+    });
+    card.appendChild(list);
+
+    return card;
+  },
+
+  /**
+   * Build a single archive row with hover-reveal actions.
+   * @param {Object} opts
+   * @param {string} opts.iconHtml - SVG string for the status icon.
+   * @param {string} [opts.keyText] - small key label.
+   * @param {string} opts.title - primary row title.
+   * @param {string} [opts.description] - secondary text.
+   * @param {Array<HTMLElement>} [opts.metaNodes] - nodes appended to the meta row.
+   * @param {Array<{label, onClick, className, iconHtml}>} [opts.actions] - action buttons.
+   * @returns {HTMLElement}
+   */
+  renderItemRow({ iconHtml, keyText, title, description, metaNodes = [], actions = [] }) {
+    const row = el('div', { class: 'approval-item' });
+
+    const icon = el('div', { class: 'approval-item-icon' });
+    icon.innerHTML = iconHtml || '';
+    row.appendChild(icon);
+
+    const body = el('div', { class: 'approval-item-body' });
+    if (keyText) body.appendChild(el('div', { class: 'approval-item-key', text: keyText }));
+    body.appendChild(el('div', { class: 'approval-item-title', text: title }));
+    if (description) body.appendChild(el('div', { class: 'approval-item-desc', text: description }));
+
+    const meta = el('div', { class: 'approval-item-meta' });
+    metaNodes.forEach(n => meta.appendChild(n));
+    if (meta.children.length) body.appendChild(meta);
+
+    row.appendChild(body);
+
+    if (actions.length) {
+      const act = el('div', { class: 'approval-item-actions' });
+      actions.forEach(a => {
+        const btn = el('button', {
+          class: 'btn btn-sm ' + (a.className || 'btn-secondary'),
+          title: a.label,
+          type: 'button'
+        });
+        btn.innerHTML = (a.iconHtml || '') + ' ' + escapeHtml(a.label);
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          a.onClick();
+        });
+        act.appendChild(btn);
+      });
+      row.appendChild(act);
+    }
+
+    return row;
+  },
+
+  metaNode(html, text, className = '') {
+    const span = el('span', { class: className });
+    span.innerHTML = (html || '') + '<span>' + escapeHtml(text) + '</span>';
+    return span;
+  },
+
+  dateNode(date) {
+    const node = this.metaNode(BoardCardIcons.calendar, formatDate(date), 'approval-item-date');
+    return node;
+  },
+
+  amountNode(amount) {
+    return el('span', { class: 'approval-item-amount', text: formatPHP(amount) });
+  },
+
+  badgeNode(text, opts = {}) {
+    return el('span', { class: 'submitter-badge ' + (opts.className || ''), text });
+  }
+};
 
