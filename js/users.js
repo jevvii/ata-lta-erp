@@ -9,7 +9,7 @@ const Users = {
   pendingCategory: sessionStorage.getItem('admin_pending_category') || 'all',
 
   render() {
-    const container = el('div', { class: 'page' });
+    const container = el('div', { class: 'page admin-tab-page' });
 
     // Keep the main "Admin" page header but drop the nested breadcrumb
     const titleBar = el('div', { class: 'page-title-bar-v2' });

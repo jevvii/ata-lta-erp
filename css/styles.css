@@ -1360,6 +1360,10 @@ tbody tr:hover {
   top: var(--clients-title-bar-height, 48px);
 }
 
+.admin-tab-page .module-tab-nav {
+  top: var(--admin-title-bar-height, 48px);
+}
+
 .billing-tab-page .board-v2 {
   overflow: visible;
   min-height: calc(100vh - var(--billing-title-bar-height, 48px) - var(--billing-tab-nav-height, 45px) - var(--billing-toolbar-height, 40px) - 80px);
