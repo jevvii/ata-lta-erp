@@ -516,9 +516,9 @@ const Workflow = {
         if (hint.route) {
           location.hash = hint.route;
         } else if (hint.action === 'edit_wr' && ctx.wrId) {
-          location.hash = '#workflow/edit/' + ctx.wrId;
+          location.hash = '#operations/form/' + ctx.wrId;
         } else if (hint.action === 'tasks' && ctx.wrId) {
-          location.hash = '#workflow/detail/' + ctx.wrId;
+          location.hash = '#operations/detail/' + ctx.wrId;
         }
       });
       footer.appendChild(actionBtn);
@@ -3200,12 +3200,8 @@ const Workflow = {
         const currentPhaseIdx = boardPhases.findIndex(p => p.statuses.includes(item.status));
         const targetPhaseIdx = boardPhases.findIndex(p => p.targetStatus === targetStatus);
         if (currentPhaseIdx === -1 || targetPhaseIdx === -1) return false;
-        // Only allow forward progression; backward moves are rejected and trigger the blocker.
+        // Silently reject backward moves so cards return to their original position.
         return targetPhaseIdx > currentPhaseIdx;
-      },
-      onDropDenied: ({ item, targetStatus }) => {
-        const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
-        self.showRoutingBlocker('Backward Routing Not Allowed', [`Work Requests cannot be moved back to "${targetPhaseLabel}" once advanced.`], { wrId: item.id });
       },
       orderField: 'boardOrder',
       onDrop: handleBoardDrop

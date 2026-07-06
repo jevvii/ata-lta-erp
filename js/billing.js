@@ -736,10 +736,8 @@ const Billing = {
         const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
         const currentIdx = flow.indexOf(item.status);
         const targetIdx = flow.indexOf(targetStatus);
-        if (currentIdx !== -1 && targetIdx !== -1 && targetIdx < currentIdx) {
-          Workflow.showRoutingBlocker('Backward Status Change Not Allowed', [`Invoice "${item.invoiceNumber}" cannot be moved back to "${targetStatus}" once advanced.`]);
-          return;
-        }
+        // Silently ignore backward moves so cards return to their original position.
+        if (currentIdx !== -1 && targetIdx !== -1 && targetIdx < currentIdx) return;
 
         if (targetStatus !== 'Partially Paid' && targetStatus !== 'Paid') return;
         const paid = self.getPaidAmount(item);
