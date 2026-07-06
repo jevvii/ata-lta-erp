@@ -1837,15 +1837,20 @@ const Workflow = {
       const record = isTemplate
         ? (this.templateEditingId ? DB.getById('retainerTemplates', this.templateEditingId) : null)
         : (this.editingId ? DB.getById('workRequests', this.editingId) : null);
+
+      const actions = [];
+      if (!isTemplate) {
+        actions.push({ text: isNew ? 'Submit Request' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'wr-form' });
+      }
+      actions.push({ text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } });
+
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Operations',
         baseHash: '#operations',
         currentText: isTemplate
           ? (isNew ? 'New Retainer Template' : (record?.name || 'Edit Template'))
           : (isNew ? 'New Work Request' : (record?.title || 'Edit Work Request')),
-        actions: [
-          { text: '← Back to Operations', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } }
-        ]
+        actions: actions
       }));
     }
 
@@ -4071,7 +4076,7 @@ const Workflow = {
 
     // Pre-populate existing tasks if editing
     if (wr) {
-      const existingTasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
+      const existingTasks = wr.tasks || DB.getWhere('tasks', t => t.workRequestId === wr.id);
       existingTasks.forEach(t => this.addTaskRow(tasksList, t));
     } else {
       this.addTaskRow(tasksList);

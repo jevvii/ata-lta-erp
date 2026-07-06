@@ -69,7 +69,8 @@ const Billing = {
         baseHash: '#billing',
         currentText: isNew ? 'New Invoice' : (inv?.invoiceNumber || 'Edit Invoice'),
         actions: [
-          { text: '← Back to Invoices', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
+          { text: isNew ? 'Save Invoice' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'invoice-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
         ]
       }));
     } else {

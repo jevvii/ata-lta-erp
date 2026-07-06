@@ -518,6 +518,12 @@ const App = {
         Transmittal.view = 'list';
         Transmittal.detailId = null;
       }
+    } else if (baseHash === '#clients') {
+      if (pathParts[1] === 'form') {
+        Clients.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else {
+        Clients.editingId = null;
+      }
     }
 
     const moduleMap = {
