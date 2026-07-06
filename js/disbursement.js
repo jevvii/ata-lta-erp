@@ -2496,7 +2496,7 @@ const Disbursement = {
         DB.insert('disbursementTemplates', templateData);
       }
       this.view = 'templates';
-      closeFormPanelAndRoute();
+      closeFormPanelAndRoute('#disbursement');
     });
 
     formWrap.appendChild(form);
@@ -2506,7 +2506,7 @@ const Disbursement = {
     const footer = el('div', { class: 'side-pane-form-footer' });
     footer.appendChild(el('button', { type: 'submit', form: 'disb-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
     const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute());
+    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#disbursement'));
     footer.appendChild(cancelBtn);
     container.appendChild(footer);
 

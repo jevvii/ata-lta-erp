@@ -9527,7 +9527,7 @@ const Workflow = {
               newTabRoute: fullPageRoute,
               actions: [
                 { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
+                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
               ]
             });
           }
@@ -9548,7 +9548,7 @@ const Workflow = {
               newTabRoute: fullPageRoute,
               actions: [
                 { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
+                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
               ]
             });
           }
@@ -9596,7 +9596,7 @@ const Workflow = {
           DB.delete('retainerTemplates', template.id);
           this.view = 'templates'; 
           this.templateEditingId = null; 
-          App.handleRoute();
+          closeFormPanelAndRoute('#operations');
         }, 'danger');
       });
       topActions.appendChild(delBtn);
@@ -9767,7 +9767,7 @@ const Workflow = {
 
     this.view = 'templates';
     this.templateEditingId = null;
-    closeFormPanelAndRoute();
+    closeFormPanelAndRoute('#operations');
   },
 
   renderArchive() {

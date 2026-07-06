@@ -2901,7 +2901,8 @@ const Billing = {
         record.createdAt = new Date().toISOString();
         DB.insert('billingTemplates', record);
       }
-      closeFormPanelAndRoute();
+      this.view = 'templates';
+      closeFormPanelAndRoute('#billing');
     });
 
     formWrap.appendChild(form);
@@ -2911,7 +2912,7 @@ const Billing = {
     const footer = el('div', { class: 'side-pane-form-footer' });
     footer.appendChild(el('button', { type: 'submit', form: 'billing-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
     const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute());
+    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#billing'));
     footer.appendChild(cancelBtn);
     container.appendChild(footer);
 
