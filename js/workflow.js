@@ -132,10 +132,6 @@ const Workflow = {
   },
 
   cleanup() {
-    if (this._jiraToolbarKeydownListener) {
-      document.removeEventListener('keydown', this._jiraToolbarKeydownListener);
-      this._jiraToolbarKeydownListener = null;
-    }
     if (this._jiraToolbarClickListener) {
       document.removeEventListener('click', this._jiraToolbarClickListener);
       this._jiraToolbarClickListener = null;
@@ -2110,7 +2106,8 @@ const Workflow = {
     const groupOptions = [
       { key: 'none', label: 'None' },
       { key: 'assignee', label: 'Assignee' },
-      { key: 'client', label: 'Client' }
+      { key: 'client', label: 'Client' },
+      { key: 'priority', label: 'Priority' }
     ];
 
     // Active filter state (Jira-style multi-select per category)
@@ -2259,7 +2256,7 @@ const Workflow = {
 
     // Group dropdown
     const groupWrap = el('div', { class: 'jira-group-wrap' });
-    const groupIconSvg = ViewIcons.group;
+    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
     const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     const groupTrigger = el('button', {
       type: 'button',
@@ -2584,31 +2581,8 @@ const Workflow = {
     stickyContainer.appendChild(jiraToolbar);
     wrapper.appendChild(stickyContainer);
 
-    // Keyboard shortcut handler for Shift + F
-    if (!this._jiraToolbarKeydownListener) {
-      this._jiraToolbarKeydownListener = (e) => {
-        if (e.shiftKey && (e.key === 'F' || e.key === 'f')) {
-          const activeEl = document.activeElement;
-          const activeTag = activeEl ? activeEl.tagName : '';
-          const isTypingInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag) || activeEl?.isContentEditable;
-          const isInsideFilterDropdown = activeEl?.closest('.jira-filter-dropdown');
-          if (isTypingInput && !activeEl?.classList?.contains('jira-filter-search') && !isInsideFilterDropdown) return;
-
-          const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
-          const activeFilterWrap = operationsContainer ? operationsContainer.querySelector('.jira-filter-wrap') : null;
-          if (activeFilterWrap) {
-            e.preventDefault();
-            const trigger = activeFilterWrap.querySelector('.jira-filter-trigger');
-            if (trigger && typeof trigger._toggleFilterDropdown === 'function') {
-              trigger._toggleFilterDropdown(e);
-            } else if (trigger) {
-              trigger.click();
-            }
-          }
-        }
-      };
-      document.addEventListener('keydown', this._jiraToolbarKeydownListener);
-    }
+    // Use the shared global Shift+F shortcut listener (Operations builds its own toolbar)
+    if (typeof attachJiraGlobalShortcuts === 'function') attachJiraGlobalShortcuts();
 
     // Close dropdowns when clicking outside (setup once)
     if (!this._jiraToolbarClickListener) {
@@ -3215,6 +3189,9 @@ const Workflow = {
           const client = DB.getById('clients', wr.clientId);
           return client?.name || 'No Client';
         }
+        if (groupBy === 'priority') {
+          return wr.priority || 'No Priority';
+        }
         return 'All';
       };
 
@@ -3225,7 +3202,7 @@ const Workflow = {
         groupMap.get(name).push(wr);
       });
 
-      const specialLast = groupBy === 'assignee' ? 'Unassigned' : 'No Client';
+      const specialLast = groupBy === 'assignee' ? 'Unassigned' : groupBy === 'client' ? 'No Client' : 'No Priority';
       const groupNames = Array.from(groupMap.keys()).sort((a, b) => {
         if (a === specialLast) return 1;
         if (b === specialLast) return -1;

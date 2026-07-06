@@ -56,7 +56,7 @@ const Clients = {
     const archiveContainer = el('div', { class: 'archive-container' + (this.activeTab === 'active' ? ' hidden' : '') });
     container.appendChild(archiveContainer);
     if (this.activeTab === 'archived') {
-      this.renderArchive(archiveContainer, '');
+      archiveContainer.appendChild(this.renderArchive(''));
     }
 
     search.addEventListener('input', debounce(() => {
@@ -64,7 +64,8 @@ const Clients = {
       if (this.activeTab === 'active') {
         this.renderList(listContainer, q);
       } else {
-        this.renderArchive(archiveContainer, q);
+        this.clearNode(archiveContainer);
+        archiveContainer.appendChild(this.renderArchive(q));
       }
     }, 200));
 
@@ -111,15 +112,41 @@ const Clients = {
       return matchesEntity && c.status !== 'Archived';
     }).length;
 
+    const isAdmin = Auth.user?.role === 'Admin';
+
     const archivedCount = DB.getWhere('clients', c => {
       const cEnt = (c.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(cEnt) : cEnt === entity.toUpperCase());
       return matchesEntity && c.status === 'Archived';
     }).length;
 
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    const rejectedClientChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity)) return false;
+      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'client' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const rejectedCount = rejectedClientChanges.length + rejectedClientRequests.length;
+    const archiveCount = archivedCount + rejectedCount;
+
     const tabs = [
       { key: 'active', label: 'Active Clients', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', count: activeCount },
-      { key: 'archived', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archivedCount }
+      { key: 'archived', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
     tabs.forEach(tab => {
@@ -681,6 +708,13 @@ const Clients = {
     App.handleRoute();
   },
 
+  unarchiveClient(id) {
+    const client = DB.getById('clients', id);
+    if (!client || client.status !== 'Archived') return;
+    DB.update('clients', id, { status: 'Active', archived: false, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
+
   getArchivedClients(query) {
     const entity = Auth.activeEntity;
     let clients = DB.getWhere('clients', c => {
@@ -700,117 +734,112 @@ const Clients = {
     return clients;
   },
 
-  renderArchive(container, query) {
-    this.clearNode(container);
-    const archivedClients = this.getArchivedClients(query);
+  renderArchive(query = '') {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
 
-    if (archivedClients.length === 0) {
-      container.appendChild(el('p', { text: 'No archived clients found.', class: 'empty-state' }));
-      return;
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    let archived = DB.getWhere('clients', c => entFilter(c.entity) && c.status === 'Archived');
+    if (query) {
+      const q = query.toLowerCase();
+      archived = archived.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.tradeName || '').toLowerCase().includes(q) ||
+        (c.tin || '').toLowerCase().includes(q)
+      );
     }
 
-    const wrapper = el('div', { class: 'archive-list' });
-
-    archivedClients.forEach(c => {
-      const pocUser = DB.getById('users', c.contactUserId);
-      const panel = el('div', { class: 'accordion-panel collapsed', style: 'margin-bottom: var(--spacing-md); border-color: var(--color-border);' });
-      
-      // Accordion Header
-      const header = el('div', { class: 'accordion-header', style: 'display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;' });
-      
-      const titleWrap = el('div', {}, [
-        el('strong', { text: c.name, style: 'font-size: 1rem; color: var(--color-text);' }),
-        el('span', { text: ' (TIN: ' + c.tin + ')', style: 'color: var(--color-text-muted); font-size: 0.875rem; margin-left: 8px;' })
-      ]);
-      
-      header.appendChild(titleWrap);
-      panel.appendChild(header);
-
-      // Accordion Content
-      const content = el('div', { class: 'accordion-content', style: 'padding: 16px; background: var(--color-bg-muted);' });
-
-      // Client info block
-      const infoBlock = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; font-size: 0.875rem;' }, [
-        el('div', {}, [ el('strong', { text: 'Trade Name: ' }), el('span', { text: c.tradeName || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Address: ' }), el('span', { text: c.address || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Point of Contact: ' }), el('span', { text: pocUser?.name || c.contactPerson || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Retainer Client: ' }), el('span', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }) ])
-      ]);
-      content.appendChild(infoBlock);
-
-      // Fetch cancelled work requests
-      const wrs = DB.getWhere('workRequests', wr => wr.clientId === c.id);
-      
-      // Work Requests Sub-section
-      content.appendChild(el('h4', { text: 'Cancelled Work Requests', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: var(--color-text);' }));
-      if (wrs.length === 0) {
-        content.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
-      } else {
-        const wrTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; margin-bottom: 16px;' }, [
-          el('thead', {}, [
-            el('tr', {}, [
-              el('th', { text: 'Title' }),
-              el('th', { text: 'Priority' }),
-              el('th', { text: 'Due Date' }),
-              el('th', { text: 'Status' })
-            ])
-          ])
-        ]);
-        const wrTbody = el('tbody');
-        wrs.forEach(wr => {
-          wrTbody.appendChild(el('tr', {}, [
-            el('td', { text: wr.title }),
-            el('td', { text: wr.priority }),
-            el('td', { text: wr.dueDate }),
-            el('td', {}, [ el('span', { class: 'badge badge-danger', text: wr.status }) ])
-          ]));
-        });
-        wrTable.appendChild(wrTbody);
-        content.appendChild(wrTable);
-      }
-
-      // Fetch archived documents
-      const wrIds = wrs.map(wr => wr.id);
-      const docs = DB.getWhere('documents', d => wrIds.includes(d.workRequestId) && (d.status === 'Archived' || d.archived === true));
-
-      // Documents Sub-section
-      content.appendChild(el('h4', { text: 'Archived Documents', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: var(--color-text);' }));
-      if (docs.length === 0) {
-        content.appendChild(el('p', { text: 'No archived documents found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
-      } else {
-        const docTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem;' }, [
-          el('thead', {}, [
-            el('tr', {}, [
-              el('th', { text: 'File Name' }),
-              el('th', { text: 'Type' }),
-              el('th', { text: 'Category' }),
-              el('th', { text: 'Upload Date' })
-            ])
-          ])
-        ]);
-        const docTbody = el('tbody');
-        docs.forEach(d => {
-          docTbody.appendChild(el('tr', {}, [
-            el('td', { text: d.fileName }),
-            el('td', { text: d.document_type || '—' }),
-            el('td', { text: d.category || '—' }),
-            el('td', { text: new Date(d.uploadDate).toLocaleDateString() })
-          ]));
-        });
-        docTable.appendChild(docTbody);
-        content.appendChild(docTable);
-      }
-
-      panel.appendChild(content);
-
-      // Event listener to toggle panel collapse
-      header.addEventListener('click', () => {
-        panel.classList.toggle('collapsed');
-      });
-
-      wrapper.appendChild(panel);
+    const rejectedClientChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity)) return false;
+      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      return true;
     });
 
-    container.appendChild(wrapper);
+    const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'client' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const canEdit = Auth.can('clients:edit');
+
+    const buildItem = (c, category) => {
+      const pocUser = DB.getById('users', c.contactUserId);
+      return {
+        id: c.id,
+        category,
+        title: c.name || '(untitled)',
+        description: `TIN: ${c.tin || '—'}`,
+        meta: [
+          { icon: ArchivePage.icons.client, text: pocUser?.name || c.contactPerson || '—' },
+          { icon: ArchivePage.icons.status, text: c.tradeName || '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(c.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#clients/form/' + c.id; }
+          },
+          ...(category === 'accomplished' && canEdit ? [{
+            label: 'Restore',
+            icon: ArchivePage.icons.restore,
+            className: 'primary',
+            onClick: () => self.unarchiveClient(c.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = record => {
+      const isOpReq = record.hasOwnProperty('requestedBy');
+      const data = isOpReq ? record : (record.proposedData || {});
+      const clientId = isOpReq ? record.clientId : data.id;
+      const client = clientId ? DB.getById('clients', clientId) : null;
+      const title = isOpReq
+        ? `Client Request ${client ? '— ' + (client.name || '') : ''}`
+        : `Client Change: ${data.name || '(untitled)'}`;
+      const reason = data.rejectionReason || record.rejectionReason || 'Rejected';
+      return {
+        id: record.id,
+        category: 'rejected',
+        title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: client ? (client.name || '—') : '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(record.reviewedAt || record.updatedAt || record.requestedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${reason}` }
+        ],
+        actions: [
+          ...(clientId ? [{
+            label: 'View Client',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#clients/form/' + clientId; }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'clients',
+      categoryLabels: { accomplished: 'Archived', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: archived.map(c => buildItem(c, 'accomplished')),
+        cancelled: [],
+        rejected: [
+          ...rejectedClientChanges.map(buildRejectedItem),
+          ...rejectedClientRequests.map(buildRejectedItem)
+        ]
+      },
+      emptyText: 'Archive is empty.'
+    });
   }
 };

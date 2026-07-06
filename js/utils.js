@@ -1928,7 +1928,20 @@ function createJiraFilterToolbar(config) {
     toolbar.appendChild(groupWrap);
   }
 
-  // Attach global Shift+F shortcut listener once
+  // Attach global Shift+F shortcut and outside-click listeners once.
+  attachJiraGlobalShortcuts();
+
+  updateFilterUI();
+  container.appendChild(toolbar);
+  return container;
+}
+
+/**
+ * Attach the global Shift+F filter shortcut and outside-click dropdown closer once.
+ * Called automatically by createJiraFilterToolbar() and can be called manually by
+ * modules that build their own Jira-style toolbar (e.g. Operations).
+ */
+function attachJiraGlobalShortcuts() {
   if (!window._jiraGlobalShortcutListenerAttached) {
     window._jiraGlobalShortcutListenerAttached = true;
     document.addEventListener('keydown', (e) => {
@@ -1948,7 +1961,6 @@ function createJiraFilterToolbar(config) {
     });
   }
 
-  // Attach global click-outside listener once
   if (!window._jiraGlobalClickListenerAttached) {
     window._jiraGlobalClickListenerAttached = true;
     document.addEventListener('click', (e) => {
@@ -1966,10 +1978,6 @@ function createJiraFilterToolbar(config) {
       document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
     });
   }
-
-  updateFilterUI();
-  container.appendChild(toolbar);
-  return container;
 }
 
 /**
