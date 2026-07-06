@@ -2763,7 +2763,61 @@ const Billing = {
             }
           }
         ];
-      }
+      },
+      bulkActions: (selectedIds) => [
+        {
+          text: '⚡ Bulk Generate Invoices',
+          className: 'btn btn-primary btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Bulk Generate Invoices', `Are you sure you want to generate invoices for all ${ids.length} selected templates?`, () => {
+              let count = 0;
+              ids.forEach(id => {
+                const t = templates.find(temp => temp.id === id);
+                if (t) {
+                  const entity = Auth.activeEntity;
+                  const now = new Date();
+                  const inv = {
+                    id: generateSequentialId('inv', 'invoices'),
+                    clientId: t.clientId,
+                    entity: entity,
+                    invoiceNumber: this.nextInvoiceNumber(entity),
+                    issueDate: now.toISOString().slice(0, 10),
+                    dueDate: new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()).toISOString().slice(0, 10),
+                    status: 'Draft',
+                    lineItems: deepClone(t.lineItems || []),
+                    subtotal: t.pfAmount || 0,
+                    vat: 0,
+                    total: t.pfAmount || 0,
+                    paidAmount: 0,
+                    payments: [],
+                    fromTemplate: t.id,
+                    createdBy: Auth.user.id,
+                    createdAt: now.toISOString(),
+                    updatedAt: now.toISOString()
+                  };
+                  DB.insert('invoices', inv);
+                  count++;
+                }
+              });
+              Workflow.showMessage('Success', `Generated ${count} invoices successfully.`, 'success');
+              this.view = 'list';
+              App.handleRoute();
+            });
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${ids.length} selected templates?`, () => {
+              ids.forEach(id => {
+                DB.delete('billingTemplates', id);
+              });
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ]
     });
 
     wrapper.appendChild(backlog);

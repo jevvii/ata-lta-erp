@@ -13513,16 +13513,7 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-backlog-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.15s ease;
-  transform: rotate(-90deg);
-  color: var(--color-text-muted);
-}
-
-.jira-backlog-chevron.active {
-  transform: rotate(0deg);
+  display: none !important;
 }
 
 .jira-backlog-title-text {
@@ -13827,4 +13818,114 @@ html.loading-active #loading-screen:not(.hidden) {
   background: rgba(37, 99, 235, 0.15);
   color: #60a5fa;
   border-color: rgba(37, 99, 235, 0.3);
+}
+
+/* ── Backlog Tags Fixed-Width Column Alignment ──────────── */
+.jira-backlog-tag-client {
+  min-width: 160px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  justify-content: flex-start;
+}
+
+.jira-backlog-tag-schedule {
+  min-width: 100px;
+  justify-content: center;
+}
+
+.jira-backlog-tag-category {
+  min-width: 120px;
+  justify-content: center;
+}
+
+.jira-backlog-tag-fund {
+  min-width: 110px;
+  justify-content: center;
+}
+
+.jira-backlog-tag-amount {
+  min-width: 120px;
+  justify-content: flex-end;
+}
+
+/* ── Floating Bulk Action Bar ──────────── */
+.jira-backlog-bulk-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #172b4d;
+  color: #ffffff;
+  padding: 10px 20px;
+  border-radius: 99px;
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 1000;
+  font-size: 0.875rem;
+  font-weight: 500;
+  animation: slideUpFade 0.2s cubic-bezier(0.15, 1, 0.3, 1);
+}
+
+@keyframes slideUpFade {
+  from {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.jira-backlog-bulk-count {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.jira-backlog-bulk-divider {
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 300;
+}
+
+.jira-backlog-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jira-backlog-bulk-actions .btn {
+  border-radius: 99px;
+  padding: 4px 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+}
+
+.jira-backlog-bulk-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.jira-backlog-bulk-close:hover {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .jira-backlog-bulk-bar {
+  background: #2c3e50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }

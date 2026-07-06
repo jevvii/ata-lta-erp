@@ -2305,7 +2305,68 @@ const Disbursement = {
             }
           }
         ];
-      }
+      },
+      bulkActions: (selectedIds) => [
+        {
+          text: '⚡ Bulk Generate Disbursements',
+          className: 'btn btn-primary btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Bulk Generate Disbursements', `Are you sure you want to generate disbursements for all ${ids.length} selected templates?`, () => {
+              let count = 0;
+              ids.forEach(id => {
+                const t = templates.find(temp => temp.id === id);
+                if (t) {
+                  const record = {
+                    id: generateSequentialId('dis', 'disbursements'),
+                    category: t.category,
+                    description: t.description || t.name,
+                    amount: t.amount,
+                    fundSource: t.fundSource,
+                    linkedInvoiceId: t.linkedInvoiceId || null,
+                    linkedWorkRequestId: t.linkedWorkRequestId || null,
+                    entity: t.entity,
+                    fromTemplate: t.id,
+                    employeeId: Auth.user.id,
+                    requestedBy: Auth.user.id,
+                    status: 'Draft',
+                    submittedAt: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
+                    receiptFilename: null,
+                    paymentHandledBy: '',
+                    paymentDetails: { method: '', reference: '', bank: '', date: '', processedBy: '' }
+                  };
+                  DB.insert('disbursements', record);
+
+                  if (record.linkedWorkRequestId) {
+                    const wr = DB.getById('workRequests', record.linkedWorkRequestId);
+                    if (wr) {
+                      const linkedIds = new Set(wr.linkedDisbursementIds || []);
+                      linkedIds.add(record.id);
+                      DB.update('workRequests', wr.id, { linkedDisbursementIds: Array.from(linkedIds) });
+                    }
+                  }
+                  count++;
+                }
+              });
+              Workflow.showMessage('Success', `Generated ${count} disbursements successfully.`, 'success');
+              this.view = 'list';
+              App.handleRoute();
+            });
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${ids.length} selected templates?`, () => {
+              ids.forEach(id => {
+                DB.delete('disbursementTemplates', id);
+              });
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ]
     });
 
     wrapper.appendChild(backlog);

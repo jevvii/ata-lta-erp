@@ -2512,7 +2512,8 @@ const JiraBacklogList = {
       emptyText = 'No templates found',
       headerActions = [],
       rowActions = () => [],
-      rowIdPrefix = 'TPL'
+      rowIdPrefix = 'TPL',
+      bulkActions
     } = options;
 
     const container = el('div', { class: 'jira-backlog-container' });
@@ -2520,13 +2521,15 @@ const JiraBacklogList = {
     // Header
     const header = el('div', { class: 'jira-backlog-header' });
     
-    // Left side info
-    const headerLeft = el('div', { class: 'jira-backlog-header-left' });
-    const chevron = el('span', {
-      class: 'jira-backlog-chevron active',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    // Left side info (Select All checkbox replaces chevron)
+    const headerLeft = el('div', { class: 'jira-backlog-header-left', style: 'cursor: default;' });
+    
+    const selectAllCheckbox = el('input', {
+      type: 'checkbox',
+      class: 'jira-backlog-header-checkbox',
+      style: 'margin-right: 8px; cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
     });
-    headerLeft.appendChild(chevron);
+    headerLeft.appendChild(selectAllCheckbox);
     
     const titleText = el('div', { class: 'jira-backlog-title-text' });
     titleText.appendChild(el('span', { class: 'jira-backlog-title', text: title }));
@@ -2552,15 +2555,8 @@ const JiraBacklogList = {
     header.appendChild(headerRight);
     container.appendChild(header);
 
-    // Body
+    // Body (Permanent, not collapsible)
     const body = el('div', { class: 'jira-backlog-body' });
-    
-    let isCollapsed = false;
-    headerLeft.addEventListener('click', () => {
-      isCollapsed = !isCollapsed;
-      chevron.classList.toggle('active', !isCollapsed);
-      body.classList.toggle('collapsed', isCollapsed);
-    });
 
     if (items.length === 0) {
       body.appendChild(renderEmptyState(emptyText, null, { variant: 'compact' }));
@@ -2568,16 +2564,118 @@ const JiraBacklogList = {
       return container;
     }
 
+    // Floating Bulk Action Bar (Jira backlog style)
+    const bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
+    
+    const countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
+    bulkBar.appendChild(countInfo);
+    
+    const divider1 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+    bulkBar.appendChild(divider1);
+    
+    const actionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
+    bulkBar.appendChild(actionsContainer);
+    
+    const divider2 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+    bulkBar.appendChild(divider2);
+    
+    const closeBtn = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
+    bulkBar.appendChild(closeBtn);
+    container.appendChild(bulkBar);
+
     const list = el('div', { class: 'jira-backlog-list' });
+
+    const rows = [];
+    const checkBoxes = [];
+
+    const defaultBulkActions = (ids) => [
+      {
+        text: 'Delete',
+        className: 'btn btn-danger btn-sm',
+        onClick: (selectedIds) => {
+          const label = selectedIds.length === 1 ? 'template' : 'templates';
+          Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${selectedIds.length} ${label}?`, () => {
+            selectedIds.forEach(id => {
+              if (rowIdPrefix === 'RT') DB.delete('retainerTemplates', id);
+              else if (rowIdPrefix === 'BL') DB.delete('billingTemplates', id);
+              else if (rowIdPrefix === 'DT') DB.delete('disbursementTemplates', id);
+            });
+            App.handleRoute();
+          }, 'danger');
+        }
+      }
+    ];
+
+    const currentBulkActions = bulkActions || defaultBulkActions;
+
+    const updateSelection = () => {
+      const selectedIds = [];
+      checkBoxes.forEach((chk, idx) => {
+        if (chk.checked) {
+          selectedIds.push(chk.dataset.id);
+          rows[idx].classList.add('selected');
+        } else {
+          rows[idx].classList.remove('selected');
+        }
+      });
+
+      if (selectedIds.length > 0) {
+        countInfo.textContent = `${selectedIds.length} selected`;
+        
+        actionsContainer.innerHTML = '';
+        const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
+        actionsList.forEach(act => {
+          const btn = el('button', {
+            class: act.className || 'btn btn-secondary btn-sm',
+            text: act.text
+          });
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            act.onClick(selectedIds);
+          });
+          actionsContainer.appendChild(btn);
+        });
+        
+        bulkBar.classList.remove('hidden');
+      } else {
+        bulkBar.classList.add('hidden');
+      }
+
+      const allChecked = checkBoxes.length > 0 && checkBoxes.every(c => c.checked);
+      const someChecked = checkBoxes.some(c => c.checked);
+      selectAllCheckbox.checked = allChecked;
+      selectAllCheckbox.indeterminate = someChecked && !allChecked;
+    };
+
+    selectAllCheckbox.addEventListener('change', () => {
+      checkBoxes.forEach(c => {
+        c.checked = selectAllCheckbox.checked;
+      });
+      updateSelection();
+    });
+
+    closeBtn.addEventListener('click', () => {
+      checkBoxes.forEach(c => {
+        c.checked = false;
+      });
+      updateSelection();
+    });
 
     items.forEach((item, index) => {
       const row = el('div', { class: 'jira-backlog-row', 'data-item-id': item.id });
+      rows.push(row);
       
-      // Checkbox container (shows on hover)
+      // Checkbox container (shows on hover, stays visible when checked)
       const checkboxWrap = el('div', { class: 'jira-backlog-row-checkbox-wrap' });
-      const chk = el('input', { type: 'checkbox', class: 'jira-backlog-row-checkbox' });
+      const chk = el('input', { 
+        type: 'checkbox', 
+        class: 'jira-backlog-row-checkbox',
+        'data-id': item.id
+      });
+      checkBoxes.push(chk);
+
       chk.addEventListener('change', () => {
-        row.classList.toggle('selected', chk.checked);
+        updateSelection();
       });
       checkboxWrap.addEventListener('click', (e) => {
         if (e.target !== chk) {
