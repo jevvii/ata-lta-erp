@@ -12103,3 +12103,29 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Scrollbars */
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--color-border); }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
+
+/* Redesigned My Submissions Staff Page Custom Styles */
+.circular-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 6px;
+  transition: all 0.2s ease;
+}
+
+.module-tab-link.active .circular-count-badge {
+  background: var(--color-primary-alpha);
+  color: var(--color-primary);
+}
+
+.module-tab-link:not(.active) .circular-count-badge {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}

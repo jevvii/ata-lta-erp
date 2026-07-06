@@ -173,7 +173,7 @@ const App = {
       const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getAllPending === 'function') ? PendingChanges.getAllPending() : [];
       const adminCount = count + pendingChanges.length;
       const adminNav = document.querySelector('nav a[href="#admin"]');
-      if (adminNav && Auth.user?.role !== 'Manager') {
+      if (adminNav) {
         let adminBadge = adminNav.querySelector('.nav-badge');
         if (adminCount > 0) {
           if (!adminBadge) {
@@ -193,7 +193,7 @@ const App = {
       const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
       const staffCount = pendingChanges.length + rejectedChanges.length + myReqs.length;
       const adminNav = document.querySelector('nav a[href="#admin"]');
-      if (adminNav && Auth.user?.role !== 'Manager') {
+      if (adminNav) {
         let adminBadge = adminNav.querySelector('.nav-badge');
         if (staffCount > 0) {
           if (!adminBadge) {
@@ -265,18 +265,14 @@ const App = {
     }
     this.renderEntitySwitcher();
 
-    // Configure Admin / My Submissions nav link dynamically based on role/permissions
     const adminNav = document.querySelector('nav a[href="#admin"]');
     if (adminNav) {
-      const canManageUsers = Auth.can('users:view');
       const labelEl = adminNav.querySelector('.nav-link-text');
-      if (Auth.user.role === 'Manager') {
-        adminNav.parentElement.style.display = 'none';
-      } else if (canManageUsers) {
+      if (Auth.user.role === 'Admin') {
         adminNav.parentElement.style.display = '';
         if (labelEl) labelEl.textContent = 'Admin';
       } else {
-        // Staff-level user: show as "My Submissions"
+        // Manager and other staff roles: show as "My Submissions"
         adminNav.parentElement.style.display = '';
         if (labelEl) labelEl.textContent = 'My Submissions';
       }
@@ -530,7 +526,7 @@ const App = {
       '#admin': Users
     };
 
-    // RBAC: Restricted modules
+    // Restrict reports and disbursement based on RBAC
     if (baseHash === '#reports' && !Auth.can('reports:view')) {
        location.hash = '#dashboard';
        return;
@@ -540,10 +536,6 @@ const App = {
        return;
     }
     if (baseHash === '#transmittal' && !Auth.can('transmittal:view') && !Auth.can('transmittal:request')) {
-       location.hash = '#dashboard';
-       return;
-    }
-    if (baseHash === '#admin' && Auth.user.role === 'Manager') {
        location.hash = '#dashboard';
        return;
     }

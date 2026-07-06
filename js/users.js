@@ -6,6 +6,11 @@ const Users = {
   view: 'users', // 'users' | 'audit' | 'pending'
   editingId: null,
   pendingDetailId: null,
+  filters: {
+    category: '',
+    status: '',
+    date: ''
+  },
 
   render() {
     const container = el('div', { class: 'page' });
@@ -16,31 +21,231 @@ const Users = {
     container.appendChild(titleBar);
     this.updateBreadcrumb(h1);
 
-    const canManageUsers = Auth.can('users:view');
+    const isStaffOrManager = Auth.user.role !== 'Admin';
 
-    // Tabs
-    const tabs = el('div', { class: 'admin-tabs' });
-    tabs.style.marginBottom = '20px'; // align layout nicely below breadcrumb
+    if (isStaffOrManager) {
+      // Initialize view state dynamically to prevent view state bleed-through
+      if (this.lastUserId !== Auth.user.id) {
+        this.lastUserId = Auth.user.id;
+        const defaultToRequests = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
+        this.view = defaultToRequests ? 'myRequests' : 'myPending';
+        this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
+      }
 
-    if (canManageUsers) {
+      const showRequestsTab = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
+      if (this.view === 'myRequests' && !showRequestsTab) {
+        this.view = 'myPending';
+      }
+      if (!['myPending', 'myRequests'].includes(this.view)) {
+        this.view = showRequestsTab ? 'myRequests' : 'myPending';
+      }
+
+      // Redesigned staff tab bar: text-link style tab bar
+      const tabs = el('div', { class: 'module-tab-nav' });
+      tabs.style.marginBottom = '12px'; // align layout nicely below breadcrumb
+
+      // Calculate counts for badges (pre-filtering)
+      const pendingItems = PendingChanges.getPendingForUser(Auth.user.id);
+      const rejectedItems = PendingChanges.getRejectedForUser(Auth.user.id);
+      const totalPending = pendingItems.length + rejectedItems.length;
+
+      const requestsItems = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
+      const totalRequests = requestsItems.length;
+
+      // 1. Pending submissions tab
+      const isPendingActive = this.view === 'myPending';
+      const myPendingTab = el('button', {
+        class: 'module-tab-link' + (isPendingActive ? ' active' : ''),
+        type: 'button'
+      });
+      // Inline document icon
+      const docIcon = el('span', {
+        class: 'tab-icon',
+        style: 'display: inline-flex; align-items: center;',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'
+      });
+      myPendingTab.appendChild(docIcon);
+      myPendingTab.appendChild(document.createTextNode(' My Pending Submissions'));
+      
+      // Count badge
+      const pendingBadge = el('span', {
+        class: 'circular-count-badge',
+        text: String(totalPending)
+      });
+      myPendingTab.appendChild(pendingBadge);
+      
+      myPendingTab.addEventListener('click', () => {
+        this.view = 'myPending';
+        this.editingId = null;
+        this.pendingDetailId = null;
+        this.filters.category = '';
+        this.filters.status = '';
+        this.filters.dateFrom = '';
+        this.filters.dateTo = '';
+        App.handleRoute();
+      });
+      tabs.appendChild(myPendingTab);
+
+      // 2. Requests tab (only for Operations and Manager)
+      if (showRequestsTab) {
+        const isRequestsActive = this.view === 'myRequests';
+        const myRequestsTab = el('button', {
+          class: 'module-tab-link' + (isRequestsActive ? ' active' : ''),
+          type: 'button'
+        });
+        // Inline paper plane icon
+        const planeIcon = el('span', {
+          class: 'tab-icon',
+          style: 'display: inline-flex; align-items: center;',
+          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>'
+        });
+        myRequestsTab.appendChild(planeIcon);
+        myRequestsTab.appendChild(document.createTextNode(' My Requests'));
+        
+        // Count badge
+        const requestsBadge = el('span', {
+          class: 'circular-count-badge',
+          text: String(totalRequests)
+        });
+        myRequestsTab.appendChild(requestsBadge);
+
+        myRequestsTab.addEventListener('click', () => {
+          this.view = 'myRequests';
+          this.editingId = null;
+          this.pendingDetailId = null;
+          this.filters.category = '';
+          this.filters.status = '';
+          this.filters.dateFrom = '';
+          this.filters.dateTo = '';
+          App.handleRoute();
+        });
+        tabs.appendChild(myRequestsTab);
+      }
+
+      container.appendChild(tabs);
+
+      // --- Filters Bar (matches other module filters) ---
+      const filters = el('div', { class: 'filters-bar' });
+
+      // 1. Categories select
+      const catFilter = el('select', { class: 'form-select' });
+      catFilter.appendChild(el('option', { value: '', text: 'All Categories' }));
+
+      const categoriesList = this.view === 'myPending'
+        ? [
+            { value: 'invoices', text: 'Invoices' },
+            { value: 'disbursements', text: 'Disbursements' },
+            { value: 'transmittals', text: 'Transmittals' },
+            { value: 'clients', text: 'Clients' },
+            { value: 'tasks', text: 'Tasks' }
+          ]
+        : [
+            { value: 'billing', text: 'Billing' },
+            { value: 'disbursement', text: 'Disbursement' },
+            { value: 'transmittal', text: 'Transmittal' }
+          ];
+
+      categoriesList.forEach(c => {
+        catFilter.appendChild(el('option', { value: c.value, text: c.text }));
+      });
+      if (this.filters.category) catFilter.value = this.filters.category;
+      filters.appendChild(wrapFilterFieldWithClear(catFilter));
+
+      // 2. Statuses select
+      const statusFilter = el('select', { class: 'form-select' });
+      statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
+
+      const statusList = this.view === 'myPending'
+        ? [
+            { value: 'pending', text: 'Pending' },
+            { value: 'rejected', text: 'Rejected' }
+          ]
+        : [
+            { value: 'pending', text: 'Pending' },
+            { value: 'fulfilled', text: 'Fulfilled' },
+            { value: 'rejected', text: 'Rejected' }
+          ];
+
+      statusList.forEach(s => {
+        statusFilter.appendChild(el('option', { value: s.value, text: s.text }));
+      });
+      if (this.filters.status) statusFilter.value = this.filters.status;
+      filters.appendChild(wrapFilterFieldWithClear(statusFilter));
+
+      // 3. Date From/To inputs
+      const dateFrom = el('input', { type: 'date', class: 'form-select' });
+      const dateTo = el('input', { type: 'date', class: 'form-select' });
+      if (this.filters.dateFrom) dateFrom.value = this.filters.dateFrom;
+      if (this.filters.dateTo) dateTo.value = this.filters.dateTo;
+      filters.appendChild(el('span', { text: 'From', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
+      filters.appendChild(wrapFilterFieldWithClear(dateFrom));
+      filters.appendChild(el('span', { text: 'To', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
+      filters.appendChild(wrapFilterFieldWithClear(dateTo));
+
+      // 4. Clear All button
+      const clearBtn = el('button', {
+        class: 'btn btn-secondary btn-sm',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
+      });
+      clearBtn.addEventListener('click', () => {
+        catFilter.value = '';
+        statusFilter.value = '';
+        dateFrom.value = '';
+        dateTo.value = '';
+        this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
+        App.handleRoute();
+      });
+      filters.appendChild(clearBtn);
+
+      // Wire change events
+      const refreshFilters = () => {
+        this.filters.category = catFilter.value;
+        this.filters.status = statusFilter.value;
+        this.filters.dateFrom = dateFrom.value;
+        this.filters.dateTo = dateTo.value;
+        App.handleRoute();
+      };
+      catFilter.addEventListener('change', refreshFilters);
+      statusFilter.addEventListener('change', refreshFilters);
+      dateFrom.addEventListener('change', refreshFilters);
+      dateTo.addEventListener('change', refreshFilters);
+
+      container.appendChild(filters);
+
+      // Render content
+      if (this.view === 'myRequests') {
+        container.appendChild(this.renderMyRequestsSection());
+      } else {
+        container.appendChild(this.renderMyPendingSection());
+      }
+
+    } else {
+      // Admin user
+      if (this.lastUserId !== Auth.user.id) {
+        this.lastUserId = Auth.user.id;
+        this.view = 'users';
+      }
+      if (!['users', 'audit', 'pending'].includes(this.view)) {
+        this.view = 'users';
+      }
+
+      const tabs = el('div', { class: 'admin-tabs' });
+      tabs.style.marginBottom = '20px';
+
       const usersTab = el('button', {
         class: 'btn ' + (this.view === 'users' ? 'btn-primary' : 'btn-secondary'),
         text: 'Users'
       });
       usersTab.addEventListener('click', () => { this.view = 'users'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
       tabs.appendChild(usersTab);
-    }
 
-    if (canManageUsers) {
       const auditTab = el('button', {
         class: 'btn ' + (this.view === 'audit' ? 'btn-primary' : 'btn-secondary'),
         text: 'Audit Log'
       });
       auditTab.addEventListener('click', () => { this.view = 'audit'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
       tabs.appendChild(auditTab);
-    }
 
-    if (canManageUsers) {
       const entity = Auth.activeEntity;
       const pendingDisbursements = DB.getWhere('disbursements', d => d.entity === entity && (d.status === 'Submitted' || d.status === 'Under Review'));
       let pendingChanges = PendingChanges.getAllPending();
@@ -57,52 +262,16 @@ const Users = {
       }
       pendingTab.addEventListener('click', () => { this.view = 'pending'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
       tabs.appendChild(pendingTab);
-    } else {
-      const isOperations = Auth.user.role === 'Operations';
-      
-      const myPendingTab = el('button', {
-        class: 'btn ' + (this.view === 'myPending' ? 'btn-primary' : 'btn-secondary'),
-        text: 'My Pending Submissions'
-      });
-      myPendingTab.addEventListener('click', () => { this.view = 'myPending'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(myPendingTab);
-      
-      const myRequestsTab = el('button', {
-        class: 'btn ' + (this.view === 'myRequests' ? 'btn-primary' : 'btn-secondary'),
-        text: 'My Requests'
-      });
-      myRequestsTab.addEventListener('click', () => { this.view = 'myRequests'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(myRequestsTab);
 
-      const validStaffViews = ['myRequests', 'myPending'];
-      if (!validStaffViews.includes(this.view)) {
-        this.view = isOperations ? 'myRequests' : 'myPending';
-      }
-    }
+      container.appendChild(tabs);
 
-    container.appendChild(tabs);
-
-    if (this.view === 'users' && canManageUsers) {
-      container.appendChild(this.renderUsersSection());
-    } else if (this.view === 'audit' && canManageUsers) {
-      container.appendChild(this.renderAuditSection());
-    } else if (this.view === 'pending' && canManageUsers) {
-      container.appendChild(this.renderPendingSection());
-    } else if (this.view === 'myPending' && !canManageUsers) {
-      container.appendChild(this.renderMyPendingSection());
-    } else if (this.view === 'myRequests' && !canManageUsers) {
-      container.appendChild(this.renderMyRequestsSection());
-    } else if (!canManageUsers) {
-      if (!['myRequests', 'myPending'].includes(this.view)) {
-        this.view = Auth.user.role === 'Operations' ? 'myRequests' : 'myPending';
-      }
-      if (this.view === 'myRequests') {
-        container.appendChild(this.renderMyRequestsSection());
+      if (this.view === 'audit') {
+        container.appendChild(this.renderAuditSection());
+      } else if (this.view === 'pending') {
+        container.appendChild(this.renderPendingSection());
       } else {
-        container.appendChild(this.renderMyPendingSection());
+        container.appendChild(this.renderUsersSection());
       }
-    } else {
-      container.appendChild(this.renderUsersSection());
     }
 
     return container;
@@ -113,14 +282,14 @@ const Users = {
     if (!h1) return;
     this.clearNode(h1);
     
-    const canManageUsers = Auth.can('users:view');
+    const isAdmin = Auth.user.role === 'Admin';
     
     if (this.pendingDetailId || subpage) {
-      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: canManageUsers ? 'Admin' : 'My Submissions' });
+      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: isAdmin ? 'Admin' : 'My Submissions' });
       baseLink.addEventListener('click', () => {
         this.pendingDetailId = null;
         this.editingId = null;
-        if (canManageUsers) {
+        if (isAdmin) {
           this.showUserList();
         }
         App.handleRoute();
@@ -136,7 +305,7 @@ const Users = {
       }
       h1.appendChild(document.createTextNode(label));
     } else {
-      h1.appendChild(document.createTextNode(canManageUsers ? 'Admin' : 'My Submissions'));
+      h1.appendChild(document.createTextNode(isAdmin ? 'Admin' : 'My Submissions'));
     }
   },
 
@@ -185,7 +354,12 @@ const Users = {
     const users = DB.getAll('users');
 
     if (users.length === 0) {
-      container.appendChild(el('p', { text: 'No users found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>',
+        title: 'No users found',
+        body: 'Add users to start managing credentials and roles.'
+      }));
       return;
     }
 
@@ -855,10 +1029,43 @@ const Users = {
       return wrapper;
     }
 
-    const pending = PendingChanges.getPendingForUser(Auth.user.id);
-    const rejected = PendingChanges.getRejectedForUser(Auth.user.id);
+    let pending = PendingChanges.getPendingForUser(Auth.user.id);
+    let rejected = PendingChanges.getRejectedForUser(Auth.user.id);
+
+    // Apply category filter
+    if (this.filters.category) {
+      pending = pending.filter(pc => pc.table === this.filters.category);
+      rejected = rejected.filter(pc => pc.table === this.filters.category);
+    }
+
+    // Apply status filter
+    if (this.filters.status) {
+      pending = pending.filter(pc => pc.status === this.filters.status);
+      rejected = rejected.filter(pc => pc.status === this.filters.status);
+    }
+
+    // Apply date range filter
+    if (this.filters.dateFrom || this.filters.dateTo) {
+      const filterFn = (pc) => {
+        if (!pc.submittedAt) return false;
+        const itemDate = new Date(pc.submittedAt);
+        const itemISO = itemDate.getFullYear() + '-' + String(itemDate.getMonth() + 1).padStart(2, '0') + '-' + String(itemDate.getDate()).padStart(2, '0');
+        if (this.filters.dateFrom && itemISO < this.filters.dateFrom) return false;
+        if (this.filters.dateTo && itemISO > this.filters.dateTo) return false;
+        return true;
+      };
+      pending = pending.filter(filterFn);
+      rejected = rejected.filter(filterFn);
+    }
+
     if (pending.length === 0 && rejected.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No pending submissions.', class: 'empty-state' }));
+      const isFiltered = this.filters.category || this.filters.status || this.filters.dateFrom || this.filters.dateTo;
+      wrapper.appendChild(renderEmptyStateV2({
+        variant: isFiltered ? 'filtered-empty' : 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
+        title: isFiltered ? 'No matching submissions' : 'No pending submissions',
+        body: isFiltered ? 'Try clearing or modifying your filter criteria.' : 'Your pending change requests will appear here once submitted.'
+      }));
       return wrapper;
     }
 
@@ -944,7 +1151,12 @@ const Users = {
     const pc = PendingChanges.getById(pendingId);
     if (!pc) {
       this.pendingDetailId = null;
-      return el('p', { text: 'Pending change not found.', class: 'empty-state' });
+      return renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+        title: 'Pending change not found',
+        body: 'The requested pending change could not be loaded.'
+      });
     }
 
     const canApprove = PendingChanges.canApproveChange(pc);
@@ -1052,7 +1264,12 @@ const Users = {
     diffContainer.innerHTML = '';
     
     if (diffs.length === 0) {
-      diffContainer.appendChild(el('p', { text: 'No changes detected between current and proposed data.', class: 'empty-state' }));
+      diffContainer.appendChild(renderEmptyStateV2({
+        variant: 'compact',
+        icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        title: 'No changes detected',
+        body: 'No differences found between current and proposed data.'
+      }));
     } else {
       // Build a clean, styled table of changed fields only
       const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
@@ -1142,10 +1359,46 @@ const Users = {
 
   renderMyRequestsSection() {
     const wrapper = el('div');
-    const requests = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
-    
+    let requests = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
+
+    // Apply category filter
+    if (this.filters.category) {
+      requests = requests.filter(r => r.type === this.filters.category);
+    }
+
+    // Apply status filter
+    if (this.filters.status) {
+      requests = requests.filter(r => r.status === this.filters.status);
+    }
+
+    // Apply date range filter
+    if (this.filters.dateFrom || this.filters.dateTo) {
+      requests = requests.filter(r => {
+        if (!r.requestedAt) return false;
+        const itemDate = new Date(r.requestedAt);
+        const itemISO = itemDate.getFullYear() + '-' + String(itemDate.getMonth() + 1).padStart(2, '0') + '-' + String(itemDate.getDate()).padStart(2, '0');
+        if (this.filters.dateFrom && itemISO < this.filters.dateFrom) return false;
+        if (this.filters.dateTo && itemISO > this.filters.dateTo) return false;
+        return true;
+      });
+    }
+
     if (requests.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No requests submitted yet.', class: 'empty-state' }));
+      const isFiltered = this.filters.category || this.filters.status || this.filters.dateFrom || this.filters.dateTo;
+      wrapper.appendChild(renderEmptyStateV2({
+        variant: isFiltered ? 'filtered-empty' : 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
+        title: isFiltered ? 'No matching requests' : 'No requests submitted yet',
+        body: isFiltered ? 'Try clearing or modifying your filter criteria.' : 'Submit a departmental request in the Operations section.',
+        actions: isFiltered ? [] : [
+          {
+            text: 'Go to Operations',
+            onClick: () => {
+              location.hash = '#operations';
+            }
+          }
+        ]
+      }));
       return wrapper;
     }
 
