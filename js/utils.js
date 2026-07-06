@@ -254,6 +254,29 @@ function renderFilterEmptyState(title, body, actions = []) {
 }
 
 /**
+ * Render a shareable module page tab navigation bar.
+ * @param {Array} tabs - [{ key, label, icon?: string, count?: number }]
+ * @param {string} currentKey - active tab key
+ * @param {Function} onTabChange - (key) => void
+ * @returns {HTMLElement}
+ */
+function renderModuleTabNav(tabs, currentKey, onTabChange) {
+  const tabNav = el('div', { class: 'module-tab-nav' });
+  tabs.forEach(tab => {
+    const btn = el('button', { class: 'module-tab-link' + (currentKey === tab.key ? ' active' : '') });
+    if (tab.icon) btn.appendChild(parseHTML(tab.icon));
+    btn.appendChild(document.createTextNode(' ' + tab.label));
+    if (tab.count !== undefined) {
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
+    }
+    btn.addEventListener('click', () => onTabChange(tab.key));
+    tabNav.appendChild(btn);
+  });
+  return tabNav;
+}
+
+/**
  * Compact board-card icons used across Operations, Billing, Disbursement,
  * and Transmittal boards to match the Jira-style reference card.
  */

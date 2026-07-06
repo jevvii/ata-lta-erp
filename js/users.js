@@ -61,9 +61,17 @@ const Users = {
 
   renderTabNav() {
     const canManageUsers = Auth.can('users:view');
-    const tabNav = el('div', { class: 'module-tab-nav' });
+
+    const changeTab = (key) => {
+      this.view = key;
+      this.editingId = null;
+      this.pendingDetailId = null;
+      App.handleRoute();
+    };
 
     if (canManageUsers) {
+      const userCount = (DB.getAll('users') || []).length;
+      const auditCount = (DB.getAll('auditLog') || []).length;
       const pendingCount = (() => {
         if (typeof this.getPendingCategories !== 'function') return 0;
         const categories = this.getPendingCategories();
@@ -71,46 +79,20 @@ const Users = {
       })();
 
       const tabs = [
-        { key: 'users', label: 'Users', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
-        { key: 'audit', label: 'Audit Log', icon: BoardCardIcons.document },
+        { key: 'users', label: 'Users', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', count: userCount },
+        { key: 'audit', label: 'Audit Log', icon: BoardCardIcons.document, count: auditCount },
         { key: 'pending', label: 'Pending Approvals', icon: BoardCardIcons.checkCircle, count: pendingCount }
       ];
-
-      tabs.forEach(tab => {
-        const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
-        btn.appendChild(parseHTML(tab.icon));
-        btn.appendChild(document.createTextNode(' ' + tab.label));
-        if (tab.count !== undefined) {
-          btn.appendChild(document.createTextNode(' '));
-          btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
-        }
-        btn.addEventListener('click', () => {
-          this.view = tab.key;
-          this.editingId = null;
-          this.pendingDetailId = null;
-          App.handleRoute();
-        });
-        tabNav.appendChild(btn);
-      });
-    } else {
-      const tabs = [
-        { key: 'myPending', label: 'My Pending Submissions' },
-        { key: 'myRequests', label: 'My Requests' }
-      ];
-      tabs.forEach(tab => {
-        const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
-        btn.appendChild(document.createTextNode(tab.label));
-        btn.addEventListener('click', () => {
-          this.view = tab.key;
-          this.editingId = null;
-          this.pendingDetailId = null;
-          App.handleRoute();
-        });
-        tabNav.appendChild(btn);
-      });
+      return renderModuleTabNav(tabs, this.view, changeTab);
     }
 
-    return tabNav;
+    const myPendingCount = (PendingChanges.getPendingForUser(Auth.user.id) || []).length;
+    const myRequestsCount = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id).length;
+    const tabs = [
+      { key: 'myPending', label: 'My Pending Submissions', icon: BoardCardIcons.checklist, count: myPendingCount },
+      { key: 'myRequests', label: 'My Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>', count: myRequestsCount }
+    ];
+    return renderModuleTabNav(tabs, this.view, changeTab);
   },
 
   updateBreadcrumb(h1, subpage) {
