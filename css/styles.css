@@ -12893,6 +12893,36 @@ html.loading-active #loading-screen:not(.hidden) {
   background-position: center;
 }
 
+.board-group-avatars {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.board-group-avatars .avatar-xs {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  border: 2px solid var(--color-surface, #fff);
+  background-size: cover;
+  background-position: center;
+  margin-left: -8px;
+}
+
+.board-group-avatars .avatar-xs:first-child {
+  margin-left: 0;
+}
+
+.board-group-avatar-overflow {
+  background: var(--color-bg-muted, #e2e8f0);
+  color: var(--color-text-muted, #64748b);
+}
+
 .board-group-name-wrap {
   display: flex;
   flex-direction: column;

@@ -3152,26 +3152,49 @@ const Workflow = {
           class: 'board-group-collapse',
           html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
         });
-        const avatar = el('div', { class: 'board-group-avatar' });
         let displayName = name;
-        if (groupBy === 'client') {
-          const client = DB.getWhere('clients', c => c.name === name)[0];
-          displayName = client?.name || name;
-          avatar.textContent = getInitials(displayName);
-        } else if (groupBy === 'assignee') {
-          const user = DB.getWhere('users', u => u.name === name)[0];
-          displayName = user?.name || name;
-          if (user?.avatarUrl) {
-            avatar.style.backgroundImage = "url('" + user.avatarUrl + "')";
-            avatar.style.backgroundSize = 'cover';
+        let avatar;
+        if (groupBy === 'assignee') {
+          const assigneeNames = name === 'Unassigned' ? [] : name.split(', ').filter(Boolean);
+          avatar = el('div', { class: 'board-group-avatars' });
+          if (assigneeNames.length === 0) {
+            const emptyAv = el('div', { class: 'board-group-avatar' });
+            emptyAv.textContent = '—';
+            emptyAv.style.backgroundColor = groupColor(displayName);
+            emptyAv.style.color = '#fff';
+            avatar.appendChild(emptyAv);
           } else {
-            avatar.textContent = getInitials(displayName);
+            assigneeNames.slice(0, 5).forEach((assigneeName) => {
+              const user = DB.getWhere('users', u => u.name === assigneeName)[0];
+              const av = el('div', { class: 'avatar-xs', title: assigneeName });
+              av.style.backgroundColor = groupColor(assigneeName);
+              av.style.color = '#fff';
+              if (user?.avatarUrl) {
+                av.style.backgroundImage = "url('" + user.avatarUrl + "')";
+              } else {
+                av.textContent = getInitials(assigneeName);
+              }
+              avatar.appendChild(av);
+            });
+            if (assigneeNames.length > 5) {
+              const overflow = el('div', {
+                class: 'avatar-xs board-group-avatar-overflow',
+                text: '+' + (assigneeNames.length - 5),
+                title: assigneeNames.slice(5).join(', ')
+              });
+              avatar.appendChild(overflow);
+            }
           }
         } else {
+          avatar = el('div', { class: 'board-group-avatar' });
+          if (groupBy === 'client') {
+            const client = DB.getWhere('clients', c => c.name === name)[0];
+            displayName = client?.name || name;
+          }
           avatar.textContent = getInitials(displayName);
+          avatar.style.backgroundColor = groupColor(displayName);
+          avatar.style.color = '#fff';
         }
-        avatar.style.backgroundColor = groupColor(displayName);
-        avatar.style.color = '#fff';
 
         const nameWrap = el('div', { class: 'board-group-name-wrap' });
         const nameLine = el('div', { class: 'board-group-name' });
