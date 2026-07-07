@@ -236,19 +236,24 @@ const Clients = {
       return;
     }
 
-    // Floating Bulk Action Bar (Jira backlog style)
-    const bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
-    const countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
-    bulkBar.appendChild(countInfo);
-    const divider1 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
-    bulkBar.appendChild(divider1);
-    const actionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
-    bulkBar.appendChild(actionsContainer);
-    const divider2 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
-    bulkBar.appendChild(divider2);
-    const closeBtn = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
-    bulkBar.appendChild(closeBtn);
-    container.appendChild(bulkBar);
+    const isAdmin = Auth.user?.role === 'Admin';
+
+    // Floating Bulk Action Bar (Jira backlog style, only for admins)
+    let bulkBar = null, countInfo = null, actionsContainer = null, closeBtn = null;
+    if (isAdmin) {
+      bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
+      countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
+      bulkBar.appendChild(countInfo);
+      const divider1 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider1);
+      actionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
+      bulkBar.appendChild(actionsContainer);
+      const divider2 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider2);
+      closeBtn = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
+      bulkBar.appendChild(closeBtn);
+      container.appendChild(bulkBar);
+    }
 
     // Table Container
     const tableContainer = el('div', { class: 'jira-table-container' });
@@ -262,14 +267,17 @@ const Clients = {
     thead.appendChild(headerRow);
     table.appendChild(thead);
 
-    // Checkbox column header
-    const selectAllCheckbox = el('input', {
-      type: 'checkbox',
-      style: 'cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
-    });
-    const thCheckbox = el('th', { style: 'width: 40px; text-align: center;' });
-    thCheckbox.appendChild(selectAllCheckbox);
-    headerRow.appendChild(thCheckbox);
+    // Checkbox column header (only for admins)
+    let selectAllCheckbox = null;
+    if (isAdmin) {
+      selectAllCheckbox = el('input', {
+        type: 'checkbox',
+        style: 'cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
+      });
+      const thCheckbox = el('th', { style: 'width: 40px; text-align: center;' });
+      thCheckbox.appendChild(selectAllCheckbox);
+      headerRow.appendChild(thCheckbox);
+    }
 
     // Work column header (labeled "Client")
     const thWork = el('th', { class: 'jira-backlog-col-header', style: 'width: 260px;' });
@@ -290,20 +298,22 @@ const Clients = {
     headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Related Companies', style: 'width: 180px;' }));
     headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Contact Details', style: 'width: 180px;' }));
 
-    // Trash bin header
-    const thTrash = el('th', { style: 'width: 45px; text-align: center;' });
-    const trashHeaderIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    trashHeaderIcon.setAttribute('viewBox', '0 0 24 24');
-    trashHeaderIcon.setAttribute('width', '14');
-    trashHeaderIcon.setAttribute('height', '14');
-    trashHeaderIcon.setAttribute('fill', 'none');
-    trashHeaderIcon.setAttribute('stroke', 'currentColor');
-    trashHeaderIcon.setAttribute('stroke-width', '2');
-    trashHeaderIcon.setAttribute('stroke-linecap', 'round');
-    trashHeaderIcon.setAttribute('stroke-linejoin', 'round');
-    trashHeaderIcon.innerHTML = '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>';
-    thTrash.appendChild(trashHeaderIcon);
-    headerRow.appendChild(thTrash);
+    // Trash bin header (only for admins)
+    if (isAdmin) {
+      const thTrash = el('th', { style: 'width: 45px; text-align: center;' });
+      const trashHeaderIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      trashHeaderIcon.setAttribute('viewBox', '0 0 24 24');
+      trashHeaderIcon.setAttribute('width', '14');
+      trashHeaderIcon.setAttribute('height', '14');
+      trashHeaderIcon.setAttribute('fill', 'none');
+      trashHeaderIcon.setAttribute('stroke', 'currentColor');
+      trashHeaderIcon.setAttribute('stroke-width', '2');
+      trashHeaderIcon.setAttribute('stroke-linecap', 'round');
+      trashHeaderIcon.setAttribute('stroke-linejoin', 'round');
+      trashHeaderIcon.innerHTML = '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>';
+      thTrash.appendChild(trashHeaderIcon);
+      headerRow.appendChild(thTrash);
+    }
 
     // Tbody
     const tbody = el('tbody');
@@ -313,6 +323,7 @@ const Clients = {
     const rows = [];
 
     const updateSelection = () => {
+      if (!isAdmin) return;
       const selectedIds = [];
       checkBoxes.forEach((chk, idx) => {
         if (chk.checked) {
@@ -323,7 +334,7 @@ const Clients = {
         }
       });
 
-      if (selectedIds.length > 0) {
+      if (selectedIds.length > 0 && bulkBar && actionsContainer) {
         countInfo.textContent = `${selectedIds.length} selected`;
         actionsContainer.innerHTML = '';
         const btn = el('button', {
@@ -335,7 +346,7 @@ const Clients = {
         });
         actionsContainer.appendChild(btn);
         bulkBar.classList.remove('hidden');
-      } else {
+      } else if (bulkBar) {
         bulkBar.classList.add('hidden');
       }
 
@@ -347,19 +358,23 @@ const Clients = {
       }
     };
 
-    selectAllCheckbox.addEventListener('change', () => {
-      checkBoxes.forEach(c => {
-        c.checked = selectAllCheckbox.checked;
+    if (isAdmin && selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', () => {
+        checkBoxes.forEach(c => {
+          c.checked = selectAllCheckbox.checked;
+        });
+        updateSelection();
       });
-      updateSelection();
-    });
 
-    closeBtn.addEventListener('click', () => {
-      checkBoxes.forEach(c => {
-        c.checked = false;
-      });
-      updateSelection();
-    });
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          checkBoxes.forEach(c => {
+            c.checked = false;
+          });
+          updateSelection();
+        });
+      }
+    }
 
     // Close dropdowns on document click
     const onDocClick = () => {
@@ -375,17 +390,19 @@ const Clients = {
       const tr = el('tr', { class: 'jira-row', 'data-item-id': client.id });
       rows.push(tr);
 
-      // 1. Checkbox
-      const tdChk = el('td', { style: 'text-align: center;' });
-      const chk = el('input', {
-        type: 'checkbox',
-        style: 'cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;',
-        'data-id': client.id
-      });
-      checkBoxes.push(chk);
-      chk.addEventListener('change', updateSelection);
-      tdChk.appendChild(chk);
-      tr.appendChild(tdChk);
+      // 1. Checkbox (only for admins)
+      if (isAdmin) {
+        const tdChk = el('td', { style: 'text-align: center;' });
+        const chk = el('input', {
+          type: 'checkbox',
+          style: 'cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;',
+          'data-id': client.id
+        });
+        checkBoxes.push(chk);
+        chk.addEventListener('change', updateSelection);
+        tdChk.appendChild(chk);
+        tr.appendChild(tdChk);
+      }
 
       // 2. Work (Client Key & Name)
       const tdWork = el('td');
@@ -498,36 +515,34 @@ const Clients = {
       const tdCd = el('td', { text: cdList });
       tr.appendChild(tdCd);
 
-      // 12. Trash (Archive Action)
-      const tdTrash = el('td', { style: 'text-align: center;' });
-      const trashBtn = el('button', { class: 'jira-trash-btn', title: 'Archive Client' });
-      const trashSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      trashSvg.setAttribute('viewBox', '0 0 24 24');
-      trashSvg.setAttribute('width', '14');
-      trashSvg.setAttribute('height', '14');
-      trashSvg.setAttribute('fill', 'none');
-      trashSvg.setAttribute('stroke', 'currentColor');
-      trashSvg.setAttribute('stroke-width', '2');
-      trashSvg.setAttribute('stroke-linecap', 'round');
-      trashSvg.setAttribute('stroke-linejoin', 'round');
-      trashSvg.innerHTML = '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>';
-      trashBtn.appendChild(trashSvg);
-      tdTrash.appendChild(trashBtn);
-      tr.appendChild(tdTrash);
+      // 12. Trash (Archive Action, only for admins)
+      if (isAdmin) {
+        const tdTrash = el('td', { style: 'text-align: center;' });
+        const trashBtn = el('button', { class: 'jira-trash-btn', title: 'Archive Client' });
+        const trashSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        trashSvg.setAttribute('viewBox', '0 0 24 24');
+        trashSvg.setAttribute('width', '14');
+        trashSvg.setAttribute('height', '14');
+        trashSvg.setAttribute('fill', 'none');
+        trashSvg.setAttribute('stroke', 'currentColor');
+        trashSvg.setAttribute('stroke-width', '2');
+        trashSvg.setAttribute('stroke-linecap', 'round');
+        trashSvg.setAttribute('stroke-linejoin', 'round');
+        trashSvg.innerHTML = '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>';
+        trashBtn.appendChild(trashSvg);
+        tdTrash.appendChild(trashBtn);
+        tr.appendChild(tdTrash);
 
-      trashBtn.addEventListener('click', () => {
-        if (Auth.user.role === 'Admin') {
+        trashBtn.addEventListener('click', () => {
           this.archiveClientDirectly(client.id);
-        } else {
-          this.archiveClientRequest(client.id);
-        }
-      });
+        });
+      }
 
       tbody.appendChild(tr);
 
       // Accordion Row
       const accordionRow = el('tr', { class: 'jira-accordion-tr hidden' });
-      const accordionTd = el('td', { colspan: '12', class: 'jira-accordion-td' });
+      const accordionTd = el('td', { colspan: isAdmin ? '12' : '10', class: 'jira-accordion-td' });
       accordionRow.appendChild(accordionTd);
       tbody.appendChild(accordionRow);
 
@@ -1048,6 +1063,10 @@ const Clients = {
   },
 
   archiveClientDirectly(clientId) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
     if (!confirm('Are you sure you want to archive this client? This will cancel all related work requests and archive all associated documents.')) return;
     
     // 1. Update the client status to 'Archived'
@@ -1074,6 +1093,10 @@ const Clients = {
   },
 
   archiveClientRequest(clientId) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
     // Check if there is already a pending change to archive this client
     const pending = DB.getWhere('pendingChanges', pc => 
       pc.table === 'clients' && 
@@ -1115,16 +1138,19 @@ const Clients = {
   },
 
   bulkArchiveClients(clientIds) {
-    if (!clientIds || clientIds.length === 0) return;
-    const isAdmin = Auth.user?.role === 'Admin';
-    if (isAdmin) {
-      this.archiveClientsDirectly(clientIds);
-    } else {
-      this.archiveClientsRequest(clientIds);
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
     }
+    if (!clientIds || clientIds.length === 0) return;
+    this.archiveClientsDirectly(clientIds);
   },
 
   archiveClientsDirectly(clientIds) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
     if (!clientIds || clientIds.length === 0) return;
     const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
     if (!confirm(`Are you sure you want to archive ${label}? This will cancel all related work requests and archive all associated documents.`)) return;
@@ -1153,6 +1179,10 @@ const Clients = {
   },
 
   archiveClientsRequest(clientIds) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
     if (!clientIds || clientIds.length === 0) return;
     const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
     if (!confirm(`Are you sure you want to request archiving ${label}? This requires Admin approval.`)) return;
