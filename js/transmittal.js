@@ -830,19 +830,22 @@ const Transmittal = {
   renderCompactListView(container, items) {
     const list = el('div', { class: 'list-view' });
     items.forEach(t => {
-      const item = el('div', { class: 'list-item' });
+      const item = el('div', { class: 'list-item', style: 'cursor: pointer;' });
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('button, a, input, select')) return;
+        location.hash = '#transmittal/detail/' + t.id;
+      });
       const left = el('div');
       left.appendChild(el('div', { class: 'list-item-title', text: t.trackingNumber }));
       left.appendChild(el('div', { class: 'list-item-meta', text: this.getClientName(t.clientId) + ' • ' + this.getWorkRequestTitle(t.workRequestId) + ' • ' + String((t.items || []).length) + ' items' }));
       item.appendChild(left);
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#transmittal/detail/' + t.id; });
-      item.appendChild(viewBtn);
+      const actionWrap = el('div', { style: 'display:flex;gap:4px;align-items:center;flex-shrink:0;' });
       if (this.canEditTransmittal(t)) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
+        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
-        item.appendChild(editBtn);
+        actionWrap.appendChild(editBtn);
       }
+      item.appendChild(actionWrap);
       list.appendChild(item);
     });
     container.appendChild(list);

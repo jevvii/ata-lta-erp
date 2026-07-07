@@ -1034,7 +1034,11 @@ const Disbursement = {
     const list = el('div', { class: 'list-view' });
     items.forEach(d => {
       const emp = DB.getById('users', this.getEmployeeId(d));
-      const item = el('div', { class: 'list-item' });
+      const item = el('div', { class: 'list-item', style: 'cursor: pointer;' });
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('button, a, input, select')) return;
+        location.hash = '#disbursement/detail/' + d.id;
+      });
       const left = el('div');
       const titleRow = el('div', { class: 'list-item-title' });
       titleRow.appendChild(document.createTextNode(d.category + ' — ' + formatPHP(d.amount)));
@@ -1058,12 +1062,9 @@ const Disbursement = {
       }
       left.appendChild(el('div', { class: 'list-item-meta', text: (emp?.name || '—') + ' • ' + this.getFundSource(d) + ' • ' + formatDate(d.submittedAt) + wrMeta }));
       item.appendChild(left);
-      const actionWrap = el('div', { style: 'display:flex;gap:4px;align-items:center;' });
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-      actionWrap.appendChild(viewBtn);
+      const actionWrap = el('div', { style: 'display:flex;gap:4px;align-items:center;flex-shrink:0;' });
       if (this.canEditDisbursement(d)) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
+        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(d.id); });
         actionWrap.appendChild(editBtn);
       }
