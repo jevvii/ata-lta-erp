@@ -49,11 +49,6 @@ const Clients = {
 
     const content = el('div', { class: 'page-content-section' });
 
-    if (this.activeTab === 'active') {
-      content.appendChild(el('div', { class: 'page-section-title', text: 'Active Clients' }));
-      content.appendChild(el('div', { class: 'page-section-subtitle', text: 'Taxpayers, trade names, contacts, and retainer agreements.' }));
-    }
-
     const listContainer = el('div', { class: 'list-container' + (this.activeTab === 'archived' ? ' hidden' : '') });
     content.appendChild(listContainer);
     if (this.activeTab === 'active') {
@@ -205,92 +200,89 @@ const Clients = {
       return;
     }
 
-    const list = el('div', { class: 'client-cards-list' });
-    clients.forEach((c, index) => {
-      list.appendChild(this.renderClientCard(c, index + 1));
+    const buildingIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/><path d="M10 9h4"/><path d="M10 13h4"/></svg>';
+
+    const items = clients.map((c, idx) => {
+      const pocUser = DB.getById('users', c.contactUserId);
+      const tags = [
+        { text: c.entity, type: 'entity', className: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), style: 'display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 18px; font-size: 0.6875rem; font-weight: 700;' },
+        (c.retainer || c.isRetainer)
+          ? { text: 'Retainer', type: 'fund', className: 'badge badge-recurring', style: 'display: inline-flex; align-items: center; justify-content: center; width: 70px; height: 18px; font-size: 0.6875rem; font-weight: 700;' }
+          : { text: '', type: 'fund', className: 'hidden-tag-placeholder' },
+        c.tin
+          ? { text: 'TIN ' + c.tin, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        (pocUser?.name || c.contactPerson)
+          ? { text: pocUser?.name || c.contactPerson, type: 'client' }
+          : { text: '', type: 'client', className: 'hidden-tag-placeholder' }
+      ];
+
+      const trade = c.tradeName ? 'Trade: ' + c.tradeName : '';
+      const address = c.address ? 'Address: ' + c.address : '';
+      const rcList = (c.relatedCompanies || []).map(rc => {
+        const rcClient = DB.getById('clients', rc.clientId);
+        return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
+      }).join(', ');
+      const related = rcList ? 'Related: ' + rcList : '';
+      const cdList = (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ');
+      const contacts = cdList ? 'Contacts: ' + cdList : '';
+      const secondary = [trade, address, related, contacts].filter(Boolean).join(' • ') || null;
+
+      return {
+        id: c.id,
+        keyText: 'CL-' + String(idx + 1).padStart(2, '0'),
+        name: c.name || '(untitled)',
+        iconHtml: buildingIcon,
+        tags,
+        secondary
+      };
     });
-    container.appendChild(list);
-  },
 
-  renderClientCard(c, index) {
-    const pocUser = DB.getById('users', c.contactUserId);
-    const card = el('div', { class: 'client-card' });
-
-    const header = el('div', { class: 'client-card-header' });
-    const titleRow = el('div', { class: 'client-card-title-row' });
-    titleRow.appendChild(el('span', { class: 'client-card-key', text: 'CL-' + String(index).padStart(2, '0') }));
-    titleRow.appendChild(el('span', { class: 'client-card-title', text: c.name || '(untitled)' }));
-    header.appendChild(titleRow);
-
-    const actions = el('div', { class: 'client-card-actions' });
-    if (Auth.can('clients:edit')) {
-      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-      editBtn.addEventListener('click', () => this.showForm(c.id));
-      actions.appendChild(editBtn);
-
-      const archiveBtn = el('button', {
-        class: 'btn btn-secondary btn-sm text-danger',
-        text: 'Archive',
-        style: 'margin-left: 8px;'
-      });
-      archiveBtn.addEventListener('click', () => {
-        // Admin bypasses PendingChanges — intentional direct-role check (Gap 6)
-        if (Auth.user.role === 'Admin') {
-          this.archiveClientDirectly(c.id);
-        } else {
-          this.archiveClientRequest(c.id);
+    const backlog = JiraBacklogList.render({
+      title: 'Active Clients',
+      subtitle: 'taxpayers, trade names, contacts, and retainer agreements',
+      items,
+      emptyText: 'No clients found',
+      rowIdPrefix: 'CL',
+      countLabel: 'client',
+      bulkActions: [],
+      columns: [
+        { label: 'Entity', width: '60px', align: 'center' },
+        { label: 'Retainer', width: '90px', align: 'center' },
+        { label: 'TIN', width: '130px' },
+        { label: 'Point of Contact', width: '180px' }
+      ],
+      headerActions: [
+        {
+          text: '+ Add Client',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => this.showForm()
         }
-      });
-      actions.appendChild(archiveBtn);
-    }
-    header.appendChild(actions);
-    card.appendChild(header);
-
-    const badges = el('div', { class: 'client-card-badges' });
-    badges.appendChild(el('span', { class: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), text: c.entity }));
-    if (c.retainer || c.isRetainer) {
-      badges.appendChild(el('span', { class: 'badge badge-recurring', text: 'Retainer' }));
-    }
-    card.appendChild(badges);
-
-    const meta = el('div', { class: 'client-card-meta' });
-    const metaItems = [
-      { label: 'TIN', value: c.tin || '—' },
-      { label: 'Point of Contact', value: pocUser?.name || c.contactPerson || '—' },
-      { label: 'Trade Name', value: c.tradeName || '—' }
-    ];
-    metaItems.forEach(item => {
-      const node = el('div', { class: 'client-card-meta-item' });
-      node.appendChild(el('span', { class: 'client-card-meta-label', text: item.label }));
-      node.appendChild(el('span', { class: 'client-card-meta-value', text: item.value }));
-      meta.appendChild(node);
+      ],
+      rowActions: (item) => {
+        if (!Auth.can('clients:edit')) return [];
+        return [
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showForm(item.id)
+          },
+          {
+            text: 'Archive',
+            className: 'btn btn-secondary btn-xs text-danger',
+            onClick: () => {
+              if (Auth.user.role === 'Admin') {
+                this.archiveClientDirectly(item.id);
+              } else {
+                this.archiveClientRequest(item.id);
+              }
+            }
+          }
+        ];
+      }
     });
-    card.appendChild(meta);
 
-    const sections = el('div', { class: 'client-card-sections' });
-
-    const addressSection = el('div', { class: 'client-card-section' });
-    addressSection.appendChild(el('span', { class: 'client-card-section-label', text: 'Address' }));
-    addressSection.appendChild(el('span', { class: 'client-card-section-value', text: c.address || '—' }));
-    sections.appendChild(addressSection);
-
-    const rcList = (c.relatedCompanies || []).map(rc => {
-      const rcClient = DB.getById('clients', rc.clientId);
-      return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
-    }).join(', ') || '—';
-    const relatedSection = el('div', { class: 'client-card-section' });
-    relatedSection.appendChild(el('span', { class: 'client-card-section-label', text: 'Related Companies' }));
-    relatedSection.appendChild(el('span', { class: 'client-card-section-value', text: rcList }));
-    sections.appendChild(relatedSection);
-
-    const cdList = (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ') || '—';
-    const contactSection = el('div', { class: 'client-card-section' });
-    contactSection.appendChild(el('span', { class: 'client-card-section-label', text: 'Contact Details' }));
-    contactSection.appendChild(el('span', { class: 'client-card-section-value', text: cdList }));
-    sections.appendChild(contactSection);
-
-    card.appendChild(sections);
-    return card;
+    container.appendChild(backlog);
   },
 
   showForm(clientId) {

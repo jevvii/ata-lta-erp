@@ -13836,6 +13836,111 @@ html.loading-active #loading-screen:not(.hidden) {
   opacity: 1;
 }
 
+/* Column-aligned backlog rows (table-like grid) */
+.jira-backlog-row--columns {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+.jira-backlog-columns-header {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--color-bg-light, #fafafa);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.jira-backlog-col-header {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jira-backlog-row-tags--columns {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.jira-backlog-row-tags--columns .jira-backlog-tag {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.jira-backlog-tag-placeholder {
+  min-height: 1px;
+}
+
+/* Custom backlog tag styles for specific column types */
+.jira-backlog-tag-role,
+.jira-backlog-tag-action,
+.jira-backlog-tag-entity {
+  justify-content: center !important;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.jira-backlog-tag-client,
+.jira-backlog-tag-category {
+  justify-content: flex-start !important;
+  font-weight: 500;
+}
+
+.jira-backlog-tag-schedule {
+  justify-content: flex-start !important;
+  color: var(--color-text-muted);
+}
+
+.hidden-tag-placeholder {
+  background: transparent !important;
+  border: none !important;
+  color: transparent !important;
+  pointer-events: none !important;
+}
+
+.jira-backlog-row-secondary {
+  grid-column: 1 / -1;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inline toolbar placed between backlog header and body */
+.jira-backlog-toolbar {
+  padding: 8px 16px 0;
+}
+
+.jira-backlog-toolbar:empty {
+  display: none;
+}
+
+/* User avatar for backlog rows (audit log, etc.) */
+.backlog-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 /* Dark mode overrides for Jira backlog */
 [data-theme="dark"] .jira-backlog-header {
   background: var(--color-bg-light);
@@ -13982,6 +14087,79 @@ html.loading-active #loading-screen:not(.hidden) {
   background: rgba(37, 99, 235, 0.15);
   color: #60a5fa;
   border-color: rgba(37, 99, 235, 0.3);
+}
+
+/* Audit / activity action tags */
+.jira-backlog-tag-action {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+  border-radius: 4px;
+}
+
+.jira-backlog-tag-action-create {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.jira-backlog-tag-action-update {
+  background: #e0f2fe;
+  color: #075985;
+  border-color: #bae6fd;
+}
+
+.jira-backlog-tag-action-delete,
+.jira-backlog-tag-action-archive {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.jira-backlog-tag-action-approve,
+.jira-backlog-tag-action-complete {
+  background: #d1fae5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.jira-backlog-tag-action-reject {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-create {
+  background: rgba(22, 101, 52, 0.2);
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-update {
+  background: rgba(7, 89, 133, 0.25);
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-delete,
+[data-theme="dark"] .jira-backlog-tag-action-archive {
+  background: rgba(153, 27, 27, 0.2);
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-approve,
+[data-theme="dark"] .jira-backlog-tag-action-complete {
+  background: rgba(4, 120, 87, 0.2);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-reject {
+  background: rgba(180, 83, 9, 0.2);
+  color: #fbbf24;
+  border-color: rgba(253, 224, 71, 0.3);
 }
 
 /* ── Backlog Tags Fixed-Width Column Alignment ──────────── */

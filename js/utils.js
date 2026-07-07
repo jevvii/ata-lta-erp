@@ -2517,8 +2517,11 @@ const JiraBacklogList = {
       rowActions = () => [],
       rowIdPrefix = 'TPL',
       bulkActions,
-      countLabel = 'template'
+      countLabel = 'template',
+      columns
     } = options;
+
+    const hasColumns = Array.isArray(columns) && columns.length > 0;
 
     const container = el('div', { class: 'jira-backlog-container' });
 
@@ -2559,6 +2562,36 @@ const JiraBacklogList = {
     });
     header.appendChild(headerRight);
     container.appendChild(header);
+
+    // Optional inline toolbar (filters, etc.) placed between header and list
+    if (options.toolbar) {
+      const toolbarWrap = el('div', { class: 'jira-backlog-toolbar' });
+      toolbarWrap.appendChild(options.toolbar);
+      container.appendChild(toolbarWrap);
+    }
+
+    // Optional column header (table-like alignment)
+    if (hasColumns) {
+      const colHeader = el('div', { class: 'jira-backlog-columns-header' });
+      const leadCols = 'auto auto 75px 1fr';
+      const metaCols = columns.map(c => c.width || '1fr').join(' ');
+      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
+
+      const spacer = el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' });
+      spacer.style.gridColumn = '1 / span 3';
+      colHeader.appendChild(spacer);
+
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--title', text: 'Name' }));
+      columns.forEach(col => {
+        const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
+        if (col.align) h.style.textAlign = col.align;
+        colHeader.appendChild(h);
+      });
+      if (headerActions.length > 0) {
+        colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--actions' }));
+      }
+      container.appendChild(colHeader);
+    }
 
     // Body (Permanent, not collapsible)
     const body = el('div', { class: 'jira-backlog-body' });
@@ -2667,13 +2700,15 @@ const JiraBacklogList = {
     });
 
     items.forEach((item, index) => {
-      const row = el('div', { class: 'jira-backlog-row', 'data-item-id': item.id });
+      const rowClasses = ['jira-backlog-row'];
+      if (hasColumns) rowClasses.push('jira-backlog-row--columns');
+      const row = el('div', { class: rowClasses.join(' '), 'data-item-id': item.id });
       rows.push(row);
-      
+
       // Checkbox container (shows on hover, stays visible when checked)
       const checkboxWrap = el('div', { class: 'jira-backlog-row-checkbox-wrap' });
-      const chk = el('input', { 
-        type: 'checkbox', 
+      const chk = el('input', {
+        type: 'checkbox',
         class: 'jira-backlog-row-checkbox',
         'data-id': item.id
       });
@@ -2706,49 +2741,71 @@ const JiraBacklogList = {
       const titleNode = el('div', { class: 'jira-backlog-row-title', text: item.name });
       row.appendChild(titleNode);
 
+      // Column-mode grid sizing (lead columns + metadata columns + actions column)
+      if (hasColumns) {
+        const leadCols = 'auto auto 75px 1fr';
+        const metaCols = columns.map(c => c.width || '1fr').join(' ');
+        row.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
+      }
+
       // Metadata / Tags
-      const tagsNode = el('div', { class: 'jira-backlog-row-tags' });
-      if (item.tags && item.tags.length > 0) {
-        item.tags.forEach(tag => {
-          const typeCls = tag.type ? ` jira-backlog-tag-${tag.type}` : '';
-          let valCls = '';
-          if (tag.type === 'schedule' && tag.value) {
-            valCls = ` jira-backlog-tag-schedule-${tag.value.toLowerCase()}`;
-          } else if (tag.type === 'fund' && tag.value) {
-            valCls = ` jira-backlog-tag-fund-${tag.value.toLowerCase().replace(/\s+/g, '')}`;
-          }
+      const tagsNode = el('div', { class: 'jira-backlog-row-tags' + (hasColumns ? ' jira-backlog-row-tags--columns' : '') });
+      if (hasColumns) {
+        tagsNode.style.gridTemplateColumns = columns.map(c => c.width || '1fr').join(' ');
+        tagsNode.style.gridColumn = `5 / span ${columns.length}`;
+      }
+      const tagList = item.tags || [];
+      tagList.forEach(tag => {
+        const typeCls = tag.type ? ` jira-backlog-tag-${tag.type}` : '';
+        let valCls = '';
+        if (tag.type === 'schedule' && tag.value) {
+          valCls = ` jira-backlog-tag-schedule-${tag.value.toLowerCase()}`;
+        } else if (tag.type === 'fund' && tag.value) {
+          valCls = ` jira-backlog-tag-fund-${tag.value.toLowerCase().replace(/\s+/g, '')}`;
+        }
 
-          const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') });
+        const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') });
 
-          let iconHtml = '';
-          if (tag.type === 'client') {
-            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
-          } else if (tag.type === 'schedule') {
-            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-          } else if (tag.type === 'category') {
-            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-          } else if (tag.type === 'fund') {
-            iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
-          } else if (tag.type === 'amount') {
-            iconHtml = '<span style="font-weight:700; margin-right:2px; font-size:0.75rem;">₱</span>';
-          }
+        let iconHtml = '';
+        if (tag.type === 'client') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+        } else if (tag.type === 'schedule') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+        } else if (tag.type === 'category') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+        } else if (tag.type === 'fund') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
+        } else if (tag.type === 'amount') {
+          iconHtml = '<span style="font-weight:700; margin-right:2px; font-size:0.75rem;">₱</span>';
+        }
 
-          let textVal = tag.text;
-          if (tag.type === 'amount' && textVal.startsWith('₱')) {
-            textVal = textVal.substring(1).trim();
-          }
+        let textVal = tag.text;
+        if (tag.type === 'amount' && textVal.startsWith('₱')) {
+          textVal = textVal.substring(1).trim();
+        }
 
-          if (iconHtml) {
-            tNode.innerHTML = iconHtml + '<span>' + escapeHtml(textVal) + '</span>';
-          } else {
-            tNode.textContent = textVal;
-          }
+        if (iconHtml) {
+          tNode.innerHTML = iconHtml + '<span>' + escapeHtml(textVal) + '</span>';
+        } else {
+          tNode.textContent = textVal;
+        }
 
-          if (tag.style) tNode.setAttribute('style', tag.style);
-          tagsNode.appendChild(tNode);
-        });
+        if (tag.style) tNode.setAttribute('style', tag.style);
+        tagsNode.appendChild(tNode);
+      });
+      if (hasColumns) {
+        for (let i = tagList.length; i < columns.length; i++) {
+          tagsNode.appendChild(el('div', { class: 'jira-backlog-tag-placeholder' }));
+        }
       }
       row.appendChild(tagsNode);
+
+      // Optional secondary line (for dense pages like Active Clients)
+      if (item.secondary) {
+        const secondaryNode = el('div', { class: 'jira-backlog-row-secondary', text: item.secondary });
+        if (hasColumns) secondaryNode.style.gridColumn = '1 / -1';
+        row.appendChild(secondaryNode);
+      }
 
       // Actions on the far right
       const rowActionsList = rowActions(item);

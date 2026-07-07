@@ -186,7 +186,7 @@ const Users = {
       name: u.name,
       iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
       tags: [
-        { text: u.role, type: 'custom', className: 'jira-backlog-tag-role ' + (roleClassMap[u.role] || '') },
+        { text: u.role, type: 'role', className: roleClassMap[u.role] || '' },
         { text: u.email, type: 'category' },
         { text: (u.entities || []).join(', ') || 'No entities', type: 'client' }
       ]
@@ -200,6 +200,11 @@ const Users = {
       rowIdPrefix: 'USR',
       countLabel: 'user',
       bulkActions: [],
+      columns: [
+        { label: 'Role', width: '100px' },
+        { label: 'Email', width: '1fr' },
+        { label: 'Entities', width: '140px' }
+      ],
       headerActions: [
         {
           text: '+ Add User',
@@ -426,13 +431,6 @@ const Users = {
     const wrapper = el('div', { class: 'page-content-section' });
     const canViewAllAudit = Auth.can('audit:view_all');
 
-    wrapper.appendChild(el('div', { class: 'page-section-title', text: 'Audit Log' }));
-    wrapper.appendChild(el('div', { class: 'page-section-subtitle', text: 'Track changes, approvals, and system activity across entities.' }));
-
-    // Filters
-    const filters = el('div', { class: 'audit-filters' });
-
-    const userFilter = el('select', { class: 'form-select' });
     // Jira Filter Toolbar & Active Filters State
     const activeFilters = {
       user: new Set(),
@@ -486,20 +484,18 @@ const Users = {
       }
     });
 
-    wrapper.appendChild(toolbarContainer);
-
     const tableContainer = el('div');
     wrapper.appendChild(tableContainer);
 
     const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, activeFilters);
+      this.refreshAuditLog(tableContainer, activeFilters, toolbarContainer);
     };
 
     triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, activeFilters) {
+  refreshAuditLog(container, activeFilters, toolbarContainer) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
     const hasLogs = logs.length > 0;
@@ -554,40 +550,64 @@ const Users = {
       return;
     }
 
-    const list = el('div', { class: 'audit-cards-list' });
-    logs.forEach((l, index) => {
-      list.appendChild(this.renderAuditCard(l, index + 1));
+    const actionClassMap = {
+      create: 'jira-backlog-tag-action-create',
+      add: 'jira-backlog-tag-action-create',
+      update: 'jira-backlog-tag-action-update',
+      edit: 'jira-backlog-tag-action-update',
+      delete: 'jira-backlog-tag-action-delete',
+      remove: 'jira-backlog-tag-action-delete',
+      archive: 'jira-backlog-tag-action-archive',
+      approve: 'jira-backlog-tag-action-approve',
+      complete: 'jira-backlog-tag-action-approve',
+      reject: 'jira-backlog-tag-action-reject'
+    };
+
+    const getActionClass = (action) => {
+      if (!action) return '';
+      const key = Object.keys(actionClassMap).find(k => action.toLowerCase().includes(k));
+      return key ? actionClassMap[key] : '';
+    };
+
+    const items = logs.map((l, idx) => {
+      const user = DB.getById('users', l.userId);
+      const userName = user ? user.name : (l.userName || l.userId);
+      const initials = userName.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
+      const avatarIcon = `<div class="backlog-avatar">${escapeHtml(initials)}</div>`;
+      const ts = new Date(l.timestamp);
+
+      return {
+        id: l.id || idx,
+        keyText: 'AUD-' + String(idx + 1).padStart(2, '0'),
+        name: l.details || '—',
+        iconHtml: avatarIcon,
+        tags: [
+          { text: l.action || 'Activity', type: 'action', className: getActionClass(l.action) },
+          { text: l.entity, type: 'entity', className: 'badge badge-' + (l.entity === 'ATA' ? 'ata' : 'lta'), style: 'display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 18px; font-size: 0.6875rem; font-weight: 700;' },
+          { text: userName, type: 'client' },
+          { text: formatDate(l.timestamp) + ' ' + ts.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }), type: 'schedule' }
+        ]
+      };
     });
-    container.appendChild(list);
-  },
 
-  renderAuditCard(log, index) {
-    const user = DB.getById('users', log.userId);
-    const ts = new Date(log.timestamp);
-    const card = el('div', { class: 'audit-card' });
+    const backlog = JiraBacklogList.render({
+      title: 'Audit Log',
+      subtitle: 'system activity and changes',
+      items,
+      emptyText: 'No audit log entries found',
+      rowIdPrefix: 'AUD',
+      countLabel: 'entry',
+      bulkActions: [],
+      columns: [
+        { label: 'Action', width: '130px' },
+        { label: 'Entity', width: '60px', align: 'center' },
+        { label: 'User', width: '140px' },
+        { label: 'Timestamp', width: '160px' }
+      ],
+      toolbar: toolbarContainer
+    });
 
-    const header = el('div', { class: 'audit-card-header' });
-    const titleRow = el('div', { class: 'audit-card-title-row' });
-    titleRow.appendChild(el('span', { class: 'audit-card-key', text: 'AUD-' + String(index).padStart(2, '0') }));
-    titleRow.appendChild(el('span', { class: 'audit-card-title', text: log.action || 'Activity' }));
-    header.appendChild(titleRow);
-
-    const timeBadge = el('span', { class: 'audit-card-time', text: formatDate(log.timestamp) + ' ' + ts.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) });
-    header.appendChild(timeBadge);
-    card.appendChild(header);
-
-    const badges = el('div', { class: 'audit-card-badges' });
-    badges.appendChild(el('span', { class: 'badge badge-' + (log.entity === 'ATA' ? 'ata' : 'lta'), text: log.entity }));
-    const userBadge = el('span', { class: 'badge badge-info', text: user ? user.name : log.userId });
-    badges.appendChild(userBadge);
-    card.appendChild(badges);
-
-    const details = el('div', { class: 'audit-card-details' });
-    details.appendChild(el('span', { class: 'audit-card-details-label', text: 'Details' }));
-    details.appendChild(el('span', { class: 'audit-card-details-value', text: log.details || '—' }));
-    card.appendChild(details);
-
-    return card;
+    container.appendChild(backlog);
   },
 
   // ============================================================
