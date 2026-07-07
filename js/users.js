@@ -137,15 +137,6 @@ const Users = {
   renderUsersSection() {
     const wrapper = el('div', { class: 'page-content-section' });
 
-    // Reset Demo Data section
-    const resetSection = el('div', { class: 'reset-section' });
-    resetSection.appendChild(el('h3', { text: 'Reset Demo Data' }));
-    resetSection.appendChild(el('p', { text: 'This will reset all data to the original demo state. This action cannot be undone.' }));
-    const resetBtn = el('button', { class: 'btn btn-danger', text: 'Reset Demo Data' });
-    resetBtn.addEventListener('click', () => this.handleReset(resetSection));
-    resetSection.appendChild(resetBtn);
-    wrapper.appendChild(resetSection);
-
     // List container
     const listContainer = el('div', { class: 'list-container' });
     wrapper.appendChild(listContainer);
@@ -154,6 +145,16 @@ const Users = {
     // Form container
     const formContainer = el('div', { class: 'form-container hidden' });
     wrapper.appendChild(formContainer);
+
+    // Reset Demo Data section (kept subtle at the bottom of the page)
+    const resetSection = el('div', { class: 'reset-section reset-section--subtle' });
+    const resetTitle = el('h3', { text: 'Reset Demo Data' });
+    resetSection.appendChild(resetTitle);
+    resetSection.appendChild(el('p', { text: 'This will reset all data to the original demo state. This action cannot be undone.' }));
+    const resetBtn = el('button', { class: 'btn btn-outline-danger btn-sm', text: 'Reset Demo Data' });
+    resetBtn.addEventListener('click', () => this.handleReset(resetSection));
+    resetSection.appendChild(resetBtn);
+    wrapper.appendChild(resetSection);
 
     return wrapper;
   },
@@ -557,6 +558,16 @@ const Users = {
     }
 
     const actionClassMap = {
+      // Specific audit action phrases first so they win over generic partials.
+      login: 'jira-backlog-tag-action-login',
+      logout: 'jira-backlog-tag-action-logout',
+      'work request created': 'jira-backlog-tag-action-create',
+      'task completed': 'jira-backlog-tag-action-approve',
+      'invoice sent': 'jira-backlog-tag-action-info',
+      'disbursement released': 'jira-backlog-tag-action-release',
+      'document stored': 'jira-backlog-tag-action-info',
+      'disbursement submitted': 'jira-backlog-tag-action-warning',
+      // Generic partials
       create: 'jira-backlog-tag-action-create',
       add: 'jira-backlog-tag-action-create',
       update: 'jira-backlog-tag-action-update',
@@ -566,12 +577,19 @@ const Users = {
       archive: 'jira-backlog-tag-action-archive',
       approve: 'jira-backlog-tag-action-approve',
       complete: 'jira-backlog-tag-action-approve',
-      reject: 'jira-backlog-tag-action-reject'
+      reject: 'jira-backlog-tag-action-reject',
+      submit: 'jira-backlog-tag-action-warning',
+      release: 'jira-backlog-tag-action-release',
+      sent: 'jira-backlog-tag-action-info',
+      stored: 'jira-backlog-tag-action-info'
     };
 
     const getActionClass = (action) => {
       if (!action) return '';
-      const key = Object.keys(actionClassMap).find(k => action.toLowerCase().includes(k));
+      // Normalize underscores to spaces so phrase mappings like
+      // 'work request created' match 'WORK_REQUEST_CREATED'.
+      const normalized = action.toLowerCase().replace(/_/g, ' ');
+      const key = Object.keys(actionClassMap).find(k => normalized.includes(k));
       return key ? actionClassMap[key] : '';
     };
 
@@ -607,7 +625,7 @@ const Users = {
       countLabel: 'entry',
       bulkActions: [],
       columns: [
-        { label: 'Action', width: '170px' },
+        { label: 'Action', width: '220px' },
         { label: 'Entity', width: '60px' },
         { label: 'User', width: '140px' },
         { label: 'Timestamp', width: '160px' }

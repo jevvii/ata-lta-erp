@@ -282,7 +282,7 @@ const Clients = {
           },
           {
             text: 'Archive',
-            className: 'btn btn-secondary btn-xs text-danger',
+            className: 'btn btn-outline-danger btn-xs',
             onClick: () => {
               if (Auth.user.role === 'Admin') {
                 this.archiveClientDirectly(item.id);
