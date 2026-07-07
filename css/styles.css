@@ -15272,3 +15272,447 @@ html.loading-active #loading-screen:not(.hidden) {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ── Jira-inspired Grid/Table View ─────────────────────────────── */
+.jira-table-container {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  margin-bottom: 24px;
+  overflow-x: auto;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.jira-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.jira-table th,
+.jira-table td {
+  border: 1px solid var(--color-border);
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+
+.jira-table th {
+  background: var(--color-bg-light, #f4f5f7);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  height: 36px;
+  white-space: nowrap;
+}
+
+.jira-table tr.jira-row:hover {
+  background: var(--color-bg-muted, #f4f5f7);
+}
+
+.jira-table tr.selected {
+  background: var(--color-bg-muted, #deebff) !important;
+}
+
+[data-theme="dark"] .jira-table th {
+  background: #1d2125;
+}
+
+[data-theme="dark"] .jira-table tr.jira-row:hover {
+  background: #22272b;
+}
+
+[data-theme="dark"] .jira-table tr.selected {
+  background: #1c3d5a !important;
+}
+
+.jira-th-work {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jira-header-chevron {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.jira-row-chevron-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  transition: transform 0.2s ease;
+  outline: none;
+}
+
+.jira-row-chevron-btn.expanded {
+  transform: rotate(90deg);
+}
+
+.jira-work-cell-content {
+  display: flex;
+  align-items: center;
+}
+
+.jira-epic-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: #8777d9;
+  color: #fff;
+  border-radius: 3px;
+  font-size: 9px;
+  margin-right: 6px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.jira-task-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: #4c9aff;
+  color: #fff;
+  border-radius: 3px;
+  font-size: 9px;
+  margin-right: 6px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.jira-key-link {
+  color: var(--color-link, #0052cc);
+  text-decoration: none;
+  font-weight: 500;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.jira-key-link:hover {
+  text-decoration: underline;
+}
+
+.jira-name-text {
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jira-avatar-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.jira-avatar-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.jira-avatar-unassigned {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-bg-muted, #dfe1e6);
+  color: var(--color-text-muted, #5e6c84);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.jira-priority-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.jira-priority-icon {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  align-items: center;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.jira-priority-icon-bar {
+  display: block;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.jira-status-dropdown-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.jira-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: 3px;
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  outline: none;
+  transition: filter 0.15s;
+}
+
+.jira-status-pill:hover {
+  filter: brightness(0.9);
+}
+
+.jira-status-pill-todo {
+  background: var(--color-bg-muted, #dfe1e6);
+  color: var(--color-text, #42526e);
+}
+
+.jira-status-pill-done {
+  background: #e3fcef;
+  color: #006644;
+}
+
+[data-theme="dark"] .jira-status-pill-todo {
+  background: #2c3e50;
+  color: #cbd5e0;
+}
+
+[data-theme="dark"] .jira-status-pill-done {
+  background: #0f3d2c;
+  color: #8ce8c5;
+}
+
+.jira-status-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 100;
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.jira-status-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text);
+  transition: background 0.15s;
+}
+
+.jira-status-dropdown-item:hover {
+  background: var(--color-bg-muted);
+}
+
+.jira-table-footer {
+  background: var(--color-bg-light, #f4f5f7);
+  border-top: 1px solid var(--color-border);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  height: 38px;
+}
+
+[data-theme="dark"] .jira-table-footer {
+  background: #1d2125;
+}
+
+.jira-footer-create-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  outline: none;
+  font-size: 13px;
+}
+
+.jira-footer-create-btn:hover {
+  background: rgba(9, 30, 66, 0.08);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-footer-create-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.jira-footer-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jira-footer-refresh-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.jira-footer-refresh-btn:hover {
+  background: rgba(9, 30, 66, 0.08);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-footer-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.jira-footer-refresh-btn svg {
+  transition: transform 0.3s ease;
+}
+
+.jira-footer-refresh-btn:active svg {
+  transform: rotate(180deg);
+}
+
+/* Accordion details */
+.jira-accordion-tr {
+  background: var(--color-bg-light, #fafafa) !important;
+}
+
+[data-theme="dark"] .jira-accordion-tr {
+  background: #1a1d20 !important;
+}
+
+.jira-accordion-details-container {
+  display: flex;
+  gap: 32px;
+  width: 100%;
+}
+
+.jira-accordion-details-section {
+  flex: 1;
+}
+
+.jira-accordion-details-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 4px;
+}
+
+.jira-details-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.jira-details-lbl {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.jira-details-val {
+  color: var(--color-text);
+}
+
+.jira-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jira-details-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.jira-details-list-item-key {
+  font-weight: 600;
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+.jira-details-list-item-key:hover {
+  text-decoration: underline;
+}
+
+.jira-details-list-item-title {
+  color: var(--color-text);
+}
+
+.jira-details-list-item-status {
+  margin-left: auto;
+}
+
+.jira-trash-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.jira-trash-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+[data-theme="dark"] .jira-trash-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
