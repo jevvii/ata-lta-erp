@@ -14799,6 +14799,12 @@ html.loading-active #loading-screen:not(.hidden) {
   text-align: left !important;
 }
 
+/* Left-aligned column headers should share the same left boundary as the
+   left edge of the badge content in the rows below. */
+.jira-backlog-col-header--left {
+  padding-left: 0 !important;
+}
+
 .jira-backlog-col-header--center,
 .jira-backlog-row-tags--columns .jira-backlog-col-cell--center,
 .jira-backlog-tag.jira-backlog-col-cell--center {

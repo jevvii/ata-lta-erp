@@ -30,13 +30,13 @@ const Transmittal = {
             const editBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Edit', style: 'margin-right:8px;' });
             editBtn.addEventListener('click', () => { this.showForm(t.id); });
             actions.appendChild(editBtn);
-            const isAdmin = Auth.user?.role === 'Admin';
-            const sendBtn = el('button', { class: 'btn btn-primary btn-sm', text: isAdmin ? 'Mark as Sent' : 'Submit for Release Approval', style: 'margin-right:8px;' });
+            const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('transmittal:release');
+            const sendBtn = el('button', { class: 'btn btn-primary btn-sm', text: canReleaseDirectly ? 'Mark as Sent' : 'Submit for Release Approval', style: 'margin-right:8px;' });
             sendBtn.addEventListener('click', () => {
-              const title = isAdmin ? 'Confirm Sent' : 'Confirm Release Request';
-              const msg = isAdmin ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?';
+              const title = canReleaseDirectly ? 'Confirm Sent' : 'Confirm Release Request';
+              const msg = canReleaseDirectly ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?';
               Workflow.showConfirm(title, msg, () => {
-                if (isAdmin) {
+                if (canReleaseDirectly) {
                   DB.update('transmittals', t.id, {
                     status: 'Sent',
                     sentAt: new Date().toISOString(),
@@ -139,7 +139,7 @@ const Transmittal = {
     }).length + DB.getWhere('operationsRequests', r => {
       if (r.type !== 'transmittal' || r.status !== 'rejected') return false;
       if (!entFilter(r.entity)) return false;
-      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && r.requestedBy !== Auth.user.id) return false;
       return true;
     }).length;
 
@@ -235,7 +235,11 @@ const Transmittal = {
   },
 
   getBoardColumns() {
-    const role = Auth.user?.role;
+    const departments = Auth.user?.departments || [];
+    const isAdmin = Auth.user?.role === 'Admin';
+    const isOperations = departments.includes('Operations');
+    const isDocumentation = departments.includes('Documentation');
+    const isManagement = departments.includes('Management');
     const canCreate = Auth.can('transmittal:create');
     const draftColor = '#94a3b8';
     const sentColor = '#3b82f6';
@@ -243,13 +247,13 @@ const Transmittal = {
 
     const draftCol = {
       key: 'Draft',
-      label: role === 'Operations' ? 'Requested' : 'Draft',
+      label: isOperations ? 'Requested' : 'Draft',
       targetStatus: 'Draft',
       statuses: ['Draft'],
-      color: role === 'Operations' ? '#f59e0b' : draftColor,
+      color: isOperations ? '#f59e0b' : draftColor,
       emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
     };
-    if (role !== 'Operations' && canCreate) {
+    if (!isOperations && canCreate) {
       draftCol.addButton = { label: 'Add Transmittal', onClick: () => this.showForm() };
     }
 
@@ -272,13 +276,13 @@ const Transmittal = {
     };
 
     // Admin: same as now (Draft | Sent | Acknowledged)
-    if (role === 'Admin') return [draftCol, sentCol, ackCol];
+    if (isAdmin) return [draftCol, sentCol, ackCol];
 
-    // Documentation and Manager: Draft | Sent | Acknowledged
-    if (role === 'Documentation' || role === 'Manager') return [draftCol, sentCol, ackCol];
+    // Documentation and Management: Draft | Sent | Acknowledged
+    if (isDocumentation || isManagement) return [draftCol, sentCol, ackCol];
 
     // Operations: Requested | Sent | Acknowledged
-    if (role === 'Operations') return [draftCol, sentCol, ackCol];
+    if (isOperations) return [draftCol, sentCol, ackCol];
 
     // Others (Accounting, HR, etc.): Sent | Acknowledged
     return [sentCol, ackCol];
@@ -701,16 +705,16 @@ const Transmittal = {
         });
       }
       if (canMark && t.status === 'Draft' && !t.pendingChangeId) {
-        const isAdmin = Auth.user?.role === 'Admin';
+        const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('transmittal:release');
         menu.push({
-          label: isAdmin ? 'Mark as Sent' : 'Submit for Release Approval',
+          label: canReleaseDirectly ? 'Mark as Sent' : 'Submit for Release Approval',
           className: 'primary',
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
           onClick: () => Workflow.showConfirm(
-            isAdmin ? 'Confirm Sent' : 'Confirm Release Request',
-            isAdmin ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?',
+            canReleaseDirectly ? 'Confirm Sent' : 'Confirm Release Request',
+            canReleaseDirectly ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?',
             () => {
-              if (isAdmin) {
+              if (canReleaseDirectly) {
                 DB.update('transmittals', t.id, {
                   status: 'Sent',
                   sentAt: new Date().toISOString(),
@@ -755,9 +759,9 @@ const Transmittal = {
       canDrag: t => canEdit && !t.pendingChangeId,
       canDrop: ({ item, targetStatus }) => {
         if (item.status === targetStatus) return true;
-        // Only Admin can advance statuses on the board
-        const isAdmin = Auth.user?.role === 'Admin';
-        if (!isAdmin) return false;
+        // Only Admin/managerial users can advance statuses on the board
+        const canAdvance = Auth.user?.role === 'Admin' || Auth.isManagerial();
+        if (!canAdvance) return false;
         const flow = ['Draft', 'Sent', 'Acknowledged'];
         const currentIdx = flow.indexOf(item.status);
         const targetIdx = flow.indexOf(targetStatus);
@@ -1966,7 +1970,7 @@ const Transmittal = {
   permanentDeleteTransmittal(id) {
     const t = DB.getById('transmittals', id);
     if (!t) return;
-    if (Auth.user?.role !== 'Admin') {
+    if (Auth.user?.role !== 'Admin' && !Auth.isManagerial() && !Auth.can('transmittal:delete')) {
       Workflow.showMessage('Permission Denied', 'Only admins can permanently delete transmittals.', 'danger');
       return;
     }
@@ -1984,7 +1988,7 @@ const Transmittal = {
   renderArchive() {
     const entity = Auth.activeEntity;
     const self = this;
-    const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
 
     const entFilter = ent => {
       const uEnt = (ent || '').toUpperCase();
@@ -1998,7 +2002,7 @@ const Transmittal = {
     const rejectedTransmittalRequests = DB.getWhere('operationsRequests', r => {
       if (r.type !== 'transmittal' || r.status !== 'rejected') return false;
       if (!entFilter(r.entity)) return false;
-      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
       return true;
     });
 
@@ -2025,7 +2029,7 @@ const Transmittal = {
             className: 'primary',
             onClick: () => self.unarchiveTransmittal(t.id)
           }] : []),
-          ...(isAdmin ? [{
+          ...(isManagerial || Auth.can('transmittal:delete') ? [{
             label: 'Delete Permanently',
             icon: ArchivePage.icons.delete,
             className: 'danger',

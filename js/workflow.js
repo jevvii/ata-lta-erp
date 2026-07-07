@@ -600,7 +600,7 @@ const Workflow = {
   },
 
   cancelWorkRequest(wrId) {
-    if (Auth.user?.role !== 'Admin') {
+    if (!Auth.isManagerial()) {
       this.showMessage('Permission Denied', 'Only Admin can cancel work requests.', 'danger');
       return;
     }
@@ -680,7 +680,7 @@ const Workflow = {
   },
 
   bulkCancelWorkRequests(ids) {
-    if (Auth.user?.role !== 'Admin') {
+    if (!Auth.isManagerial()) {
       this.showMessage('Permission Denied', 'Only Admin can cancel work requests.', 'danger');
       return;
     }
@@ -2174,7 +2174,7 @@ const Workflow = {
       const ent = (wr?.entity || data.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent) : ent === entity.toUpperCase());
       if (!matchesEntity) return false;
-      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && pc.submittedBy !== Auth.user.id) return false;
       return true;
     }).length;
 
@@ -2992,7 +2992,7 @@ const Workflow = {
         }
       }
 
-      if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+      if (Auth.isManagerial() && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
         const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel', style: 'margin-left: 4px;' });
         cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); this.cancelWorkRequest(wr.id); });
         wrapper.appendChild(cancelBtn);
@@ -3060,7 +3060,7 @@ const Workflow = {
             onClick: (sel) => this.bulkArchiveWorkRequests(sel)
           });
         }
-        if (Auth.user?.role === 'Admin' && canCancel > 0) {
+        if (Auth.isManagerial() && canCancel > 0) {
           actions.push({
             text: `Cancel (${canCancel})`,
             className: 'btn btn-danger btn-sm',
@@ -3242,9 +3242,9 @@ const Workflow = {
       });
 
       if (showQuickRoute) {
-        const isAdmin = Auth.user?.role === 'Admin';
+        const canRouteDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('workflow:approve');
         items.push({
-          label: isAdmin ? `Advance to ${transitionStatus.nextPhase}` : `Request Advance to ${transitionStatus.nextPhase}`,
+          label: canRouteDirectly ? `Advance to ${transitionStatus.nextPhase}` : `Request Advance to ${transitionStatus.nextPhase}`,
           className: 'primary',
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
           onClick: () => self.transitionWorkRequest(wr.id)
@@ -3259,7 +3259,7 @@ const Workflow = {
         });
       }
 
-      if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+      if (Auth.isManagerial() && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
         items.push({
           label: 'Cancel',
           className: 'danger',
@@ -5681,8 +5681,7 @@ const Workflow = {
     
     const ts = this.getPhaseTransitionStatus(wr.id);
     const showRouteButton = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
-    const isAdmin = Auth.user?.role === 'Admin';
-    const canCancel = isAdmin && wr.status !== 'Completed' && wr.status !== 'Cancelled';
+    const canCancel = Auth.isManagerial() && wr.status !== 'Completed' && wr.status !== 'Cancelled';
     const phaseColors = {
       'Draft': '#6b6b6b',
       'Pre-processing': '#2f6feb',
@@ -5720,11 +5719,11 @@ const Workflow = {
     }
 
     if (showRouteButton) {
-      const isAdmin = Auth.user?.role === 'Admin';
-      const canRequest = !isAdmin && this.canRequestPhaseRouting();
+      const canRouteDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('workflow:approve');
+      const canRequest = !canRouteDirectly && this.canRequestPhaseRouting();
       const routeBtn = el('button', {
         class: 'btn btn-sm btn-primary',
-        text: isAdmin ? `Route to ${ts.nextPhase}` : `Request Route to ${ts.nextPhase}`,
+        text: canRouteDirectly ? `Route to ${ts.nextPhase}` : `Request Route to ${ts.nextPhase}`,
         style: `font-weight: 600; cursor: ${ts.canTransition ? 'pointer' : 'not-allowed'};`,
         disabled: !ts.canTransition
       });
@@ -10110,7 +10109,7 @@ const Workflow = {
   renderArchive() {
     const entity = Auth.activeEntity;
     const self = this;
-    const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
 
     const wrFilter = wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
@@ -10151,7 +10150,7 @@ const Workflow = {
             className: 'primary',
             onClick: () => self.unarchiveWorkRequest(wr.id)
           }] : []),
-          ...(category === 'cancelled' && isAdmin ? [{
+          ...(category === 'cancelled' && isManagerial ? [{
             label: 'Restore to Draft',
             icon: ArchivePage.icons.restore,
             className: 'primary',

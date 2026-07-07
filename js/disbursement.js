@@ -185,12 +185,12 @@ const Disbursement = {
       if (pc.table !== 'disbursements' || pc.status !== 'rejected') return false;
       const data = pc.proposedData || {};
       if (!entMatch(data.entity)) return false;
-      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && pc.submittedBy !== Auth.user.id) return false;
       return true;
     }).length + DB.getWhere('operationsRequests', r => {
       if (r.type !== 'disbursement' || r.status !== 'rejected') return false;
       if (!entMatch(r.entity)) return false;
-      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && r.requestedBy !== Auth.user.id) return false;
       return true;
     }).length;
 
@@ -703,10 +703,11 @@ const Disbursement = {
    * - Others: Released | Funded | Rejected
    */
   getBoardColumns() {
+    const departments = Auth.user?.departments || [];
     const role = Auth.user?.role;
     const isAdmin = role === 'Admin';
-    const isAccounting = role === 'Accounting';
-    const isOperations = role === 'Operations';
+    const isAccounting = departments.includes('Accounting');
+    const isOperations = departments.includes('Operations');
 
     if (isAdmin) {
       return [
@@ -972,10 +973,10 @@ const Disbursement = {
         }
 
         const label = item.category + ' — ' + formatPHP(item.amount);
-        const isAdmin = Auth.user?.role === 'Admin';
+        const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('disbursement:release');
         const applyMove = () => {
-          // Non-Admin marking as Released must submit for admin approval.
-          const nextStatus = (targetStatus === 'Released' && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+          // Non-managerial marking as Released must submit for admin approval.
+          const nextStatus = (targetStatus === 'Released' && !canReleaseDirectly) ? 'Release Pending Approval' : targetStatus;
           const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
           if (nextStatus === 'Release Pending Approval') {
             changes.releaseRequestedBy = Auth.user.id;
@@ -989,7 +990,7 @@ const Disbursement = {
         if (['Approved', 'Released', 'Funded'].includes(targetStatus)) {
           const msgs = {
             'Approved': `Approve disbursement "${label}"?`,
-            'Released': isAdmin ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
+            'Released': canReleaseDirectly ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
             'Funded': `Mark disbursement "${label}" as Funded? This confirms funds have been credited.`
           };
           Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
@@ -1709,7 +1710,7 @@ const Disbursement = {
           const handler = DB.getById('users', d.paymentHandledBy);
           container.appendChild(renderEmptyState(`Waiting for release authorization from ${handler?.name || 'assigned handler'}`));
         }
-    } else if (d.status === 'Released' && (canApprove || Auth.user?.role === 'Accounting')) {
+    } else if (d.status === 'Released' && (canApprove || Auth.can('disbursement:release') || Auth.user?.departments?.includes('Accounting'))) {
       // Final funding step after release.
       const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
       const fundBtn = el('button', { class: 'btn btn-success', text: 'Mark as Funded' });
@@ -1891,7 +1892,7 @@ const Disbursement = {
     const requester = DB.getById('users', d.requestedBy);
     let approverId = d.approvedBy || d.accountingApprovedBy;
     if (!approverId && (d.status === 'Approved' || d.status === 'Released')) {
-      const adminUser = DB.getWhere('users', u => u.role === 'Admin')[0];
+      const adminUser = DB.getWhere('users', u => u.role === 'Admin' || (u.departments || []).includes('Management'))[0];
       if (adminUser) approverId = adminUser.id;
     }
     const approver = approverId ? DB.getById('users', approverId) : null;
@@ -2755,7 +2756,7 @@ const Disbursement = {
   permanentDeleteDisbursement(id) {
     const d = DB.getById('disbursements', id);
     if (!d) return;
-    if (Auth.user?.role !== 'Admin' && !Auth.can('disbursement:delete')) {
+    if (Auth.user?.role !== 'Admin' && !Auth.can('disbursement:delete') && !Auth.isManagerial()) {
       Workflow.showMessage('Permission Denied', 'Only admins can permanently delete disbursements.', 'danger');
       return;
     }
@@ -2780,7 +2781,7 @@ const Disbursement = {
   renderArchive() {
     const entity = Auth.activeEntity;
     const self = this;
-    const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
 
     const entFilter = ent => {
       const uEnt = (ent || '').toUpperCase();
@@ -2795,14 +2796,14 @@ const Disbursement = {
       if (pc.table !== 'disbursements' || pc.status !== 'rejected') return false;
       const data = pc.proposedData || {};
       if (!entFilter(data.entity)) return false;
-      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      if (!isManagerial && pc.submittedBy !== Auth.user.id) return false;
       return true;
     });
 
     const rejectedDisbursementRequests = DB.getWhere('operationsRequests', r => {
       if (r.type !== 'disbursement' || r.status !== 'rejected') return false;
       if (!entFilter(r.entity)) return false;
-      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
       return true;
     });
 
@@ -2829,7 +2830,7 @@ const Disbursement = {
             className: 'primary',
             onClick: () => self.unarchiveDisbursement(d.id)
           }] : []),
-          ...(isAdmin || Auth.can('disbursement:delete') ? [{
+          ...(isManagerial || Auth.can('disbursement:delete') ? [{
             label: 'Delete Permanently',
             icon: ArchivePage.icons.delete,
             className: 'danger',

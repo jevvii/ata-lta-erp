@@ -175,7 +175,7 @@ const App = {
         const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
         const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
         let approvalsCount = 0;
-        if (Auth.user.role === 'Manager' && typeof Users !== 'undefined' && typeof Users.getPendingCategories === 'function') {
+        if (Auth.isManagerial() && typeof Users !== 'undefined' && typeof Users.getPendingCategories === 'function') {
           const categories = Users.getPendingCategories();
           approvalsCount = Object.values(categories).reduce((sum, arr) => sum + (arr || []).length, 0);
         }

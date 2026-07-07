@@ -141,14 +141,14 @@ const Billing = {
       const ent = data.entity || '';
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(ent) : ent === entity);
       if (!matchesEntity) return false;
-      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && pc.submittedBy !== Auth.user.id) return false;
       return true;
     }).length + DB.getWhere('operationsRequests', r => {
       if (r.type !== 'billing' || r.status !== 'rejected') return false;
       const ent = (r.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent) : ent === entity.toUpperCase());
       if (!matchesEntity) return false;
-      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && r.requestedBy !== Auth.user.id) return false;
       return true;
     }).length;
 
@@ -601,9 +601,10 @@ const Billing = {
    * - Others: Requested (Draft/Pending/Approved) | Released (Sent) | Partially Paid | Paid | Overdue
    */
   getBoardColumns() {
+    const departments = Auth.user?.departments || [];
     const role = Auth.user?.role;
     const isAdmin = role === 'Admin';
-    const isAccounting = role === 'Accounting';
+    const isAccounting = departments.includes('Accounting');
 
     const releasedStatuses = ['Sent'];
 
@@ -844,8 +845,8 @@ const Billing = {
 
         const applyMove = () => {
           const isRelease = targetStatus === 'Sent';
-          const isAdmin = Auth.user?.role === 'Admin';
-          const nextStatus = (isRelease && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+          const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('billing:release');
+          const nextStatus = (isRelease && !canReleaseDirectly) ? 'Release Pending Approval' : targetStatus;
           const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
           DB.update('invoices', item.id, changes);
           App.handleRoute();
@@ -854,10 +855,10 @@ const Billing = {
         // Confirm critical transitions
         if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
           const isRelease = targetStatus === 'Sent';
-          const isAdmin = Auth.user?.role === 'Admin';
+          const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('billing:release');
           const labels = {
             'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
-            'Sent': { msg: isAdmin ? `Release invoice "${item.invoiceNumber}" to client?` : `Submit invoice "${item.invoiceNumber}" for release approval?`, type: 'success' },
+            'Sent': { msg: canReleaseDirectly ? `Release invoice "${item.invoiceNumber}" to client?` : `Submit invoice "${item.invoiceNumber}" for release approval?`, type: 'success' },
             'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
           };
           const cfg = labels[targetStatus];
@@ -1882,8 +1883,8 @@ const Billing = {
       }
     } else if (inv.status === 'Approved' && canEdit) {
       // Mark as Released — billing:edit (Accounting), pending Admin approval
-      const isAdmin = Auth.user?.role === 'Admin';
-      const sentBtn = el('button', { class: 'btn btn-primary', text: isAdmin ? 'Release Invoice' : 'Submit for Release' });
+      const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('billing:release');
+      const sentBtn = el('button', { class: 'btn btn-primary', text: canReleaseDirectly ? 'Release Invoice' : 'Submit for Release' });
       sentBtn.addEventListener('click', () => {
         if (isAdmin) {
           DB.update('invoices', inv.id, { status: 'Sent', updatedAt: new Date().toISOString() });
@@ -3143,7 +3144,7 @@ const Billing = {
   permanentDeleteInvoice(id) {
     const inv = DB.getById('invoices', id);
     if (!inv) return;
-    if (Auth.user?.role !== 'Admin') {
+    if (Auth.user?.role !== 'Admin' && !Auth.isManagerial() && !Auth.can('billing:delete')) {
       Workflow.showMessage('Permission Denied', 'Only admins can permanently delete invoices.', 'danger');
       return;
     }
@@ -3167,7 +3168,7 @@ const Billing = {
   renderArchive() {
     const entity = Auth.activeEntity;
     const self = this;
-    const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
 
     const entFilter = ent => {
       if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent.toUpperCase());
@@ -3181,14 +3182,14 @@ const Billing = {
       if (pc.table !== 'invoices' || pc.status !== 'rejected') return false;
       const data = pc.proposedData || {};
       if (!entFilter(data.entity || '')) return false;
-      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      if (!isManagerial && pc.submittedBy !== Auth.user.id) return false;
       return true;
     });
 
     const rejectedBillingRequests = DB.getWhere('operationsRequests', r => {
       if (r.type !== 'billing' || r.status !== 'rejected') return false;
       if (!entFilter(r.entity || '')) return false;
-      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
       return true;
     });
 
@@ -3221,7 +3222,7 @@ const Billing = {
             className: 'primary',
             onClick: () => self.restoreInvoice(inv.id)
           }] : []),
-          ...(isAdmin ? [{
+          ...(isManagerial || Auth.can('billing:delete') ? [{
             label: 'Delete Permanently',
             icon: ArchivePage.icons.delete,
             className: 'danger',
