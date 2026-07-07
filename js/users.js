@@ -914,6 +914,28 @@ const Users = {
     });
   },
 
+  getTypeBadgeInfo(item) {
+    if (item.type === 'disbursement') {
+      return { text: 'Expense', className: 'badge-warning' };
+    }
+    
+    const table = item.raw && item.raw.table;
+    switch (table) {
+      case 'tasks':
+        return { text: 'Task', className: 'badge-recurring' };
+      case 'workRequests':
+        return { text: 'Work Request', className: 'badge-preprocessing' };
+      case 'invoices':
+        return { text: 'Invoice', className: 'badge-billing' };
+      case 'transmittals':
+        return { text: 'Transmittal', className: 'badge-neutral' };
+      case 'clients':
+        return { text: 'Client', className: 'badge-info' };
+      default:
+        return { text: 'Change', className: 'badge-neutral' };
+    }
+  },
+
   renderTableView(container, items) {
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
@@ -937,12 +959,11 @@ const Users = {
       
       // Type
       const tdType = el('td');
-      const badgeColor = item.type === 'disbursement' ? '#f59e0b' : '#3b82f6';
-      const badgeBg = item.type === 'disbursement' ? '#fef3c7' : '#dbeafe';
-      const badgeText = item.type === 'disbursement' ? 'Expense' : 'Billing';
+      const badgeInfo = this.getTypeBadgeInfo(item);
       tdType.appendChild(el('span', {
-        text: badgeText,
-        style: `font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor};`
+        class: `badge ${badgeInfo.className}`,
+        text: badgeInfo.text,
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       tr.appendChild(tdType);
       
@@ -990,14 +1011,13 @@ const Users = {
         }
       });
       
-      const badgeColor = item.type === 'disbursement' ? '#f59e0b' : '#3b82f6';
-      const badgeBg = item.type === 'disbursement' ? '#fef3c7' : '#dbeafe';
-      const badgeText = item.type === 'disbursement' ? 'Expense' : 'Billing';
+      const badgeInfo = this.getTypeBadgeInfo(item);
       
       const leftPart = el('div', { style: 'display: flex; align-items: center; gap: 12px;' });
       leftPart.appendChild(el('span', {
-        text: badgeText,
-        style: `font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; min-width: 60px; text-align: center;`
+        class: `badge ${badgeInfo.className}`,
+        text: badgeInfo.text,
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       
       const textInfo = el('div');
@@ -1186,121 +1206,316 @@ const Users = {
     header.appendChild(backBtn);
     wrapper.appendChild(header);
 
-    // Meta Card
-    const submitter = DB.getById('users', pc.submittedBy);
-    const metaCard = el('div', {
-      class: 'card',
-      style: 'border-radius: 8px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;'
-    });
-
-    const addMeta = (label, val) => {
-      const g = el('div');
-      g.appendChild(el('div', { text: label, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px;' }));
-      g.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 500; color: var(--color-text);' }));
-      metaCard.appendChild(g);
+    // SVGs for Notion Property Grid
+    const Icons = {
+      workRequest: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1.8 1.8"/><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1.8-1.8"/></svg>`,
+      assignee: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+      coAssignees: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      priority: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`,
+      dueDate: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+      predecessors: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8v8a6 6 0 0 0 12 0"/><circle cx="18" cy="8" r="3"/><circle cx="6" cy="8" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+      client: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+      status: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+      document: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+      invoice: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15h.01M12 15h.01M16 15h.01"/></svg>`,
+      amount: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="12" cy="15" r="2"/></svg>`,
+      checklist: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`
     };
 
-    const niceTableName = pc.table.charAt(0).toUpperCase() + pc.table.slice(1).replace(/([A-Z])/g, ' $1');
-    addMeta('Record Entity/Table', niceTableName);
-    addMeta('Submitted By', submitter ? submitter.name : pc.submittedBy);
-    addMeta('Submission Date', formatDate(pc.submittedAt));
-    
-    wrapper.appendChild(metaCard);
-
-    // If it's an invoice, show the proposed invoice fields for verification
-    if (pc.table === 'invoices') {
-      const proposed = pc.proposedData;
-      const client = proposed ? DB.getById('clients', proposed.clientId) : null;
-      const wr = proposed && proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
-
-      const invoiceReviewSection = el('div', { class: 'form-section', style: 'margin-bottom: 24px;' });
-      invoiceReviewSection.appendChild(el('h3', { text: '📄 Invoice / Billing Details', style: 'font-size: 1rem; font-weight: 600; color: var(--color-primary); margin-bottom: 12px;' }));
-
-      const invoiceCard = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
-
-      // Meta Grid
-      const grid = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px;' });
-
-      const addGridField = (lbl, val) => {
-        const field = el('div');
-        field.appendChild(el('div', { text: lbl, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px;' }));
-        field.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 600; color: var(--color-text);' }));
-        grid.appendChild(field);
-      };
-
-      addGridField('Invoice Number', proposed ? proposed.invoiceNumber : '—');
-      addGridField('Client', client ? client.name : '—');
-      addGridField('Work Request / Project', wr ? wr.title : '—');
-      addGridField('Issue Date', proposed ? formatDate(proposed.issueDate) : '—');
-      addGridField('Due Date', proposed ? formatDate(proposed.dueDate) : '—');
-      addGridField('Total Amount', proposed ? formatPHP(proposed.total) : '—');
-
-      invoiceCard.appendChild(grid);
-
-      // Line Items Sub-table
-      if (proposed && Array.isArray(proposed.lineItems) && proposed.lineItems.length > 0) {
-        invoiceCard.appendChild(el('div', { text: 'Line Items', style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 8px; margin-top: 12px;' }));
-        const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px;' });
-        const liThead = el('thead');
-        const liThr = el('tr');
-        ['Type', 'Description', 'Amount'].forEach(h => liThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 8px;' })));
-        liThead.appendChild(liThr);
-        liTable.appendChild(liThead);
-
-        const liTbody = el('tbody');
-        proposed.lineItems.forEach(item => {
-          const tr = el('tr');
-          tr.appendChild(el('td', { text: item.type, style: 'padding: 8px;' }));
-          tr.appendChild(el('td', { text: item.description, style: 'padding: 8px;' }));
-          tr.appendChild(el('td', { text: formatPHP(item.amount), style: 'padding: 8px; font-weight: 600;' }));
-          liTbody.appendChild(tr);
-        });
-        liTable.appendChild(liTbody);
-        invoiceCard.appendChild(liTable);
-      }
-
-      invoiceReviewSection.appendChild(invoiceCard);
-      wrapper.appendChild(invoiceReviewSection);
+    function getInitials(name) {
+      if (!name) return 'U';
+      return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     }
 
-    // Diff / Change Details Section
-    const diffSection = el('div', { class: 'form-section', style: 'margin-bottom: 24px;' });
-    diffSection.appendChild(el('h3', { text: 'Change Comparison', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
+    function createPropertyRow(label, iconSvg, valueNode) {
+      return el('div', { class: 'notion-property-row' }, [
+        el('span', { class: 'notion-property-label' }, [
+          el('span', { html: iconSvg, style: 'display: flex; align-items: center;' }),
+          label
+        ]),
+        el('span', { class: 'notion-property-value' }, [valueNode])
+      ]);
+    }
 
-    const diffContainer = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
-    
-    // Custom diff tables rendering for beautiful layout
-    const { current, proposed, diffs, isNew } = PendingChanges.buildDiff(pc);
-    diffContainer.innerHTML = '';
-    
-    if (diffs.length === 0) {
-      diffContainer.appendChild(renderEmptyStateV2({
-        variant: 'compact',
-        icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-        title: 'No changes detected',
-        body: 'No differences found between current and proposed data.'
-      }));
+    // Submitter Info
+    const submitter = DB.getById('users', pc.submittedBy);
+    const submitterName = submitter ? submitter.name : pc.submittedBy;
+    const submitterInitials = getInitials(submitterName);
+
+    const singularName = {
+      tasks: 'task',
+      workRequests: 'work request',
+      invoices: 'invoice',
+      transmittals: 'transmittal',
+      clients: 'client',
+      disbursements: 'disbursement'
+    }[pc.table] || pc.table;
+
+    // Main Notion Card
+    const reviewCard = el('div', { class: 'admin-review-card' });
+
+    // 1. Card Header Row (Avatar, Meta Text, Status Badge)
+    const cardHeader = el('div', { class: 'admin-review-card-header' }, [
+      el('div', { class: 'admin-review-submitter-info' }, [
+        el('div', { class: 'admin-review-avatar', text: submitterInitials }),
+        el('div', { class: 'admin-review-meta-text' }, [
+          el('strong', { text: submitterName }),
+          ` proposed a new ${singularName} · ${formatDate(pc.submittedAt)}`
+        ])
+      ]),
+      el('div', { class: 'admin-review-status-badge', text: 'Awaiting approval' })
+    ]);
+    reviewCard.appendChild(cardHeader);
+
+    // 2. Title Section
+    const proposed = pc.proposedData;
+    let recordTitle = '';
+    let titleIcon = '';
+
+    if (pc.table === 'tasks') {
+      recordTitle = proposed.title || '(Untitled)';
+      titleIcon = Icons.checklist;
+    } else if (pc.table === 'workRequests') {
+      recordTitle = proposed.title || '(Untitled)';
+      titleIcon = Icons.document;
+    } else if (pc.table === 'invoices') {
+      recordTitle = proposed.invoiceNumber || '(No Invoice Number)';
+      titleIcon = Icons.invoice;
+    } else if (pc.table === 'transmittals') {
+      recordTitle = proposed.transmittalNumber || '(No Transmittal Number)';
+      titleIcon = Icons.document;
+    } else if (pc.table === 'clients') {
+      recordTitle = proposed.name || '(No Client Name)';
+      titleIcon = Icons.client;
+    } else if (pc.table === 'disbursements') {
+      recordTitle = proposed.voucherNumber || '(No Voucher Number)';
+      titleIcon = Icons.amount;
     } else {
-      // Build a clean, styled table of changed fields only
+      recordTitle = proposed.title || proposed.name || proposed.invoiceNumber || proposed.voucherNumber || '(Untitled)';
+      titleIcon = Icons.document;
+    }
+
+    const titleContainer = el('div', { class: 'notion-title-section' }, [
+      el('div', { class: 'notion-title-icon', html: titleIcon }),
+      el('h3', { class: 'notion-title-text', text: recordTitle })
+    ]);
+    reviewCard.appendChild(titleContainer);
+
+    // 3. Validation / Warning Banner
+    if (pc.table === 'tasks' && (proposed.title && (proposed.title.length <= 2 || proposed.title.toLowerCase() === 's'))) {
+      const warningBox = el('div', { class: 'notion-warning-box' }, [
+        el('span', { text: '⚠️', style: 'margin-right: 4px;' }),
+        el('span', { text: 'Title looks incomplete — verify before approving.' })
+      ]);
+      reviewCard.appendChild(warningBox);
+    }
+
+    // 4. Notion Property Grid
+    const propertyGrid = el('div', { class: 'notion-property-grid' });
+
+    if (pc.table === 'tasks') {
+      // Work Request
+      const wr = proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
+      const wrVal = wr 
+        ? el('a', { class: 'notion-property-value-link', href: `#operations/detail/${wr.id}`, text: wr.title || proposed.workRequestId })
+        : el('span', { text: proposed.workRequestId || 'None' });
+      propertyGrid.appendChild(createPropertyRow('Work request', Icons.workRequest, wrVal));
+
+      // Assignee
+      const assignee = proposed.assigneeId ? DB.getById('users', proposed.assigneeId) : null;
+      const assigneeVal = assignee 
+        ? el('span', { text: assignee.name })
+        : el('span', { class: 'notion-property-value-warning', html: `⚠️ Not set` });
+      propertyGrid.appendChild(createPropertyRow('Assignee', Icons.assignee, assigneeVal));
+
+      // Co-assignees
+      const coVal = (proposed.coAssignees && proposed.coAssignees.length > 0)
+        ? el('span', { text: proposed.coAssignees.join(', ') })
+        : el('span', { style: 'font-style: italic; color: var(--color-text-muted);', text: 'None' });
+      propertyGrid.appendChild(createPropertyRow('Co-assignees', Icons.coAssignees, coVal));
+
+      // Priority
+      const priority = proposed.priority || 'Normal';
+      let priorityClass = 'badge-info';
+      if (priority === 'High' || priority === 'Urgent') priorityClass = 'badge-danger';
+      else if (priority === 'Low') priorityClass = 'badge-muted';
+      const priorityVal = el('span', { 
+        class: `badge ${priorityClass}`, 
+        text: priority,
+        style: 'font-size: 11px; padding: 2px 8px; border-radius: 4px;'
+      });
+      propertyGrid.appendChild(createPropertyRow('Priority', Icons.priority, priorityVal));
+
+      // Due date
+      const dueVal = proposed.dueDate
+        ? el('span', { text: formatDate(proposed.dueDate) })
+        : el('span', { style: 'font-style: italic; color: var(--color-text-muted);', text: 'Not set' });
+      propertyGrid.appendChild(createPropertyRow('Due date', Icons.dueDate, dueVal));
+
+      // Predecessors
+      const predVal = (proposed.predecessors && proposed.predecessors.length > 0)
+        ? el('span', { text: proposed.predecessors.join(', ') })
+        : el('span', { style: 'font-style: italic; color: var(--color-text-muted);', text: 'None' });
+      propertyGrid.appendChild(createPropertyRow('Predecessors', Icons.predecessors, predVal));
+
+    } else if (pc.table === 'workRequests') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+      
+      const statusVal = el('span', { class: 'badge badge-info', text: proposed.status || 'Draft' });
+      propertyGrid.appendChild(createPropertyRow('Status', Icons.status, statusVal));
+
+      const priority = proposed.priority || 'Normal';
+      const priorityVal = el('span', { class: 'badge badge-info', text: priority });
+      propertyGrid.appendChild(createPropertyRow('Priority', Icons.priority, priorityVal));
+
+      const assignee = proposed.assigneeId ? DB.getById('users', proposed.assigneeId) : null;
+      propertyGrid.appendChild(createPropertyRow('Assignee', Icons.assignee, el('span', { text: assignee ? assignee.name : 'Not set' })));
+
+    } else if (pc.table === 'invoices') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+
+      const wr = proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
+      propertyGrid.appendChild(createPropertyRow('Work request', Icons.workRequest, el('span', { text: wr ? wr.title : 'None' })));
+
+      propertyGrid.appendChild(createPropertyRow('Issue date', Icons.dueDate, el('span', { text: formatDate(proposed.issueDate) })));
+      propertyGrid.appendChild(createPropertyRow('Due date', Icons.dueDate, el('span', { text: formatDate(proposed.dueDate) })));
+      propertyGrid.appendChild(createPropertyRow('Total amount', Icons.amount, el('span', { text: formatPHP(proposed.total), style: 'font-weight: 700;' })));
+
+    } else if (pc.table === 'transmittals') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+
+      const wr = proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
+      propertyGrid.appendChild(createPropertyRow('Work request', Icons.workRequest, el('span', { text: wr ? wr.title : 'None' })));
+
+      propertyGrid.appendChild(createPropertyRow('Date', Icons.dueDate, el('span', { text: formatDate(proposed.date) })));
+      propertyGrid.appendChild(createPropertyRow('Status', Icons.status, el('span', { class: 'badge badge-info', text: proposed.status || 'Draft' })));
+
+    } else if (pc.table === 'clients') {
+      propertyGrid.appendChild(createPropertyRow('TIN', Icons.document, el('span', { text: proposed.tin || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Contact person', Icons.assignee, el('span', { text: proposed.contactPerson || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Phone', Icons.document, el('span', { text: proposed.phone || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Email', Icons.document, el('span', { text: proposed.email || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Retainer status', Icons.status, el('span', { text: proposed.retainer ? 'Yes' : 'No' })));
+
+    } else if (pc.table === 'disbursements') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+      propertyGrid.appendChild(createPropertyRow('Amount', Icons.amount, el('span', { text: formatPHP(proposed.amount), style: 'font-weight: 700;' })));
+      propertyGrid.appendChild(createPropertyRow('Payment method', Icons.document, el('span', { text: proposed.paymentMethod || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Status', Icons.status, el('span', { class: 'badge badge-info', text: proposed.status || 'Draft' })));
+
+    } else {
+      for (const [k, v] of Object.entries(proposed)) {
+        if (['id', 'createdAt', 'updatedAt', 'tasks', 'lineItems', 'checklist'].includes(k)) continue;
+        const displayVal = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        const niceKey = k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        propertyGrid.appendChild(createPropertyRow(niceKey, Icons.document, el('span', { text: displayVal })));
+      }
+    }
+
+    reviewCard.appendChild(propertyGrid);
+
+    // 5. Checklist or Sub-items section
+    let hasSubSection = false;
+    const subSectionContainer = el('div', { class: 'notion-sub-section' });
+
+    if (pc.table === 'tasks') {
+      hasSubSection = true;
+      const checklistCount = proposed.checklist ? proposed.checklist.length : 0;
+      subSectionContainer.appendChild(el('div', { class: 'notion-section-divider' }));
+      subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-title' }, [
+        el('span', { html: Icons.checklist }),
+        `Checklist items proposed (${checklistCount})`
+      ]));
+
+      if (proposed.checklist && proposed.checklist.length > 0) {
+        const list = el('div', { style: 'display: flex; flex-direction: column; gap: 8px; margin-top: 12px;' });
+        proposed.checklist.forEach(item => {
+          const checkRow = el('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
+            el('input', { type: 'checkbox', disabled: true, checked: item.completed }),
+            el('span', { text: item.text, style: 'font-size: 0.875rem; color: var(--color-text); font-style: normal;' })
+          ]);
+          list.appendChild(checkRow);
+        });
+        subSectionContainer.appendChild(list);
+      } else {
+        subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-content', text: 'Staff did not add any checklist items.' }));
+      }
+    } else if (pc.table === 'invoices' && proposed.lineItems && proposed.lineItems.length > 0) {
+      hasSubSection = true;
+      subSectionContainer.appendChild(el('div', { class: 'notion-section-divider' }));
+      subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-title' }, [
+        el('span', { html: Icons.document }),
+        `Line Items`
+      ]));
+
+      const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px;' });
+      const liThead = el('thead');
+      const liThr = el('tr');
+      ['Type', 'Description', 'Amount'].forEach(h => liThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 8px;' })));
+      liThead.appendChild(liThr);
+      liTable.appendChild(liThead);
+
+      const liTbody = el('tbody');
+      proposed.lineItems.forEach(item => {
+        const tr = el('tr');
+        tr.appendChild(el('td', { text: item.type, style: 'padding: 8px;' }));
+        tr.appendChild(el('td', { text: item.description, style: 'padding: 8px;' }));
+        tr.appendChild(el('td', { text: formatPHP(item.amount), style: 'padding: 8px; font-weight: 600;' }));
+        liTbody.appendChild(tr);
+      });
+      liTable.appendChild(liTbody);
+      liTable.style.fontStyle = 'normal';
+      subSectionContainer.appendChild(liTable);
+    } else if (pc.table === 'workRequests' && proposed.tasks && proposed.tasks.length > 0) {
+      hasSubSection = true;
+      subSectionContainer.appendChild(el('div', { class: 'notion-section-divider' }));
+      subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-title' }, [
+        el('span', { html: Icons.checklist }),
+        `Proposed Tasks (${proposed.tasks.length})`
+      ]));
+
+      const list = el('div', { style: 'display: flex; flex-direction: column; gap: 8px; margin-top: 12px;' });
+      proposed.tasks.forEach(t => {
+        const taskRow = el('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
+          el('span', { html: Icons.checklist, style: 'color: var(--color-text-muted); opacity: 0.6;' }),
+          el('span', { text: t.title, style: 'font-size: 0.875rem; color: var(--color-text); font-style: normal; font-weight: 500;' })
+        ]);
+        list.appendChild(taskRow);
+      });
+      subSectionContainer.appendChild(list);
+    }
+
+    if (hasSubSection) {
+      reviewCard.appendChild(subSectionContainer);
+    }
+
+    wrapper.appendChild(reviewCard);
+
+    // 6. Changed Fields (Diff) Table for Edits
+    const { current, diffs, isNew } = PendingChanges.buildDiff(pc);
+    if (!isNew && diffs.length > 0) {
+      const diffSection = el('div', { class: 'form-section', style: 'margin-top: 24px; margin-bottom: 24px;' });
+      diffSection.appendChild(el('h3', { text: 'Changed Fields (Diff)', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
+
+      const diffContainer = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
       const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
       const diffThead = el('thead');
       const diffThr = el('tr');
-      ['Field', 'Proposed Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: var(--color-bg-muted); border-bottom: 2px solid var(--color-border); font-size: 0.8125rem;' })));
+      ['Field', 'Current Approved Value', 'Proposed Pending Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: var(--color-bg-muted); border-bottom: 2px solid var(--color-border); font-size: 0.8125rem;' })));
       diffThead.appendChild(diffThr);
       diffTable.appendChild(diffThead);
       
       const diffTbody = el('tbody');
       diffs.forEach(d => {
         const tr = el('tr');
-        
-        // Format the key to look nice
         const niceKey = d.key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
         
-        // Format values
         let oldVal = d.old;
         let newVal = d.new;
-        
-        // If it's a JSON or long array/object, make it clean
         if (oldVal.startsWith('[') || oldVal.startsWith('{')) {
           try {
             const parsed = JSON.parse(oldVal);
@@ -1314,18 +1529,18 @@ const Users = {
           } catch(e) {}
         }
         
-        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-text);' }));
-        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-success); background: rgba(52, 211, 153, 0.12);' }));
+        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-text-muted);' }));
+        tr.appendChild(el('td', { text: oldVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-size: 0.8125rem; color: var(--color-text);' }));
+        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-success); background: rgba(52, 211, 153, 0.1);' }));
         diffTbody.appendChild(tr);
       });
       diffTable.appendChild(diffTbody);
       diffContainer.appendChild(diffTable);
+      diffSection.appendChild(diffContainer);
+      wrapper.appendChild(diffSection);
     }
-    
-    diffSection.appendChild(diffContainer);
-    wrapper.appendChild(diffSection);
 
-    // Actions Footer
+    // 7. Actions Footer
     const actions = el('div', {
       style: 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'
     });
@@ -1379,6 +1594,7 @@ const Users = {
           location.hash = `#operations/form/${pc.proposedData.id}`;
         } else if (pc.table === 'tasks') {
           App.handleRoute(); // navigate back to wherever they were
+          PendingChanges.editingPendingId = pc.id;
           Workflow.showEditTaskModal(pc.proposedData.id, () => {
             App.handleRoute();
           });

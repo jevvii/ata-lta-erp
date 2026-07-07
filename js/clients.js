@@ -491,6 +491,7 @@ const Clients = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     const data = Object.fromEntries(new FormData(form).entries());
 
@@ -584,6 +585,7 @@ const Clients = {
       relatedCompanies
     };
 
+    let result = { approved: true };
     if (this.editingId && this.editingId !== 'new') {
       record.id = this.editingId;
       const old = DB.getById('clients', this.editingId);
@@ -594,12 +596,12 @@ const Clients = {
         record.email = old.email || '';
       }
       record.contactPerson = contactPerson;
-      PendingChanges.submit('clients', record, false);
+      result = PendingChanges.submit('clients', record, false);
     } else {
       record.id = generateId('c');
       record.createdAt = new Date().toISOString();
       record.contactPerson = contactPerson;
-      PendingChanges.submit('clients', record, true);
+      result = PendingChanges.submit('clients', record, true);
     }
 
     const isNew = !this.editingId || this.editingId === 'new';
@@ -611,7 +613,8 @@ const Clients = {
         : `Client ${record.name} ${isNew ? 'creation' : 'update'} request has been submitted for Admin approval.`,
       type: 'success'
     };
-    closeFormPanelAndRoute('#clients', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#clients';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   archiveClientDirectly(clientId) {

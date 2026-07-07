@@ -899,6 +899,7 @@ const Transmittal = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     const entity = Auth.activeEntity;
     const data = Object.fromEntries(new FormData(form).entries());
@@ -994,7 +995,8 @@ const Transmittal = {
       message: 'Transmittal has been ' + (isNew ? 'created' : 'updated') + ' successfully.',
       type: 'success'
     };
-    closeFormPanelAndRoute('#transmittal', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#transmittal';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   // ============================================================

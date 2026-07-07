@@ -4383,6 +4383,7 @@ const Workflow = {
   },
 
   submitForm(form) {
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
     // Temporarily enable disabled fields so FormData picks them up
     const disabledFields = form.querySelectorAll('[disabled]');
     disabledFields.forEach(f => f.disabled = false);
@@ -4565,7 +4566,8 @@ const Workflow = {
         : `Work Request ${isNew ? 'creation' : 'update'} request has been submitted for Admin approval.`,
       type: 'success'
     };
-    closeFormPanelAndRoute('#operations', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#operations';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   /**
@@ -8259,6 +8261,98 @@ const Workflow = {
       form.appendChild(coAssigneeGroup);
     }
 
+    // Initialize from existing task checklist or empty array
+    let checklistItems = Array.isArray(task.checklist) ? [...task.checklist] : [];
+
+    // Append the Checklist Builder layout (identical to Add Task modal)
+    const checklistGroup = el('div', { class: 'form-group' });
+    checklistGroup.appendChild(el('label', { text: 'Checklist Items' }));
+    const checklistContainer = el('div', { class: 'checklist-items-container' });
+
+    const checklistBuilder = el('div', { style: 'display:flex; gap:8px; align-items:center;' });
+    const checklistInput = el('input', { type: 'text', placeholder: 'Add a checklist item...', style: 'flex:1;' });
+    const checklistCategorySel = el('select', { style: 'width:110px; flex-shrink:0;' });
+    checklistCategorySel.appendChild(el('option', { value: 'subtask', text: 'Sub-task' }));
+    checklistCategorySel.appendChild(el('option', { value: 'document', text: 'Document' }));
+    const addChecklistBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Add' });
+    checklistBuilder.appendChild(checklistInput);
+    checklistBuilder.appendChild(checklistCategorySel);
+    checklistBuilder.appendChild(addChecklistBtn);
+    checklistContainer.appendChild(checklistBuilder);
+    checklistGroup.appendChild(checklistContainer);
+    form.appendChild(checklistGroup);
+
+    const renderChecklist = () => {
+      const existingList = checklistContainer.querySelector('.checklist-items-list');
+      if (existingList) existingList.remove();
+      if (checklistItems.length === 0) return;
+
+      const list = el('div', { class: 'checklist-items-list', style: 'display:flex; flex-direction:column; gap:6px; margin-top:8px;' });
+      checklistItems.forEach((item, idx) => {
+        const row = el('div', { style: 'display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;' });
+        row.appendChild(el('span', { text: item.text, style: 'flex:1; font-size:0.85rem;' }));
+        const categoryBadge = el('span', {
+          text: item.category === 'document' ? 'Document' : 'Sub-task',
+          style: 'font-size:0.7rem; padding:2px 6px; border-radius:10px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600;'
+        });
+        row.appendChild(categoryBadge);
+
+        const prereqSelect = el('select', { style: 'font-size:0.8rem; max-width:140px;' });
+        prereqSelect.appendChild(el('option', { value: '', text: '— None —' }));
+        prereqSelect.appendChild(el('option', { value: '*', text: 'All Task (*)' }));
+        checklistItems.slice(0, idx).forEach((prev, pIdx) => {
+          if (!prev.id) prev.id = generateId('chk');
+          prereqSelect.appendChild(el('option', { value: prev.id, text: `${pIdx + 1}. ${prev.text}` }));
+        });
+        if (checklistItems.length <= 1) {
+          prereqSelect.disabled = true;
+        }
+        prereqSelect.value = item.dependsOn || '';
+        prereqSelect.addEventListener('change', () => {
+          item.dependsOn = prereqSelect.value || null;
+        });
+        row.appendChild(prereqSelect);
+
+        const assigneeDropdown = this.createGroundWorkerDropdown({
+          selectedGroundWorkerName: item.assigneeName,
+          placeholder: 'Assign...',
+          maxWidth: '140px',
+          className: 'modal-checklist-assignee',
+          onChange: ({ assigneeId, assigneeName }) => {
+            item.assigneeId = assigneeId || null;
+            item.assigneeName = assigneeName || null;
+          }
+        });
+        row.appendChild(assigneeDropdown);
+
+        const delBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: '×' });
+        delBtn.addEventListener('click', () => {
+          checklistItems.splice(idx, 1);
+          renderChecklist();
+        });
+        row.appendChild(delBtn);
+        list.appendChild(row);
+      });
+      checklistContainer.insertBefore(list, checklistBuilder);
+    };
+
+    const addChecklistItem = () => {
+      const val = checklistInput.value.trim();
+      if (!val) return;
+      checklistItems.push({ id: generateId('chk'), text: val, category: checklistCategorySel.value || 'subtask', assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] });
+      checklistInput.value = '';
+      renderChecklist();
+    };
+    addChecklistBtn.addEventListener('click', addChecklistItem);
+    checklistInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addChecklistItem();
+      }
+    });
+
+    renderChecklist();
+
     // Due Date
     form.appendChild(el('div', { class: 'form-group' }, [
       el('label', { text: 'Due Date' }),
@@ -8381,7 +8475,8 @@ const Workflow = {
     });
     updateModalSelectionText();
 
-    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Changes' });
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
+    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: isResubmitting ? 'Save & Resubmit' : 'Save Changes' });
     form.appendChild(submitBtn);
 
     const overlay = this.showModal('Edit Task', form, () => {
@@ -8407,6 +8502,7 @@ const Workflow = {
         priority: data.priority || 'Normal',
         dueDate: data.dueDate || '',
         predecessors: predecessors,
+        checklist: checklistItems,
         updatedAt: new Date().toISOString()
       });
 

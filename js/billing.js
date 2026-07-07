@@ -1026,6 +1026,7 @@ const Billing = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     // Validate line items: at least one complete row, no partially-filled rows.
     const itemRows = form.querySelectorAll('.notion-line-item-row');
@@ -1164,7 +1165,8 @@ const Billing = {
         : 'Invoice ' + record.invoiceNumber + ' ' + (isNew ? 'creation' : 'update') + ' request has been submitted for Admin approval.',
       type: 'success'
     };
-    closeFormPanelAndRoute('#billing', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#billing';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   showForm(invoiceId = null) {

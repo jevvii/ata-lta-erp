@@ -1145,6 +1145,7 @@ const Disbursement = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     const data = Object.fromEntries(new FormData(form).entries());
     const entity = Auth.activeEntity;
@@ -1242,7 +1243,8 @@ const Disbursement = {
       message: 'Disbursement expense has been ' + (isNew ? 'submitted' : 'updated') + ' successfully.',
       type: 'success'
     };
-    closeFormPanelAndRoute('#disbursement', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#disbursement';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   showRequestDisbursementModal() {
