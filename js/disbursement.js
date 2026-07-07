@@ -1073,14 +1073,90 @@ const Disbursement = {
     // Category
     const catGroup = el('div', { class: 'notion-prop' });
     catGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Category' }));
-    const catSel = el('select', { name: 'category', required: true, class: 'notion-prop-select' });
-    ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
+    
+    const standardCategories = ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'];
+    let initialCategory = '';
+    if (existing) {
+      initialCategory = existing.category;
+    } else if (opReq) {
+      initialCategory = opReq.category;
+    }
+    const isCustom = initialCategory && !standardCategories.includes(initialCategory);
+
+    const catSel = el('select', { required: true, class: 'notion-prop-select' });
+    standardCategories.forEach(c => {
       const opt = el('option', { value: c, text: c });
-      if (existing && existing.category === c) opt.selected = true;
-      else if (!existing && opReq && opReq.category === c) opt.selected = true;
+      if (isCustom) {
+        if (c === 'Other') opt.selected = true;
+      } else {
+        if (initialCategory === c) opt.selected = true;
+      }
       catSel.appendChild(opt);
     });
+
+    const catInput = el('input', {
+      type: 'text',
+      placeholder: 'Enter custom category...',
+      class: 'notion-prop-input',
+      style: 'flex: 1;',
+      value: isCustom ? initialCategory : ''
+    });
+
+    const backBtn = el('button', {
+      type: 'button',
+      class: 'btn btn-secondary btn-sm',
+      text: 'Back',
+      style: 'margin-left: 8px; padding: 4px 8px; font-size: 0.75rem; height: auto; line-height: 1.2;'
+    });
+
+    const inputWrapper = el('div', {
+      style: 'flex: 1; display: flex; align-items: center;'
+    });
+    inputWrapper.appendChild(catInput);
+    inputWrapper.appendChild(backBtn);
+
+    if (isCustom) {
+      catSel.style.display = 'none';
+      catSel.required = false;
+      catInput.setAttribute('name', 'category');
+      catInput.required = true;
+      inputWrapper.style.display = 'flex';
+    } else {
+      catSel.setAttribute('name', 'category');
+      catSel.required = true;
+      catSel.style.display = 'block';
+      inputWrapper.style.display = 'none';
+      catInput.required = false;
+    }
+
+    catSel.addEventListener('change', () => {
+      if (catSel.value === 'Other') {
+        catSel.style.display = 'none';
+        catSel.removeAttribute('name');
+        catSel.required = false;
+
+        inputWrapper.style.display = 'flex';
+        catInput.setAttribute('name', 'category');
+        catInput.required = true;
+        catInput.value = '';
+        catInput.focus();
+      }
+    });
+
+    backBtn.addEventListener('click', () => {
+      inputWrapper.style.display = 'none';
+      catInput.removeAttribute('name');
+      catInput.required = false;
+      catInput.value = '';
+
+      catSel.style.display = 'block';
+      catSel.setAttribute('name', 'category');
+      catSel.required = true;
+      catSel.value = 'Transportation';
+    });
+
     catGroup.appendChild(catSel);
+    catGroup.appendChild(inputWrapper);
     propsGrid.appendChild(catGroup);
 
     // Linked Work Request
