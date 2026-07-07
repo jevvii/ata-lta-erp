@@ -437,14 +437,17 @@ const Users = {
       }
     }
 
-    // Derive a legacy role for compatibility from the existing record or first department.
-    let role = data.role;
-    if (this.editingId) {
-      const existing = DB.getById('users', this.editingId);
-      role = existing?.role || role;
-    }
-    if (!role && departments.length > 0) {
+    // Derive a legacy role for compatibility and keep it in sync with department assignments.
+    let role = null;
+    const existing = this.editingId ? DB.getById('users', this.editingId) : null;
+    if (existing && existing.role === 'Admin') {
+      role = 'Admin';
+    } else if (departments.includes('Management')) {
+      role = 'Manager';
+    } else if (departments.length > 0) {
       role = departments[0];
+    } else {
+      role = existing?.role || 'HR';
     }
 
     // Clear previous errors

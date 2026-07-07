@@ -2830,12 +2830,13 @@ const JiraBacklogList = {
       });
 
       if (bulkBar) {
-        if (selectedIds.length > 0) {
+        const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
+        const finalActions = actionsList || [];
+        if (selectedIds.length > 0 && finalActions.length > 0) {
           countInfo.textContent = `${selectedIds.length} selected`;
           
           actionsContainer.innerHTML = '';
-          const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
-          actionsList.forEach(act => {
+          finalActions.forEach(act => {
             const btn = el('button', {
               class: act.className || 'btn btn-secondary btn-sm',
               text: act.text

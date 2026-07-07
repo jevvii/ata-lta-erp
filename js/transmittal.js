@@ -1971,7 +1971,7 @@ const Transmittal = {
     const t = DB.getById('transmittals', id);
     if (!t) return;
     if (Auth.user?.role !== 'Admin' && !Auth.isManagerial() && !Auth.can('transmittal:delete')) {
-      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete transmittals.', 'danger');
+      Workflow.showMessage('Permission Denied', 'Only authorized users can permanently delete transmittals.', 'danger');
       return;
     }
     Workflow.showConfirm('Permanently Delete Transmittal',

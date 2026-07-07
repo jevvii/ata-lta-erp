@@ -95,21 +95,28 @@
           }
           return;
         }
-        bulkCount.textContent = `${ids.length} selected`;
-        bulkActionsContainer.innerHTML = '';
+
         const actionsList = typeof bulkActions === 'function' ? bulkActions(ids) : bulkActions;
-        (actionsList || []).forEach(act => {
-          const btn = el('button', {
-            class: act.className || 'btn btn-secondary btn-sm',
-            text: act.text
+        const finalActions = actionsList || [];
+
+        if (finalActions.length === 0) {
+          bulkBar.classList.add('hidden');
+        } else {
+          bulkCount.textContent = `${ids.length} selected`;
+          bulkActionsContainer.innerHTML = '';
+          finalActions.forEach(act => {
+            const btn = el('button', {
+              class: act.className || 'btn btn-secondary btn-sm',
+              text: act.text
+            });
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              act.onClick(ids);
+            });
+            bulkActionsContainer.appendChild(btn);
           });
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            act.onClick(ids);
-          });
-          bulkActionsContainer.appendChild(btn);
-        });
-        bulkBar.classList.remove('hidden');
+          bulkBar.classList.remove('hidden');
+        }
 
         if (selectAllCheckbox) {
           const allChecked = rowRefs.length > 0 && rowRefs.every(r => r.chk.checked);

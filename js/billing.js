@@ -3145,7 +3145,7 @@ const Billing = {
     const inv = DB.getById('invoices', id);
     if (!inv) return;
     if (Auth.user?.role !== 'Admin' && !Auth.isManagerial() && !Auth.can('billing:delete')) {
-      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete invoices.', 'danger');
+      Workflow.showMessage('Permission Denied', 'Only authorized users can permanently delete invoices.', 'danger');
       return;
     }
     Workflow.showConfirm('Permanently Delete Invoice',

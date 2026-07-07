@@ -2757,7 +2757,7 @@ const Disbursement = {
     const d = DB.getById('disbursements', id);
     if (!d) return;
     if (Auth.user?.role !== 'Admin' && !Auth.can('disbursement:delete') && !Auth.isManagerial()) {
-      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete disbursements.', 'danger');
+      Workflow.showMessage('Permission Denied', 'Only authorized users can permanently delete disbursements.', 'danger');
       return;
     }
     Workflow.showConfirm('Permanently Delete Disbursement',

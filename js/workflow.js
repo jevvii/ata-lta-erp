@@ -601,7 +601,7 @@ const Workflow = {
 
   cancelWorkRequest(wrId) {
     if (!Auth.isManagerial()) {
-      this.showMessage('Permission Denied', 'Only Admin can cancel work requests.', 'danger');
+      this.showMessage('Permission Denied', 'Only managerial users can cancel work requests.', 'danger');
       return;
     }
     const wr = DB.getById('workRequests', wrId);

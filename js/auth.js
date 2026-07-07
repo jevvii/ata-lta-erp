@@ -144,7 +144,14 @@ const Auth = {
     // the user belongs to.
     const granted = new Set();
     const departments = Array.isArray(this.user.departments) ? this.user.departments : [];
-    departments.forEach(dept => {
+    const effectiveDepts = [...departments];
+    if (this.user.role) {
+      const legacyDept = this.user.role === 'Manager' ? 'Management' : this.user.role;
+      if (this.DEPARTMENT_PERMISSIONS[legacyDept] && !effectiveDepts.includes(legacyDept)) {
+        effectiveDepts.push(legacyDept);
+      }
+    }
+    effectiveDepts.forEach(dept => {
       (this.DEPARTMENT_PERMISSIONS[dept] || []).forEach(p => granted.add(p));
     });
 
