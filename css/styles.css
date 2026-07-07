@@ -13668,6 +13668,33 @@ html.loading-active #loading-screen:not(.hidden) {
   border-bottom: 1px solid var(--color-border);
 }
 
+/* In column mode the header becomes a grid so the page title sits directly
+   above the "Name" column and the right actions align with row actions. */
+.jira-backlog-header--columns {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+}
+
+.jira-backlog-header--columns .jira-backlog-header-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.jira-backlog-header--columns .jira-backlog-header-checkbox {
+  margin-right: 0 !important;
+}
+
+.jira-backlog-header--columns .jira-backlog-title-text {
+  min-width: 0;
+}
+
+.jira-backlog-header-placeholder {
+  /* empty grid cell */
+}
+
 .jira-backlog-header-left {
   display: flex;
   align-items: center;
@@ -13840,8 +13867,32 @@ html.loading-active #loading-screen:not(.hidden) {
 .jira-backlog-row--columns {
   display: grid;
   align-items: center;
-  gap: 12px;
+  column-gap: 12px;
+  row-gap: 4px;
   padding: 10px 16px;
+}
+
+/* In column mode, lead items become grid cells and must not carry their flex-era margins. */
+.jira-backlog-row--columns .jira-backlog-row-checkbox-wrap {
+  margin-right: 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-icon {
+  margin-right: 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-key {
+  margin-right: 0;
+  width: 100%;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-title {
+  min-width: 0;
+  width: 100%;
 }
 
 .jira-backlog-columns-header {
@@ -13860,6 +13911,7 @@ html.loading-active #loading-screen:not(.hidden) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .jira-backlog-row-tags--columns {
@@ -13872,7 +13924,18 @@ html.loading-active #loading-screen:not(.hidden) {
 
 .jira-backlog-row-tags--columns .jira-backlog-tag {
   width: 100%;
+  min-width: 0;
   justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jira-backlog-row-tags--columns .jira-backlog-tag > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .jira-backlog-tag-placeholder {
@@ -13915,6 +13978,10 @@ html.loading-active #loading-screen:not(.hidden) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-secondary {
+  margin-top: 0;
 }
 
 /* Inline toolbar placed between backlog header and body */

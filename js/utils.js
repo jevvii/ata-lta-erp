@@ -2526,29 +2526,22 @@ const JiraBacklogList = {
     const container = el('div', { class: 'jira-backlog-container' });
 
     // Header
-    const header = el('div', { class: 'jira-backlog-header' });
-    
-    // Left side info (Select All checkbox replaces chevron)
-    const headerLeft = el('div', { class: 'jira-backlog-header-left', style: 'cursor: default;' });
-    
+    const header = el('div', { class: 'jira-backlog-header' + (hasColumns ? ' jira-backlog-header--columns' : '') });
+
     const selectAllCheckbox = el('input', {
       type: 'checkbox',
       class: 'jira-backlog-header-checkbox',
       style: 'margin-right: 8px; cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
     });
-    headerLeft.appendChild(selectAllCheckbox);
-    
+
     const titleText = el('div', { class: 'jira-backlog-title-text' });
     titleText.appendChild(el('span', { class: 'jira-backlog-title', text: title }));
     if (subtitle) {
       titleText.appendChild(el('span', { class: 'jira-backlog-subtitle', text: subtitle }));
     }
-    headerLeft.appendChild(titleText);
-    
+
     const countText = `${items.length} ${items.length === 1 ? countLabel : countLabel + 's'}`;
     const countBadge = el('span', { class: 'jira-backlog-count-badge', text: countText });
-    headerLeft.appendChild(countBadge);
-    header.appendChild(headerLeft);
 
     // Right side actions
     const headerRight = el('div', { class: 'jira-backlog-header-right' });
@@ -2560,7 +2553,33 @@ const JiraBacklogList = {
       if (act.onClick) btn.addEventListener('click', act.onClick);
       headerRight.appendChild(btn);
     });
-    header.appendChild(headerRight);
+
+    if (hasColumns) {
+      // Grid-based header so the title sits directly above the "Name" column
+      // and the right actions align with row actions.
+      const leadCols = '28px 24px 75px 1fr';
+      const metaCols = columns.map(c => c.width || '1fr').join(' ');
+      header.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
+      headerRight.style.gridColumn = String(5 + columns.length);
+
+      const checkboxWrap = el('div', { class: 'jira-backlog-header-checkbox-wrap' });
+      checkboxWrap.appendChild(selectAllCheckbox);
+      header.appendChild(checkboxWrap);
+      header.appendChild(el('div', { class: 'jira-backlog-header-placeholder' }));
+      header.appendChild(el('div', { class: 'jira-backlog-header-placeholder' }));
+      titleText.appendChild(countBadge);
+      header.appendChild(titleText);
+      header.appendChild(headerRight);
+    } else {
+      // Left side info (Select All checkbox replaces chevron)
+      const headerLeft = el('div', { class: 'jira-backlog-header-left', style: 'cursor: default;' });
+      headerLeft.appendChild(selectAllCheckbox);
+      headerLeft.appendChild(titleText);
+      headerLeft.appendChild(countBadge);
+      header.appendChild(headerLeft);
+      header.appendChild(headerRight);
+    }
+
     container.appendChild(header);
 
     // Optional inline toolbar (filters, etc.) placed between header and list
@@ -2573,23 +2592,26 @@ const JiraBacklogList = {
     // Optional column header (table-like alignment)
     if (hasColumns) {
       const colHeader = el('div', { class: 'jira-backlog-columns-header' });
-      const leadCols = 'auto auto 75px 1fr';
+      // Fixed lead widths so the header and body columns line up exactly.
+      const leadCols = '28px 24px 75px 1fr';
       const metaCols = columns.map(c => c.width || '1fr').join(' ');
       colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
 
-      const spacer = el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' });
-      spacer.style.gridColumn = '1 / span 3';
-      colHeader.appendChild(spacer);
-
+      // Lead-column placeholders: checkbox, icon, key — then "Name" aligns with the title column.
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--title', text: 'Name' }));
+
       columns.forEach(col => {
         const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
         if (col.align) h.style.textAlign = col.align;
         colHeader.appendChild(h);
       });
-      if (headerActions.length > 0) {
-        colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--actions' }));
-      }
+
+      // Actions column header placeholder (aligns with the far-right actions cell).
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--actions' }));
+
       container.appendChild(colHeader);
     }
 
@@ -2743,7 +2765,7 @@ const JiraBacklogList = {
 
       // Column-mode grid sizing (lead columns + metadata columns + actions column)
       if (hasColumns) {
-        const leadCols = 'auto auto 75px 1fr';
+        const leadCols = '28px 24px 75px 1fr';
         const metaCols = columns.map(c => c.width || '1fr').join(' ');
         row.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
       }
