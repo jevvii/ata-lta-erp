@@ -10,6 +10,7 @@ const Disbursement = {
   listViewMode: 'table', // 'table' | 'board' | 'list'
   EDITABLE_STATUSES: ['Draft', 'Submitted', 'Under Review', 'Pending'],
   PENDING_APPROVAL_STATUSES: ['Submitted', 'Under Review', 'Pending'],
+  STANDARD_CATEGORIES: ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'],
 
   render() {
     const container = el('div', { class: 'page' });
@@ -1074,7 +1075,7 @@ const Disbursement = {
     const catGroup = el('div', { class: 'notion-prop' });
     catGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Category' }));
     
-    const standardCategories = ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'];
+    const standardCategories = this.STANDARD_CATEGORIES;
     let initialCategory = '';
     if (existing) {
       initialCategory = existing.category;
@@ -1082,7 +1083,14 @@ const Disbursement = {
       initialCategory = opReq.category;
     }
     const isCustom = initialCategory && !standardCategories.includes(initialCategory);
-    let previousSelection = (initialCategory && initialCategory !== 'Other' && !isCustom) ? initialCategory : standardCategories[0];
+    let previousSelection;
+    if (isCustom) {
+      previousSelection = 'Other';
+    } else if (initialCategory && initialCategory !== 'Other') {
+      previousSelection = initialCategory;
+    } else {
+      previousSelection = standardCategories[0];
+    }
 
     const catSel = el('select', { required: true, class: 'notion-prop-select' });
     standardCategories.forEach(c => {
@@ -1109,8 +1117,7 @@ const Disbursement = {
     });
 
     const inputWrapper = el('div', {
-      class: 'notion-input-with-btn',
-      style: 'flex: 1;'
+      class: 'notion-input-with-btn'
     });
     inputWrapper.appendChild(catInput);
     inputWrapper.appendChild(backBtn);
@@ -1130,7 +1137,7 @@ const Disbursement = {
       catInput.removeAttribute('name');
       catInput.required = false;
 
-      catSel.style.display = 'block';
+      catSel.style.display = '';
       catSel.setAttribute('name', 'category');
       catSel.required = true;
     };
@@ -2503,7 +2510,7 @@ const Disbursement = {
     const catGroup = el('div', { class: 'form-group' });
     catGroup.appendChild(el('label', { text: 'Category *' }));
     const catSel = el('select', { name: 'category', required: true, class: 'form-select' });
-    ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
+    this.STANDARD_CATEGORIES.forEach(c => {
       catSel.appendChild(el('option', { value: c, text: c }));
     });
     if (template) catSel.value = template.category || '';
