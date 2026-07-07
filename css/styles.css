@@ -13659,6 +13659,11 @@ html.loading-active #loading-screen:not(.hidden) {
   box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
 }
 
+/* Wide table-like backlogs can scroll horizontally so no detail is clipped. */
+.jira-backlog-container--columns {
+  overflow-x: auto;
+}
+
 .jira-backlog-header {
   display: flex;
   align-items: center;
@@ -13666,33 +13671,6 @@ html.loading-active #loading-screen:not(.hidden) {
   padding: 10px 16px;
   background: var(--color-bg-light, #fafafa);
   border-bottom: 1px solid var(--color-border);
-}
-
-/* In column mode the header becomes a grid so the page title sits directly
-   above the "Name" column and the right actions align with row actions. */
-.jira-backlog-header--columns {
-  display: grid;
-  align-items: center;
-  gap: 12px;
-}
-
-.jira-backlog-header--columns .jira-backlog-header-checkbox-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-}
-
-.jira-backlog-header--columns .jira-backlog-header-checkbox {
-  margin-right: 0 !important;
-}
-
-.jira-backlog-header--columns .jira-backlog-title-text {
-  min-width: 0;
-}
-
-.jira-backlog-header-placeholder {
-  /* empty grid cell */
 }
 
 .jira-backlog-header-left {
@@ -13866,7 +13844,7 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Column-aligned backlog rows (table-like grid) */
 .jira-backlog-row--columns {
   display: grid;
-  align-items: center;
+  align-items: start;
   column-gap: 12px;
   row-gap: 4px;
   padding: 10px 16px;
@@ -13893,6 +13871,9 @@ html.loading-active #loading-screen:not(.hidden) {
 .jira-backlog-row--columns .jira-backlog-row-title {
   min-width: 0;
   width: 100%;
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .jira-backlog-columns-header {
@@ -13908,34 +13889,40 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-backlog-col-header {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: nowrap;
   min-width: 0;
+  text-align: left;
 }
 
 .jira-backlog-row-tags--columns {
   display: grid;
-  align-items: center;
+  align-items: start;
   gap: 12px;
   margin-left: 0;
   margin-right: 0;
 }
 
+/* In column mode the badge should shrink to its content and only its left edge
+   needs to line up with the column. The column track width is fixed, but the
+   badge background expands naturally to fit its text and may cross the right
+   boundary of the column if needed. */
 .jira-backlog-row-tags--columns .jira-backlog-tag {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   min-width: 0;
+  justify-self: start;
   justify-content: flex-start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .jira-backlog-row-tags--columns .jira-backlog-tag > * {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .jira-backlog-tag-placeholder {
@@ -13950,6 +13937,15 @@ html.loading-active #loading-screen:not(.hidden) {
   text-align: center;
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+/* In column mode the left edge of every badge should line up, so remove
+   forced centering and let the badge shrink to its content from the left. */
+.jira-backlog-row-tags--columns .jira-backlog-tag-role,
+.jira-backlog-row-tags--columns .jira-backlog-tag-action,
+.jira-backlog-row-tags--columns .jira-backlog-tag-entity {
+  justify-content: flex-start !important;
+  text-align: left;
 }
 
 .jira-backlog-tag-client,
@@ -13967,7 +13963,18 @@ html.loading-active #loading-screen:not(.hidden) {
   background: transparent !important;
   border: none !important;
   color: transparent !important;
+  padding: 0 !important;
+  min-height: 0 !important;
   pointer-events: none !important;
+}
+
+/* Retainer check column: a simple centered check with no badge background. */
+.jira-backlog-tag-retainer-check {
+  background: transparent !important;
+  border: none !important;
+  color: var(--color-success, #16a34a);
+  padding: 0;
+  justify-self: center;
 }
 
 .jira-backlog-row-secondary {

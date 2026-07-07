@@ -202,39 +202,44 @@ const Clients = {
 
     const buildingIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/><path d="M10 9h4"/><path d="M10 13h4"/></svg>';
 
+    const checkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
     const items = clients.map((c, idx) => {
       const pocUser = DB.getById('users', c.contactUserId);
       const tags = [
-        { text: c.entity, type: 'entity', className: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), style: 'display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 18px; font-size: 0.6875rem; font-weight: 700;' },
+        { text: c.entity, type: 'entity', className: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success') },
         (c.retainer || c.isRetainer)
-          ? { text: 'Retainer', type: 'fund', className: 'badge badge-recurring', style: 'display: inline-flex; align-items: center; justify-content: center; width: 70px; height: 18px; font-size: 0.6875rem; font-weight: 700;' }
+          ? { text: checkIcon, type: 'fund', className: 'jira-backlog-tag-retainer-check', isHtml: true }
           : { text: '', type: 'fund', className: 'hidden-tag-placeholder' },
         c.tin
           ? { text: 'TIN ' + c.tin, type: 'category' }
           : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
         (pocUser?.name || c.contactPerson)
           ? { text: pocUser?.name || c.contactPerson, type: 'client' }
-          : { text: '', type: 'client', className: 'hidden-tag-placeholder' }
+          : { text: '', type: 'client', className: 'hidden-tag-placeholder' },
+        c.tradeName
+          ? { text: c.tradeName, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        c.address
+          ? { text: c.address, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        (c.relatedCompanies || []).length > 0
+          ? { text: (c.relatedCompanies || []).map(rc => {
+              const rcClient = DB.getById('clients', rc.clientId);
+              return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
+            }).join(', '), type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        (c.contactDetails || []).length > 0
+          ? { text: (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', '), type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' }
       ];
-
-      const trade = c.tradeName ? 'Trade: ' + c.tradeName : '';
-      const address = c.address ? 'Address: ' + c.address : '';
-      const rcList = (c.relatedCompanies || []).map(rc => {
-        const rcClient = DB.getById('clients', rc.clientId);
-        return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
-      }).join(', ');
-      const related = rcList ? 'Related: ' + rcList : '';
-      const cdList = (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ');
-      const contacts = cdList ? 'Contacts: ' + cdList : '';
-      const secondary = [trade, address, related, contacts].filter(Boolean).join(' • ') || null;
 
       return {
         id: c.id,
         keyText: 'CL-' + String(idx + 1).padStart(2, '0'),
         name: c.name || '(untitled)',
         iconHtml: buildingIcon,
-        tags,
-        secondary
+        tags
       };
     });
 
@@ -247,10 +252,14 @@ const Clients = {
       countLabel: 'client',
       bulkActions: [],
       columns: [
-        { label: 'Entity', width: '60px', align: 'center' },
-        { label: 'Retainer', width: '90px', align: 'center' },
+        { label: 'Entity', width: '60px' },
+        { label: 'Retainer', width: '60px' },
         { label: 'TIN', width: '130px' },
-        { label: 'Point of Contact', width: '180px' }
+        { label: 'Point of Contact', width: '160px' },
+        { label: 'Trade Name', width: '160px' },
+        { label: 'Address', width: '200px' },
+        { label: 'Related Companies', width: '200px' },
+        { label: 'Contact Details', width: '220px' }
       ],
       headerActions: [
         {

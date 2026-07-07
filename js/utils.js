@@ -2523,25 +2523,32 @@ const JiraBacklogList = {
 
     const hasColumns = Array.isArray(columns) && columns.length > 0;
 
-    const container = el('div', { class: 'jira-backlog-container' });
+    const container = el('div', { class: 'jira-backlog-container' + (hasColumns ? ' jira-backlog-container--columns' : '') });
 
     // Header
-    const header = el('div', { class: 'jira-backlog-header' + (hasColumns ? ' jira-backlog-header--columns' : '') });
+    const header = el('div', { class: 'jira-backlog-header' });
+
+    // Left side info (Select All checkbox replaces chevron)
+    const headerLeft = el('div', { class: 'jira-backlog-header-left', style: 'cursor: default;' });
 
     const selectAllCheckbox = el('input', {
       type: 'checkbox',
       class: 'jira-backlog-header-checkbox',
       style: 'margin-right: 8px; cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
     });
+    headerLeft.appendChild(selectAllCheckbox);
 
     const titleText = el('div', { class: 'jira-backlog-title-text' });
     titleText.appendChild(el('span', { class: 'jira-backlog-title', text: title }));
     if (subtitle) {
       titleText.appendChild(el('span', { class: 'jira-backlog-subtitle', text: subtitle }));
     }
+    headerLeft.appendChild(titleText);
 
     const countText = `${items.length} ${items.length === 1 ? countLabel : countLabel + 's'}`;
     const countBadge = el('span', { class: 'jira-backlog-count-badge', text: countText });
+    headerLeft.appendChild(countBadge);
+    header.appendChild(headerLeft);
 
     // Right side actions
     const headerRight = el('div', { class: 'jira-backlog-header-right' });
@@ -2553,32 +2560,7 @@ const JiraBacklogList = {
       if (act.onClick) btn.addEventListener('click', act.onClick);
       headerRight.appendChild(btn);
     });
-
-    if (hasColumns) {
-      // Grid-based header so the title sits directly above the "Name" column
-      // and the right actions align with row actions.
-      const leadCols = '28px 24px 75px 1fr';
-      const metaCols = columns.map(c => c.width || '1fr').join(' ');
-      header.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
-      headerRight.style.gridColumn = String(5 + columns.length);
-
-      const checkboxWrap = el('div', { class: 'jira-backlog-header-checkbox-wrap' });
-      checkboxWrap.appendChild(selectAllCheckbox);
-      header.appendChild(checkboxWrap);
-      header.appendChild(el('div', { class: 'jira-backlog-header-placeholder' }));
-      header.appendChild(el('div', { class: 'jira-backlog-header-placeholder' }));
-      titleText.appendChild(countBadge);
-      header.appendChild(titleText);
-      header.appendChild(headerRight);
-    } else {
-      // Left side info (Select All checkbox replaces chevron)
-      const headerLeft = el('div', { class: 'jira-backlog-header-left', style: 'cursor: default;' });
-      headerLeft.appendChild(selectAllCheckbox);
-      headerLeft.appendChild(titleText);
-      headerLeft.appendChild(countBadge);
-      header.appendChild(headerLeft);
-      header.appendChild(headerRight);
-    }
+    header.appendChild(headerRight);
 
     container.appendChild(header);
 
@@ -2589,7 +2571,9 @@ const JiraBacklogList = {
       container.appendChild(toolbarWrap);
     }
 
-    // Optional column header (table-like alignment)
+    // Optional column header (table-like alignment).
+    // The lead spacers line up with the checkbox/icon/key/title area so the
+    // first data column header sits directly above the first row data column.
     if (hasColumns) {
       const colHeader = el('div', { class: 'jira-backlog-columns-header' });
       // Fixed lead widths so the header and body columns line up exactly.
@@ -2597,11 +2581,11 @@ const JiraBacklogList = {
       const metaCols = columns.map(c => c.width || '1fr').join(' ');
       colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
 
-      // Lead-column placeholders: checkbox, icon, key — then "Name" aligns with the title column.
+      // Lead-column placeholders: checkbox, icon, key, title.
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
-      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--title', text: 'Name' }));
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
 
       columns.forEach(col => {
         const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
@@ -2806,7 +2790,9 @@ const JiraBacklogList = {
           textVal = textVal.substring(1).trim();
         }
 
-        if (iconHtml) {
+        if (tag.isHtml) {
+          tNode.innerHTML = textVal;
+        } else if (iconHtml) {
           tNode.innerHTML = iconHtml + '<span>' + escapeHtml(textVal) + '</span>';
         } else {
           tNode.textContent = textVal;

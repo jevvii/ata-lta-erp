@@ -201,9 +201,9 @@ const Users = {
       countLabel: 'user',
       bulkActions: [],
       columns: [
-        { label: 'Role', width: '100px' },
-        { label: 'Email', width: '1fr' },
-        { label: 'Entities', width: '140px' }
+        { label: 'Role', width: '110px' },
+        { label: 'Email', width: '220px' },
+        { label: 'Entities', width: '180px' }
       ],
       headerActions: [
         {
@@ -583,7 +583,7 @@ const Users = {
         iconHtml: avatarIcon,
         tags: [
           { text: l.action || 'Activity', type: 'action', className: 'jira-backlog-tag-action ' + getActionClass(l.action) },
-          { text: l.entity, type: 'entity', className: 'badge badge-' + (l.entity === 'ATA' ? 'ata' : 'lta'), style: 'display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 18px; font-size: 0.6875rem; font-weight: 700;' },
+          { text: l.entity, type: 'entity', className: 'badge badge-' + (l.entity === 'ATA' ? 'ata' : 'lta') },
           { text: userName, type: 'client' },
           { text: formatDate(l.timestamp) + ' ' + ts.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }), type: 'schedule' }
         ]
@@ -600,7 +600,7 @@ const Users = {
       bulkActions: [],
       columns: [
         { label: 'Action', width: '130px' },
-        { label: 'Entity', width: '60px', align: 'center' },
+        { label: 'Entity', width: '60px' },
         { label: 'User', width: '140px' },
         { label: 'Timestamp', width: '160px' }
       ],
