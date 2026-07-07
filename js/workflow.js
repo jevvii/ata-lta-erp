@@ -9665,6 +9665,38 @@ const Workflow = {
       items: backlogItems,
       emptyText: 'No retainer templates found',
       rowIdPrefix: 'RT',
+      bulkActions: (selectedIds) => [
+        {
+          text: 'Bulk Generate',
+          className: 'btn btn-primary btn-sm',
+          onClick: (ids) => {
+            this.showConfirm(
+              'Bulk Generate Work Requests',
+              `Are you sure you want to generate Work Requests for these ${ids.length} selected retainer templates?`,
+              () => {
+                this.bulkGenerateFromTemplates(ids);
+              }
+            );
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            this.showConfirm(
+              'Delete Templates',
+              `Are you sure you want to delete these ${ids.length} templates?`,
+              () => {
+                ids.forEach(id => {
+                  DB.delete('retainerTemplates', id);
+                });
+                App.handleRoute();
+              },
+              'danger'
+            );
+          }
+        }
+      ],
       headerActions: [
         {
           text: '+ Create Template',
@@ -10069,5 +10101,68 @@ const Workflow = {
     });
 
     location.hash = '#operations/detail/' + workRequest.id;
+  },
+
+  bulkGenerateFromTemplates(templateIds) {
+    if (!Array.isArray(templateIds) || templateIds.length === 0) return;
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const titleSuffix = now.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
+    let generatedCount = 0;
+
+    templateIds.forEach(templateId => {
+      const template = DB.getById('retainerTemplates', templateId);
+      if (!template) return;
+
+      const dueDate = new Date(now.getTime() + (template.schedule === 'quarterly' ? 90 : 30) * 86400000);
+      const maxOrder = Math.max(0, ...DB.getAll('workRequests').map(r => r.boardOrder || 0));
+
+      const workRequest = {
+        id: generateSequentialId('wr', 'workRequests'),
+        title: `${template.name} (${titleSuffix})`,
+        description: template.description || '',
+        clientId: template.clientId,
+        priority: 'Priority',
+        dueDate: dueDate.toISOString().slice(0, 10),
+        entity: template.entity,
+        status: 'Draft',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        boardOrder: maxOrder + 1000
+      };
+      DB.insert('workRequests', workRequest);
+
+      const idMap = new Map();
+      (template.tasks || []).forEach(t => idMap.set(t.id, generateId('t')));
+
+      (template.tasks || []).forEach((t, idx) => {
+        const mappedPreds = (t.predecessors || []).map(pid => idMap.get(pid)).filter(Boolean);
+        DB.insert('tasks', {
+          id: idMap.get(t.id),
+          workRequestId: workRequest.id,
+          title: t.title,
+          assigneeId: t.assigneeId || null,
+          assigneeName: t.assigneeName || null,
+          predecessors: mappedPreds,
+          status: 'Draft',
+          dueDate: workRequest.dueDate,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          sortOrder: idx
+        });
+      });
+
+      generatedCount++;
+    });
+
+    this.showMessage(
+      'Bulk Generation Complete',
+      `Successfully generated ${generatedCount} Work Requests in Draft status from the selected templates.`,
+      'success'
+    );
+
+    this.view = 'list';
+    App.handleRoute();
   }
 };
