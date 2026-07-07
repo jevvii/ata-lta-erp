@@ -47,24 +47,29 @@ const Clients = {
     stickyContainer.appendChild(filters);
     container.appendChild(stickyContainer);
 
+    const content = el('div', { class: 'page-content-section' });
+
     const listContainer = el('div', { class: 'list-container' + (this.activeTab === 'archived' ? ' hidden' : '') });
-    container.appendChild(listContainer);
+    content.appendChild(listContainer);
     if (this.activeTab === 'active') {
       this.renderList(listContainer, '');
     }
 
     const archiveContainer = el('div', { class: 'archive-container' + (this.activeTab === 'active' ? ' hidden' : '') });
-    container.appendChild(archiveContainer);
+    content.appendChild(archiveContainer);
     if (this.activeTab === 'archived') {
-      this.renderArchive(archiveContainer, '');
+      archiveContainer.appendChild(this.renderArchive(''));
     }
+
+    container.appendChild(content);
 
     search.addEventListener('input', debounce(() => {
       const q = search.value.trim();
       if (this.activeTab === 'active') {
         this.renderList(listContainer, q);
       } else {
-        this.renderArchive(archiveContainer, q);
+        this.clearNode(archiveContainer);
+        archiveContainer.appendChild(this.renderArchive(q));
       }
     }, 200));
 
@@ -102,8 +107,6 @@ const Clients = {
   },
 
   renderTabNav() {
-    const tabNav = el('div', { class: 'module-tab-nav' });
-
     const entity = Auth.activeEntity;
     const activeCount = DB.getWhere('clients', c => {
       const cEnt = (c.entity || '').toUpperCase();
@@ -111,30 +114,46 @@ const Clients = {
       return matchesEntity && c.status !== 'Archived';
     }).length;
 
+    const isAdmin = Auth.user?.role === 'Admin';
+
     const archivedCount = DB.getWhere('clients', c => {
       const cEnt = (c.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(cEnt) : cEnt === entity.toUpperCase());
       return matchesEntity && c.status === 'Archived';
     }).length;
 
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    const rejectedClientChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity)) return false;
+      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'client' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const rejectedCount = rejectedClientChanges.length + rejectedClientRequests.length;
+    const archiveCount = archivedCount + rejectedCount;
+
     const tabs = [
       { key: 'active', label: 'Active Clients', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', count: activeCount },
-      { key: 'archived', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archivedCount }
+      { key: 'archived', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
-    tabs.forEach(tab => {
-      const btn = el('button', { class: 'module-tab-link' + (this.activeTab === tab.key ? ' active' : '') });
-      btn.appendChild(parseHTML(tab.icon));
-      btn.appendChild(document.createTextNode(' ' + tab.label));
-      if (tab.count !== undefined) {
-        btn.appendChild(document.createTextNode(' '));
-        btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
-      }
-      btn.addEventListener('click', () => {
-        this.activeTab = tab.key;
-        App.handleRoute();
-      });
-      tabNav.appendChild(btn);
+    const tabNav = renderModuleTabNav(tabs, this.activeTab, (key) => {
+      this.activeTab = key;
+      App.handleRoute();
     });
 
     if (Auth.can('clients:edit') && this.activeTab === 'active') {
@@ -177,74 +196,109 @@ const Clients = {
     const clients = this.getFilteredClients(query);
 
     if (clients.length === 0) {
-      container.appendChild(el('p', { text: 'No clients found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No clients found', null, { variant: 'zero-state' }));
       return;
     }
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const headerRow = el('tr');
-    ['Taxpayer', 'TIN', 'Point of Contact', 'Trade Name', 'Address', 'Related Companies', 'Contact Details', 'Entity', 'Retainer', 'Actions'].forEach(h => {
-      headerRow.appendChild(el('th', { text: h }));
-    });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
+    const buildingIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/><path d="M10 9h4"/><path d="M10 13h4"/></svg>';
 
-    const tbody = el('tbody');
-    clients.forEach(c => {
+    const checkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+    const items = clients.map((c, idx) => {
       const pocUser = DB.getById('users', c.contactUserId);
-      const row = el('tr');
-      row.appendChild(el('td', { text: c.name }));
-      row.appendChild(el('td', { text: c.tin }));
-      row.appendChild(el('td', { text: pocUser?.name || c.contactPerson || '—' }));
-      row.appendChild(el('td', { text: c.tradeName || '—' }));
-      row.appendChild(el('td', { text: c.address || '—' }));
+      const tags = [
+        { text: c.entity, type: 'entity', className: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success') },
+        (c.retainer || c.isRetainer)
+          ? { text: checkIcon, type: 'fund', className: 'jira-backlog-tag-retainer-check', isHtml: true }
+          : { text: '', type: 'fund', className: 'hidden-tag-placeholder' },
+        c.tin
+          ? { text: 'TIN ' + c.tin, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        (pocUser?.name || c.contactPerson)
+          ? { text: pocUser?.name || c.contactPerson, type: 'client' }
+          : { text: '', type: 'client', className: 'hidden-tag-placeholder' },
+        c.tradeName
+          ? { text: c.tradeName, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        c.address
+          ? { text: c.address, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        (c.relatedCompanies || []).length > 0
+          ? { text: (c.relatedCompanies || []).map(rc => {
+              const rcClient = DB.getById('clients', rc.clientId);
+              return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
+            }).join(', '), type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        (c.contactDetails || []).length > 0
+          ? { text: (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', '), type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' }
+      ];
 
-      // Related Companies
-      const rcList = (c.relatedCompanies || []).map(rc => {
-        const rcClient = DB.getById('clients', rc.clientId);
-        return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
-      }).join(', ');
-      row.appendChild(el('td', { text: rcList || '—' }));
-
-      // Contact Details
-      const cdList = (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ');
-      row.appendChild(el('td', { text: cdList || '—' }));
-
-      const badge = el('span', { class: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), text: c.entity });
-      const tdEntity = el('td');
-      tdEntity.appendChild(badge);
-      row.appendChild(tdEntity);
-      row.appendChild(el('td', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }));
-      const actions = el('td');
-      if (Auth.can('clients:edit')) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-        editBtn.addEventListener('click', () => this.showForm(c.id));
-        actions.appendChild(editBtn);
-      }
-      
-      if (Auth.can('clients:edit')) {
-        const archiveBtn = el('button', { 
-          class: 'btn btn-secondary btn-sm text-danger', 
-          text: 'Archive', 
-          style: 'margin-left: 8px;' 
-        });
-        archiveBtn.addEventListener('click', () => {
-          // Admin bypasses PendingChanges — intentional direct-role check (Gap 6)
-          if (Auth.user.role === 'Admin') {
-            this.archiveClientDirectly(c.id);
-          } else {
-            this.archiveClientRequest(c.id);
-          }
-        });
-        actions.appendChild(archiveBtn);
-      }
-
-      row.appendChild(actions);
-      tbody.appendChild(row);
+      return {
+        id: c.id,
+        keyText: 'CL-' + String(idx + 1).padStart(2, '0'),
+        name: c.name || '(untitled)',
+        iconHtml: buildingIcon,
+        tags
+      };
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    const longestNameLen = items.reduce((max, item) => Math.max(max, (item.name || '').length), 0);
+    const titleColumnWidth = Math.max(200, longestNameLen * 9 + 24) + 'px';
+
+    const backlog = JiraBacklogList.render({
+      title: 'Active Clients',
+      subtitle: 'taxpayers, trade names, contacts, and retainer agreements',
+      items,
+      emptyText: 'No clients found',
+      rowIdPrefix: 'CL',
+      countLabel: 'client',
+      bulkActions: [],
+      titleColumnWidth,
+      columns: [
+        { label: 'Entity', width: '55px' },
+        { label: 'Retainer', width: '55px' },
+        { label: 'TIN', width: '110px' },
+        { label: 'Point of Contact', width: '120px' },
+        { label: 'Trade Name', width: '140px' },
+        { label: 'Address', width: '160px' },
+        { label: 'Related Companies', width: '160px' },
+        { label: 'Contact Details', width: '180px' }
+      ],
+      headerActions: [],
+      bulkActions: (ids) => [
+        {
+          text: 'Archive Selected',
+          className: 'btn btn-outline-danger btn-sm',
+          onClick: (selectedIds) => {
+            this.bulkArchiveClients(selectedIds);
+          }
+        }
+      ],
+      rowActions: (item) => {
+        if (!Auth.can('clients:edit')) return [];
+        return [
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showForm(item.id)
+          },
+          {
+            text: 'Archive',
+            className: 'btn btn-outline-danger btn-xs',
+            onClick: () => {
+              if (Auth.user.role === 'Admin') {
+                this.archiveClientDirectly(item.id);
+              } else {
+                this.archiveClientRequest(item.id);
+              }
+            }
+          }
+        ];
+      }
+    });
+
+    container.appendChild(backlog);
   },
 
   showForm(clientId) {
@@ -681,6 +735,117 @@ const Clients = {
     App.handleRoute();
   },
 
+  bulkArchiveClients(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const isAdmin = Auth.user?.role === 'Admin';
+    if (isAdmin) {
+      this.archiveClientsDirectly(clientIds);
+    } else {
+      this.archiveClientsRequest(clientIds);
+    }
+  },
+
+  archiveClientsDirectly(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
+    if (!confirm(`Are you sure you want to archive ${label}? This will cancel all related work requests and archive all associated documents.`)) return;
+
+    let archivedCount = 0;
+    clientIds.forEach(clientId => {
+      const client = DB.getById('clients', clientId);
+      if (!client) return;
+      client.status = 'Archived';
+      client.updatedAt = new Date().toISOString();
+      DB.update('clients', clientId, client);
+
+      const wrs = DB.getWhere('workRequests', wr => wr.clientId === clientId);
+      wrs.forEach(wr => {
+        DB.update('workRequests', wr.id, { status: 'Cancelled', updatedAt: new Date().toISOString() });
+        const docs = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
+        docs.forEach(doc => {
+          DB.update('documents', doc.id, { status: 'Archived', archived: true });
+        });
+      });
+      archivedCount++;
+    });
+
+    alert(archivedCount === 1 ? 'Client archived successfully.' : `${archivedCount} clients archived successfully.`);
+    App.handleRoute();
+  },
+
+  archiveClientsRequest(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
+    if (!confirm(`Are you sure you want to request archiving ${label}? This requires Admin approval.`)) return;
+
+    let requestedCount = 0;
+    clientIds.forEach(clientId => {
+      const pending = DB.getWhere('pendingChanges', pc =>
+        pc.table === 'clients' &&
+        pc.parentRecordId === clientId &&
+        pc.status === 'pending' &&
+        pc.proposedData &&
+        pc.proposedData.status === 'Archived'
+      );
+      if (pending.length > 0) return;
+
+      const client = DB.getById('clients', clientId);
+      if (!client) return;
+
+      const proposed = deepClone(client);
+      proposed.status = 'Archived';
+      proposed.updatedAt = new Date().toISOString();
+
+      const pc = {
+        id: generateId('pc'),
+        table: 'clients',
+        parentRecordId: clientId,
+        proposedData: proposed,
+        submittedBy: Auth.user.id,
+        submittedAt: new Date().toISOString(),
+        status: 'pending',
+        rejectionReason: '',
+        reviewedBy: '',
+        reviewedAt: ''
+      };
+      DB.insert('pendingChanges', pc);
+      requestedCount++;
+    });
+
+    if (requestedCount === 0) {
+      alert('Archive requests for the selected clients are already pending approval.');
+    } else {
+      alert(requestedCount === 1 ? 'Archive request submitted for Admin approval.' : `${requestedCount} archive requests submitted for Admin approval.`);
+    }
+    App.handleRoute();
+  },
+
+  unarchiveClient(id) {
+    const client = DB.getById('clients', id);
+    if (!client || client.status !== 'Archived') return;
+    DB.update('clients', id, { status: 'Active', archived: false, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
+
+  bulkUnarchiveClients(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const validIds = clientIds.filter(id => {
+      const client = DB.getById('clients', id);
+      return client && client.status === 'Archived';
+    });
+    if (validIds.length === 0) return;
+
+    const label = validIds.length === 1 ? 'this client' : `these ${validIds.length} clients`;
+    if (!confirm(`Are you sure you want to restore ${label} to Active Clients?`)) return;
+
+    validIds.forEach(id => {
+      DB.update('clients', id, { status: 'Active', archived: false, updatedAt: new Date().toISOString() });
+    });
+
+    alert(validIds.length === 1 ? 'Client restored successfully.' : `${validIds.length} clients restored successfully.`);
+    App.handleRoute();
+  },
+
   getArchivedClients(query) {
     const entity = Auth.activeEntity;
     let clients = DB.getWhere('clients', c => {
@@ -700,117 +865,121 @@ const Clients = {
     return clients;
   },
 
-  renderArchive(container, query) {
-    this.clearNode(container);
-    const archivedClients = this.getArchivedClients(query);
+  renderArchive(query = '') {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
 
-    if (archivedClients.length === 0) {
-      container.appendChild(el('p', { text: 'No archived clients found.', class: 'empty-state' }));
-      return;
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    let archived = DB.getWhere('clients', c => entFilter(c.entity) && c.status === 'Archived');
+    if (query) {
+      const q = query.toLowerCase();
+      archived = archived.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.tradeName || '').toLowerCase().includes(q) ||
+        (c.tin || '').toLowerCase().includes(q)
+      );
     }
 
-    const wrapper = el('div', { class: 'archive-list' });
-
-    archivedClients.forEach(c => {
-      const pocUser = DB.getById('users', c.contactUserId);
-      const panel = el('div', { class: 'accordion-panel collapsed', style: 'margin-bottom: var(--spacing-md); border-color: var(--color-border);' });
-      
-      // Accordion Header
-      const header = el('div', { class: 'accordion-header', style: 'display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;' });
-      
-      const titleWrap = el('div', {}, [
-        el('strong', { text: c.name, style: 'font-size: 1rem; color: var(--color-text);' }),
-        el('span', { text: ' (TIN: ' + c.tin + ')', style: 'color: var(--color-text-muted); font-size: 0.875rem; margin-left: 8px;' })
-      ]);
-      
-      header.appendChild(titleWrap);
-      panel.appendChild(header);
-
-      // Accordion Content
-      const content = el('div', { class: 'accordion-content', style: 'padding: 16px; background: var(--color-bg-muted);' });
-
-      // Client info block
-      const infoBlock = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; font-size: 0.875rem;' }, [
-        el('div', {}, [ el('strong', { text: 'Trade Name: ' }), el('span', { text: c.tradeName || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Address: ' }), el('span', { text: c.address || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Point of Contact: ' }), el('span', { text: pocUser?.name || c.contactPerson || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Retainer Client: ' }), el('span', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }) ])
-      ]);
-      content.appendChild(infoBlock);
-
-      // Fetch cancelled work requests
-      const wrs = DB.getWhere('workRequests', wr => wr.clientId === c.id);
-      
-      // Work Requests Sub-section
-      content.appendChild(el('h4', { text: 'Cancelled Work Requests', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: var(--color-text);' }));
-      if (wrs.length === 0) {
-        content.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
-      } else {
-        const wrTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; margin-bottom: 16px;' }, [
-          el('thead', {}, [
-            el('tr', {}, [
-              el('th', { text: 'Title' }),
-              el('th', { text: 'Priority' }),
-              el('th', { text: 'Due Date' }),
-              el('th', { text: 'Status' })
-            ])
-          ])
-        ]);
-        const wrTbody = el('tbody');
-        wrs.forEach(wr => {
-          wrTbody.appendChild(el('tr', {}, [
-            el('td', { text: wr.title }),
-            el('td', { text: wr.priority }),
-            el('td', { text: wr.dueDate }),
-            el('td', {}, [ el('span', { class: 'badge badge-danger', text: wr.status }) ])
-          ]));
-        });
-        wrTable.appendChild(wrTbody);
-        content.appendChild(wrTable);
-      }
-
-      // Fetch archived documents
-      const wrIds = wrs.map(wr => wr.id);
-      const docs = DB.getWhere('documents', d => wrIds.includes(d.workRequestId) && (d.status === 'Archived' || d.archived === true));
-
-      // Documents Sub-section
-      content.appendChild(el('h4', { text: 'Archived Documents', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: var(--color-text);' }));
-      if (docs.length === 0) {
-        content.appendChild(el('p', { text: 'No archived documents found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
-      } else {
-        const docTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem;' }, [
-          el('thead', {}, [
-            el('tr', {}, [
-              el('th', { text: 'File Name' }),
-              el('th', { text: 'Type' }),
-              el('th', { text: 'Category' }),
-              el('th', { text: 'Upload Date' })
-            ])
-          ])
-        ]);
-        const docTbody = el('tbody');
-        docs.forEach(d => {
-          docTbody.appendChild(el('tr', {}, [
-            el('td', { text: d.fileName }),
-            el('td', { text: d.document_type || '—' }),
-            el('td', { text: d.category || '—' }),
-            el('td', { text: new Date(d.uploadDate).toLocaleDateString() })
-          ]));
-        });
-        docTable.appendChild(docTbody);
-        content.appendChild(docTable);
-      }
-
-      panel.appendChild(content);
-
-      // Event listener to toggle panel collapse
-      header.addEventListener('click', () => {
-        panel.classList.toggle('collapsed');
-      });
-
-      wrapper.appendChild(panel);
+    const rejectedClientChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity)) return false;
+      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      return true;
     });
 
-    container.appendChild(wrapper);
+    const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'client' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const canEdit = Auth.can('clients:edit');
+
+    const buildItem = (c, category) => {
+      const pocUser = DB.getById('users', c.contactUserId);
+      return {
+        id: c.id,
+        category,
+        title: c.name || '(untitled)',
+        description: `TIN: ${c.tin || '—'}`,
+        meta: [
+          { icon: ArchivePage.icons.client, text: pocUser?.name || c.contactPerson || '—' },
+          { icon: ArchivePage.icons.status, text: c.tradeName || '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(c.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#clients/form/' + c.id; }
+          },
+          ...(category === 'accomplished' && canEdit ? [{
+            label: 'Restore',
+            icon: ArchivePage.icons.restore,
+            className: 'primary',
+            onClick: () => self.unarchiveClient(c.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = record => {
+      const isOpReq = record.hasOwnProperty('requestedBy');
+      const data = isOpReq ? record : (record.proposedData || {});
+      const clientId = isOpReq ? record.clientId : data.id;
+      const client = clientId ? DB.getById('clients', clientId) : null;
+      const title = isOpReq
+        ? `Client Request ${client ? '— ' + (client.name || '') : ''}`
+        : `Client Change: ${data.name || '(untitled)'}`;
+      const reason = data.rejectionReason || record.rejectionReason || 'Rejected';
+      return {
+        id: record.id,
+        category: 'rejected',
+        title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: client ? (client.name || '—') : '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(record.reviewedAt || record.updatedAt || record.requestedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${reason}` }
+        ],
+        actions: [
+          ...(clientId ? [{
+            label: 'View Client',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#clients/form/' + clientId; }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'clients',
+      categoryLabels: { accomplished: 'Archived', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: archived.map(c => buildItem(c, 'accomplished')),
+        cancelled: [],
+        rejected: [
+          ...rejectedClientChanges.map(buildRejectedItem),
+          ...rejectedClientRequests.map(buildRejectedItem)
+        ]
+      },
+      emptyText: 'Archive is empty.',
+      bulkActions: (ids) => [
+        {
+          text: 'Restore Selected',
+          className: 'btn btn-primary btn-sm',
+          onClick: (selectedIds) => {
+            this.bulkUnarchiveClients(selectedIds);
+          }
+        }
+      ]
+    });
   }
 };

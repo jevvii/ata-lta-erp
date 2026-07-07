@@ -38,9 +38,10 @@ const MaterialDatePicker = (() => {
   }
 
   function attach(input) {
-    if (processedInputs.has(input)) return;
+    if (!input || processedInputs.has(input) || input.dataset.mdpAttached === 'true') return;
     if (input.getAttribute('type') !== 'date') return;
     processedInputs.add(input);
+    input.dataset.mdpAttached = 'true';
 
     // Capture the initial value before changing type
     const initialValue = input.value || '';

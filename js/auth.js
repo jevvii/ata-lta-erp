@@ -79,6 +79,11 @@ const Auth = {
     this.user = null;
     this.activeEntity = null;
     localStorage.removeItem(this._sessionKey);
+    try {
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('erp_filters_')) sessionStorage.removeItem(key);
+      });
+    } catch (e) {}
     this.updateSessionClasses(false);
   },
 

@@ -5,8 +5,9 @@
  */
 
 const Billing = {
-  view: 'list', // 'list' | 'form' | 'detail' | 'aging' | 'templates'
+  view: 'list', // 'list' | 'form' | 'detail' | 'aging' | 'templates' | 'templateForm'
   detailId: null,
+  templateEditingId: null,
   pendingPrefill: null, // { clientId, workRequestId } — set when generating billing from a WR
 
   getInvoiceById(id) {
@@ -72,9 +73,21 @@ const Billing = {
           { text: '← Back to Invoices', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
         ]
       }));
+    } else if (this.view === 'templateForm') {
+      container.classList.add('billing-tab-page');
+      const isNew = !this.templateEditingId;
+      const template = isNew ? null : DB.getById('billingTemplates', this.templateEditingId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Billing',
+        baseHash: '#billing',
+        currentText: isNew ? 'New Billing Template' : (template?.name || 'Edit Template'),
+        actions: [
+          { text: '← Back to Billing', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
+        ]
+      }));
     } else {
       container.classList.add('billing-tab-page');
-      // Tab views: list, templates, aging, trash
+      // Tab views: list, templates, aging, archive
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       titleBar.appendChild(el('h1', { text: 'Billing' }));
       container.appendChild(titleBar);
@@ -88,7 +101,8 @@ const Billing = {
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'aging') container.appendChild(this.renderAging());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
-    else if (this.view === 'trash') container.appendChild(this.renderTrash());
+    else if (this.view === 'archive') container.appendChild(this.renderArchive());
+    else if (this.view === 'templateForm') container.appendChild(this.renderTemplateForm());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -104,40 +118,51 @@ const Billing = {
 
   renderTabNav() {
     const entity = Auth.activeEntity;
-    const tabNav = el('div', { class: 'module-tab-nav' });
 
     const invoiceCount = DB.getWhere('invoices', inv => {
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
-      return matchesEntity && inv.status !== 'Cancelled';
+      return matchesEntity && inv.status !== 'Cancelled' && !inv.archived;
     }).length + DB.getWhere('pendingChanges', pc => pc.table === 'invoices' && pc.status === 'pending').length;
 
     const templateCount = (DB.getAll('billingTemplates') || []).length;
 
-    const trashCount = DB.getWhere('invoices', inv => {
+    const archiveInvCount = DB.getWhere('invoices', inv => {
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
-      return matchesEntity && inv.status === 'Cancelled';
+      if (!matchesEntity) return false;
+      if (inv.status === 'Cancelled') return true;
+      if (inv.status === 'Paid' && inv.archived) return true;
+      return false;
     }).length;
+
+    const rejectedCount = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'invoices' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      const ent = data.entity || '';
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(ent) : ent === entity);
+      if (!matchesEntity) return false;
+      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    }).length + DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'billing' || r.status !== 'rejected') return false;
+      const ent = (r.entity || '').toUpperCase();
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent) : ent === entity.toUpperCase());
+      if (!matchesEntity) return false;
+      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    }).length;
+
+    const archiveCount = archiveInvCount + rejectedCount;
 
     const tabs = [
       { key: 'list', label: 'Invoices', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: invoiceCount },
       { key: 'templates', label: 'Templates', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>', count: templateCount },
       { key: 'aging', label: 'Aging Report', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' },
-      { key: 'trash', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: trashCount }
+      { key: 'archive', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
-    tabs.forEach(tab => {
-      const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
-      btn.appendChild(parseHTML(tab.icon));
-      btn.appendChild(document.createTextNode(' ' + tab.label));
-      if (tab.count !== undefined) {
-        btn.appendChild(document.createTextNode(' '));
-        btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
-      }
-      btn.addEventListener('click', () => {
-        this.view = tab.key;
-        App.handleRoute();
-      });
-      tabNav.appendChild(btn);
+    const tabNav = renderModuleTabNav(tabs, this.view, (key) => {
+      this.view = key;
+      App.handleRoute();
     });
 
     const canCreate = Auth.can('billing:edit');
@@ -228,149 +253,132 @@ const Billing = {
 
 
 
-    // Pending operations requests banner
-    if (Auth.can('billing:edit')) {
-      const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'billing');
-      if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:var(--color-bg-muted);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:var(--color-text);margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
-        bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Invoice Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
-        banner.appendChild(bannerTitle);
-        pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid var(--color-border);' });
-          const client = DB.getById('clients', req.clientId);
-          const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:var(--color-text);' });
-          info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
-          row.appendChild(info);
-          const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
-          fulfillBtn.addEventListener('click', () => {
-            Billing.prefilledWrId = req.workRequestId;
-            Billing.prefilledClientId = req.clientId;
-            Billing.prefilledRequestId = req.id;
-            Billing.showForm();
-          });
-          row.appendChild(fulfillBtn);
-          banner.appendChild(row);
-        });
-        wrapper.appendChild(banner);
-      }
-    }
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      workRequest: new Set(),
+      client: new Set(),
+      employee: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
 
-    // Filters
-    const filters = el('div', { class: 'filters-bar' });
-    const wrFilter = el('select', { class: 'form-select' });
-    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
-    DB.getWhere('workRequests', wr => {
-      const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).forEach(wr => {
-      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(wrFilter));
-
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions });
-    filters.appendChild(clientFilter);
-
-    const empOptions = [{ value: '', text: 'All Employees' }];
-    DB.getWhere('users', u => {
-      const userEnts = (u.entities || []).map(e => e.toUpperCase());
-      if (entity === 'ALL') {
-        return userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e));
-      }
-      return userEnts.includes(entity.toUpperCase());
-    }).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions });
-    filters.appendChild(empFilter);
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(el('span', { text: 'From', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filters.appendChild(el('span', { text: 'To', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const statusFilter = el('select', { class: 'form-select' });
-    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'].forEach(s => {
-      statusFilter.appendChild(el('option', { value: s, text: s }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      wrFilter.value = '';
-      clientFilter.value = '';
-      empFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      statusFilter.value = '';
-      App.clearSavedFilters('billing');
-      refresh();
-    });
-    filters.appendChild(clearBtn);
-
-    stickyContainer.appendChild(filters);
-
-    // Restore saved filters
     const savedFilters = App.restoreFilters('billing');
     if (savedFilters) {
-      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
-      if (savedFilters.status) statusFilter.value = savedFilters.status;
+      if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
+      else if (savedFilters.workRequest) activeFilters.workRequest.add(savedFilters.workRequest);
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      else if (savedFilters.client) activeFilters.client.add(savedFilters.client);
+      if (Array.isArray(savedFilters.employee)) savedFilters.employee.forEach(v => activeFilters.employee.add(v));
+      else if (savedFilters.employee) activeFilters.employee.add(savedFilters.employee);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
     const saveCurrentFilters = () => {
       App.saveFilters('billing', {
-        workRequest: wrFilter.value,
-        client: clientFilter.value,
-        employee: empFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value,
-        status: statusFilter.value
+        workRequest: Array.from(activeFilters.workRequest),
+        client: Array.from(activeFilters.client),
+        employee: Array.from(activeFilters.employee),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
       });
     };
 
-    // View mode toggle
-    const viewMode = App.getPreferredViewMode('billing') || 'table';
-    const vmToggle = el('div', { class: 'view-mode-toggle' });
-    const vmTable = el('button', { html: ViewIcons.table + ' Table', class: viewMode === 'table' ? 'active' : '' });
-    const vmBoard = el('button', { html: ViewIcons.board + ' Board', class: viewMode === 'board' ? 'active' : '' });
-    const vmList = el('button', { html: ViewIcons.list + ' List', class: viewMode === 'list' ? 'active' : '' });
-    vmTable.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'table'); App.handleRoute(); });
-    vmBoard.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'board'); App.handleRoute(); });
-    vmList.addEventListener('click', () => { saveCurrentFilters(); App.setPreferredViewMode('billing', 'list'); App.handleRoute(); });
-    vmToggle.appendChild(vmTable);
-    vmToggle.appendChild(vmBoard);
-    vmToggle.appendChild(vmList);
-    stickyContainer.appendChild(vmToggle);
+    const getWorkRequestOptions = () => DB.getWhere('workRequests', wr => {
+      const wrEnt = (wr.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase();
+    }).map(wr => ({ value: wr.id, label: wr.title }));
+
+    const getClientOptions = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt) : clientEnt === entity.toUpperCase();
+    }).map(c => ({ value: c.id, label: c.name }));
+
+    const getEmployeeOptions = () => {
+      const set = new Set();
+      DB.getWhere('users', u => {
+        const userEnts = (u.entities || []).map(e => e.toUpperCase());
+        return entity === 'ALL' ? userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e)) : userEnts.includes(entity.toUpperCase());
+      }).forEach(u => set.add(u.name));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) set.add(name);
+      });
+      return Array.from(set).map(n => ({ value: n, label: n }));
+    };
+
+    const getStatusOptions = () => [
+      { value: 'Draft', label: 'Draft' },
+      { value: 'Pending', label: 'Pending' },
+      { value: 'Approved', label: 'Approved' },
+      { value: 'Sent', label: 'Sent' },
+      { value: 'Partially Paid', label: 'Partially Paid' },
+      { value: 'Paid', label: 'Paid' },
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Cancelled', label: 'Cancelled' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      workRequest: { label: 'Work Request', getOptions: getWorkRequestOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      employee: { label: 'Employee', getOptions: getEmployeeOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    let viewMode = App.getPreferredViewMode('billing') || 'table';
+    let groupBy = App.restoreGroupBy('billing') || 'none';
+
+    const groupOptions = [
+      { key: 'none', label: 'None' },
+      { key: 'client', label: 'Client', getName: inv => {
+        const client = DB.getById('clients', inv.clientId);
+        return client?.name || 'No Client';
+      }},
+      { key: 'employee', label: 'Employee', getName: inv => {
+        const creator = inv.createdBy ? DB.getById('users', inv.createdBy) : null;
+        return creator?.name || 'Unassigned';
+      }},
+      { key: 'workRequest', label: 'Work Request', getName: inv => {
+        const wr = DB.getById('workRequests', inv.workRequestId);
+        return wr?.title || 'No Work Request';
+      }}
+    ];
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'billing',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        refresh();
+      },
+      viewMode,
+      onViewModeChange: (newMode) => {
+        viewMode = newMode;
+        App.setPreferredViewMode('billing', newMode);
+        saveCurrentFilters();
+        refresh();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: (newGroupBy) => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('billing', groupBy);
+        refresh();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
 
     const contentContainer = el('div');
@@ -378,11 +386,11 @@ const Billing = {
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
-      let invoices = DB.getWhere('invoices', inv => {
+      const baseInvoices = DB.getWhere('invoices', inv => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(inv.entity) : inv.entity === entity);
-        return matchesEntity && inv.status !== 'Cancelled';
+        return matchesEntity && inv.status !== 'Cancelled' && !inv.archived;
       });
-      
+
       const pendingInvs = DB.getWhere('pendingChanges', pc => {
         if (pc.table !== 'invoices' || pc.status !== 'pending') return false;
         const inv = pc.proposedData;
@@ -397,51 +405,68 @@ const Billing = {
         return inv;
       });
 
-      invoices = [...invoices, ...pendingInvs];
+      const hasInvoices = baseInvoices.length > 0 || pendingInvs.length > 0;
+      let invoices = [...baseInvoices, ...pendingInvs];
 
-      if (wrFilter.value) invoices = invoices.filter(inv => {
-        const wr = DB.getById('workRequests', inv.workRequestId);
-        return wr && wr.id === wrFilter.value;
-      });
-      const selectedClient = clientFilter.value ? DB.getById('clients', clientFilter.value) : null;
-      if (selectedClient && selectedClient.name === clientFilter.searchText) {
-        invoices = invoices.filter(inv => inv.clientId === clientFilter.value);
-      } else if (clientFilter.searchText && clientFilter.searchText.trim() !== '') {
-        const query = clientFilter.searchText.trim().toLowerCase();
-        invoices = invoices.filter(inv => {
-          const client = DB.getById('clients', inv.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
+      if (activeFilters.workRequest.size > 0) {
+        invoices = invoices.filter(inv => activeFilters.workRequest.has(inv.workRequestId));
       }
-      if (empFilter.searchText && empFilter.searchText.trim() !== '') {
-        const query = empFilter.searchText.trim().toLowerCase();
+      if (activeFilters.client.size > 0) {
+        invoices = invoices.filter(inv => activeFilters.client.has(inv.clientId));
+      }
+      if (activeFilters.employee.size > 0) {
         invoices = invoices.filter(inv => {
           const creator = inv.createdBy ? DB.getById('users', inv.createdBy) : null;
-          if (creator && creator.name.toLowerCase().includes(query)) return true;
+          if (creator && activeFilters.employee.has(creator.name)) return true;
           const tasks = inv.workRequestId ? DB.getWhere('tasks', t => t.workRequestId === inv.workRequestId) : [];
           return tasks.some(t => {
-            if (t.assigneeId) {
-              const u = DB.getById('users', t.assigneeId);
-              if (u && u.name.toLowerCase().includes(query)) return true;
-            }
-            if (t.assigneeName && t.assigneeName.toLowerCase().includes(query)) return true;
-            return false;
+            const u = t.assigneeId ? DB.getById('users', t.assigneeId) : null;
+            return (u && activeFilters.employee.has(u.name)) || activeFilters.employee.has(t.assigneeName);
           });
         });
-      } else if (empFilter.value) {
-        invoices = invoices.filter(inv => inv.createdBy === empFilter.value);
       }
-      if (dateFrom.value) invoices = invoices.filter(inv => inv.issueDate >= dateFrom.value);
-      if (dateTo.value) invoices = invoices.filter(inv => inv.issueDate <= dateTo.value);
-      if (statusFilter.value) invoices = invoices.filter(inv => inv.status === statusFilter.value);
+      if (activeFilters.status.size > 0) {
+        invoices = invoices.filter(inv => activeFilters.status.has(inv.status));
+      }
+      if (activeFilters.date.size > 0) {
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        const endOfWeek = new Date(now);
+        endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+        const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
 
-      if (viewMode === 'table') this.refreshTable(contentContainer, invoices);
-      else if (viewMode === 'board') this.refreshBoard(contentContainer, invoices);
-      else this.refreshListCompact(contentContainer, invoices);
+        invoices = invoices.filter(inv => {
+          if (!inv.dueDate && !inv.issueDate) return false;
+          const dStr = (inv.dueDate || inv.issueDate).slice(0, 10);
+          if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+          let bucket = 'Due Later';
+          if (dStr < todayStr) bucket = 'Overdue';
+          else if (dStr === todayStr) bucket = 'Due Today';
+          else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+          else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+          return activeFilters.date.has(bucket);
+        });
+      }
+
+      const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
+      if (invoices.length === 0 && hasActiveFilters && hasInvoices) {
+        contentContainer.appendChild(renderFilterEmptyState(
+          'No invoices match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('billing'); App.handleRoute(); } }]
+        ));
+      } else if (viewMode === 'table') {
+        this.refreshTable(contentContainer, invoices);
+      } else if (viewMode === 'board') {
+        this.refreshBoard(contentContainer, invoices, groupBy, groupOptions, stickyContainer);
+      } else {
+        this.refreshListCompact(contentContainer, invoices);
+      }
     };
 
-    [wrFilter, clientFilter, empFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); refresh(); }));
     refresh();
 
     return wrapper;
@@ -449,7 +474,7 @@ const Billing = {
 
   refreshTable(container, invoices) {
     if (invoices.length === 0) {
-      container.appendChild(el('p', { text: 'No invoices found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No invoices found', null, { variant: 'zero-state' }));
       return;
     }
     const table = el('table', { class: 'data-table' });
@@ -510,6 +535,15 @@ const Billing = {
         });
         tdAct.appendChild(trashBtn);
       }
+
+      if (inv.status === 'Paid' && !inv.archived) {
+        const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
+        archiveBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.archiveInvoice(inv.id);
+        });
+        tdAct.appendChild(archiveBtn);
+      }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
     });
@@ -517,10 +551,62 @@ const Billing = {
     container.appendChild(table);
   },
 
-  refreshBoard(container, invoices) {
+  /**
+   * Role-aware board columns for Billing.
+   *
+   * - Admin: Draft | Released (Sent) | Partially Paid | Paid | Overdue
+   *   Pending and Approved are funnelled to the Admin Console and hidden from the board.
+   * - Accounting: Draft | Pending | Released (Sent) | Partially Paid | Paid | Overdue
+   *   Approved is hidden from the board (action happens via list/detail).
+   * - Others: Requested (Draft/Pending/Approved) | Released (Sent) | Partially Paid | Paid | Overdue
+   */
+  getBoardColumns() {
+    const role = Auth.user?.role;
+    const isAdmin = role === 'Admin';
+    const isAccounting = role === 'Accounting';
+
+    const releasedStatuses = ['Sent'];
+
+    if (isAdmin) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Released', label: 'Released', statuses: releasedStatuses, targetStatus: 'Sent', color: '#3b82f6' },
+        { key: 'Partially Paid', label: 'Partially Paid', statuses: ['Partially Paid'], targetStatus: 'Partially Paid', color: '#f59e0b' },
+        { key: 'Paid', label: 'Paid', statuses: ['Paid'], targetStatus: 'Paid', color: '#10b981' },
+        { key: 'Overdue', label: 'Overdue', statuses: ['Overdue'], targetStatus: 'Overdue', color: '#ef4444' }
+      ];
+    }
+
+    if (isAccounting) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Pending', label: 'Pending', statuses: ['Pending'], targetStatus: 'Pending', color: '#f59e0b' },
+        { key: 'Released', label: 'Released', statuses: releasedStatuses, targetStatus: 'Sent', color: '#3b82f6' },
+        { key: 'Partially Paid', label: 'Partially Paid', statuses: ['Partially Paid'], targetStatus: 'Partially Paid', color: '#f59e0b' },
+        { key: 'Paid', label: 'Paid', statuses: ['Paid'], targetStatus: 'Paid', color: '#10b981' },
+        { key: 'Overdue', label: 'Overdue', statuses: ['Overdue'], targetStatus: 'Overdue', color: '#ef4444' }
+      ];
+    }
+
+    return [
+      { key: 'Requested', label: 'Requested', statuses: ['Draft', 'Pending', 'Approved'], targetStatus: 'Pending', color: '#94a3b8' },
+      { key: 'Released', label: 'Released', statuses: releasedStatuses, targetStatus: 'Sent', color: '#3b82f6' },
+      { key: 'Partially Paid', label: 'Partially Paid', statuses: ['Partially Paid'], targetStatus: 'Partially Paid', color: '#f59e0b' },
+      { key: 'Paid', label: 'Paid', statuses: ['Paid'], targetStatus: 'Paid', color: '#10b981' },
+      { key: 'Overdue', label: 'Overdue', statuses: ['Overdue'], targetStatus: 'Overdue', color: '#ef4444' }
+    ];
+  },
+
+  getInvoiceDisplayStatus(status) {
+    if (status === 'Sent') return 'Released';
+    return status;
+  },
+
+  refreshBoard(container, invoices, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     const canEdit = Auth.can('billing:edit');
     const self = this;
-    const statuses = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid', 'Overdue'];
+    toolbarContainer?.classList.remove('grouped-board-active');
+    const boardPhases = this.getBoardColumns();
     const statusColors = {
       'Draft': '#94a3b8',
       'Pending': '#f59e0b',
@@ -531,9 +617,9 @@ const Billing = {
       'Overdue': '#ef4444'
     };
 
-    // Normalize boardOrder within each status column.
-    statuses.forEach(st => {
-      const colInvs = invoices.filter(inv => inv.status === st && !inv.pendingChangeId);
+    // Normalize boardOrder within each visible column.
+    boardPhases.forEach(phase => {
+      const colInvs = invoices.filter(inv => phase.statuses.includes(inv.status) && !inv.pendingChangeId);
       colInvs.sort((a, b) => {
         const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
         const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
@@ -551,187 +637,231 @@ const Billing = {
       });
     });
 
+    const makeColumns = () => boardPhases.map(phase => {
+      const col = {
+        ...phase,
+        icon: 'phase',
+        emptyState: { variant: 'compact', title: 'No invoices', body: '' }
+      };
+      if (phase.key === 'Draft' && canEdit) {
+        col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
+      }
+      return col;
+    });
+
     let cardNumber = 1;
+
+    const renderCard = (inv) => {
+      const client = DB.getById('clients', inv.clientId);
+      const paid = self.getPaidAmount(inv);
+      const balance = inv.total - paid;
+      const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
+
+      const statusPriorityClass = {
+        'Paid': 'card-v2-priority-low',
+        'Approved': 'card-v2-priority-low',
+        'Sent': 'card-v2-priority-normal',
+        'Partially Paid': 'card-v2-priority-medium',
+        'Pending': 'card-v2-priority-medium',
+        'Draft': 'card-v2-priority-normal',
+        'Overdue': 'card-v2-priority-urgent'
+      }[inv.status] || 'card-v2-priority-normal';
+
+      const descParts = [inv.invoiceNumber];
+      if (inv.workRequestId) {
+        const wr = DB.getById('workRequests', inv.workRequestId);
+        if (wr) descParts.push(wr.title);
+      }
+      if (inv.fromTemplate) descParts.push('Recurring');
+
+      const card = buildCompactBoardCard({
+        key: 'INV-' + cardNumber++,
+        progress,
+        statusColor: statusColors[inv.status] || '#cbd5e1',
+        title: inv.invoiceNumber,
+        description: client?.name || '—',
+        detail: descParts.slice(1).join(' • '),
+        date: inv.issueDate ? formatDate(inv.issueDate) : '',
+        priority: self.getInvoiceDisplayStatus(inv.status),
+        priorityClass: statusPriorityClass,
+        onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+      });
+
+      const footerRight = card.querySelector('.card-v2-footer-right');
+      if (balance > 0 && balance < inv.total) {
+        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
+      }
+      footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
+      return card;
+    };
+
+    const cardMenuItems = (inv) => {
+      const items = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+      }];
+      if (canEdit && inv.status === 'Draft' && !inv.pendingChangeId) {
+        items.push({
+          label: 'Edit',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+          onClick: () => self.showForm(inv.id)
+        });
+        items.push({
+          label: 'Trash',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          onClick: () => self.trashInvoice(inv.id)
+        });
+      }
+
+      if (inv.status === 'Paid' && !inv.archived) {
+        items.push({
+          label: 'Archive',
+          className: 'primary',
+          icon: ArchivePage.icons.archive,
+          onClick: () => self.archiveInvoice(inv.id)
+        });
+      }
+      return items;
+    };
+
+    const boardDrag = {
+      enabled: true,
+      canDrag: inv => canEdit && !inv.pendingChangeId,
+      canDrop: ({ item, targetStatus }) => {
+        if (item.status === targetStatus) return true;
+        const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
+        const currentIdx = flow.indexOf(item.status);
+        const targetIdx = flow.indexOf(targetStatus);
+        if (currentIdx === -1 || targetIdx === -1) return false;
+        if (targetIdx <= currentIdx) return false;
+
+        // Payment status transitions require recorded payments that match the target.
+        const paid = self.getPaidAmount(item);
+        if (targetStatus === 'Partially Paid') {
+          return paid > 0 && paid < item.total;
+        }
+        if (targetStatus === 'Paid') {
+          return item.total > 0 && paid >= item.total;
+        }
+        return true;
+      },
+      orderField: 'boardOrder',
+      onDropDenied({ item, targetStatus }) {
+        const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
+        const currentIdx = flow.indexOf(item.status);
+        const targetIdx = flow.indexOf(targetStatus);
+        // Silently ignore backward moves so cards return to their original position.
+        if (currentIdx !== -1 && targetIdx !== -1 && targetIdx < currentIdx) return;
+
+        if (targetStatus !== 'Partially Paid' && targetStatus !== 'Paid') return;
+        const paid = self.getPaidAmount(item);
+        if (targetStatus === 'Partially Paid') {
+          if (paid <= 0) {
+            Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Partially Paid — no payments have been recorded.`, 'warning');
+          } else if (paid >= item.total) {
+            Workflow.showMessage('Already Fully Paid', `Invoice "${item.invoiceNumber}" has payments totaling ${formatPHP(paid)}. Use the Paid status instead.`, 'warning');
+          }
+        } else if (targetStatus === 'Paid') {
+          if (item.total <= 0) {
+            Workflow.showMessage('Invalid Invoice', `Invoice "${item.invoiceNumber}" has no billable amount and cannot be marked Paid.`, 'warning');
+          } else if (paid <= 0) {
+            Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Paid — no payments have been recorded.`, 'warning');
+          } else if (paid < item.total) {
+            const balance = item.total - paid;
+            Workflow.showMessage('Balance Remaining', `Invoice "${item.invoiceNumber}" still has a balance of ${formatPHP(balance)}. Record the remaining payment before marking Paid.`, 'warning');
+          }
+        }
+      },
+      onDrop({ item, targetStatus, newOrder, fromStatus }) {
+        if (fromStatus === targetStatus) {
+          DB.update('invoices', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+          return;
+        }
+
+        // Permission gate: only billing:approve can move to Approved
+        if (targetStatus === 'Approved' && !Auth.can('billing:approve')) {
+          Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve invoices.', 'danger');
+          return;
+        }
+
+        // Block if pending admin approval
+        if (item.pendingChangeId) {
+          Workflow.showMessage('Pending Approval', `Invoice "${item.invoiceNumber}" is pending administrative approval and cannot be moved.`, 'warning');
+          return;
+        }
+
+        // Block Draft → beyond Pending if no line items
+        if (fromStatus === 'Draft' && targetStatus !== 'Pending') {
+          const hasItems = item.items && item.items.length > 0;
+          if (!hasItems && (!item.total || item.total <= 0)) {
+            Workflow.showMessage('Incomplete Invoice', 'Cannot advance — invoice has no line items or amount.', 'warning');
+            return;
+          }
+        }
+
+        const applyMove = () => {
+          const isRelease = targetStatus === 'Sent';
+          const isAdmin = Auth.user?.role === 'Admin';
+          const nextStatus = (isRelease && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+          const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
+          DB.update('invoices', item.id, changes);
+          App.handleRoute();
+        };
+
+        // Confirm critical transitions
+        if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
+          const isRelease = targetStatus === 'Sent';
+          const isAdmin = Auth.user?.role === 'Admin';
+          const labels = {
+            'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
+            'Sent': { msg: isAdmin ? `Release invoice "${item.invoiceNumber}" to client?` : `Submit invoice "${item.invoiceNumber}" for release approval?`, type: 'success' },
+            'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
+          };
+          const cfg = labels[targetStatus];
+          Workflow.showConfirm('Confirm Status Change', cfg.msg, applyMove, cfg.type);
+          return;
+        }
+
+        applyMove();
+      }
+    };
+
+    if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
+      cardNumber = 1;
+      renderGroupedKanbanBoard({
+        container,
+        items: invoices,
+        columns: makeColumns(),
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        renderCard,
+        cardMenuItems,
+        storageKey: 'erp_billing_grouped_collapsed',
+        drag: boardDrag
+      });
+      return;
+    }
+
+    cardNumber = 1;
 
     KanbanBoard.render({
       container,
       items: invoices,
-      columns: statuses.map(st => {
-        const col = {
-          key: st,
-          label: st,
-          targetStatus: st,
-          color: statusColors[st] || '#cbd5e1'
-        };
-        if (st === 'Draft' && canEdit) {
-          col.addButton = { label: 'Add Billing', onClick: () => self.showForm() };
-          col.addCard = { label: 'Add Billing', onClick: () => self.showForm() };
-        } else if (st !== 'Draft') {
-          col.emptyState = { variant: 'compact', title: 'No invoices', body: '' };
-        }
-        return col;
-      }),
-      renderCard(inv) {
-        const client = DB.getById('clients', inv.clientId);
-        const paid = self.getPaidAmount(inv);
-        const balance = inv.total - paid;
-        const progress = inv.total > 0 ? Math.round((paid / inv.total) * 100) : 0;
-
-        const statusPriorityClass = {
-          'Paid': 'card-v2-priority-low',
-          'Approved': 'card-v2-priority-low',
-          'Sent': 'card-v2-priority-normal',
-          'Partially Paid': 'card-v2-priority-medium',
-          'Pending': 'card-v2-priority-medium',
-          'Draft': 'card-v2-priority-normal',
-          'Overdue': 'card-v2-priority-urgent'
-        }[inv.status] || 'card-v2-priority-normal';
-
-        const descParts = [inv.invoiceNumber];
-        if (inv.workRequestId) {
-          const wr = DB.getById('workRequests', inv.workRequestId);
-          if (wr) descParts.push(wr.title);
-        }
-        if (inv.fromTemplate) descParts.push('Recurring');
-
-        const card = buildCompactBoardCard({
-          key: 'INV-' + cardNumber++,
-          progress,
-          statusColor: statusColors[inv.status] || '#cbd5e1',
-          title: inv.invoiceNumber,
-          description: client?.name || '—',
-          detail: descParts.slice(1).join(' • '),
-          date: inv.issueDate ? formatDate(inv.issueDate) : '',
-          priority: inv.status,
-          priorityClass: statusPriorityClass,
-          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
-        });
-
-        const footerRight = card.querySelector('.card-v2-footer-right');
-        if (balance > 0 && balance < inv.total) {
-          footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: `Bal ${formatPHP(balance)}`, style: 'font-size:0.7rem;color:var(--color-danger);font-weight:600;' }));
-        }
-        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(inv.total), style: 'font-weight:700;color:var(--color-text);' }));
-        return card;
-      },
-      cardMenuItems(inv) {
-        const items = [{
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { location.hash = '#billing/detail/' + inv.id; }
-        }];
-        if (canEdit && inv.status === 'Draft' && !inv.pendingChangeId) {
-          items.push({
-            label: 'Edit',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-            onClick: () => self.showForm(inv.id)
-          });
-          items.push({
-            label: 'Trash',
-            className: 'danger',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-            onClick: () => self.trashInvoice(inv.id)
-          });
-        }
-        return items;
-      },
-      drag: {
-        enabled: true,
-        canDrag: inv => canEdit && !inv.pendingChangeId,
-        canDrop: ({ item, targetStatus }) => {
-          if (item.status === targetStatus) return true;
-          const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
-          const currentIdx = flow.indexOf(item.status);
-          const targetIdx = flow.indexOf(targetStatus);
-          if (currentIdx === -1 || targetIdx === -1) return false;
-          if (targetIdx <= currentIdx) return false;
-
-          // Payment status transitions require recorded payments that match the target.
-          const paid = self.getPaidAmount(item);
-          if (targetStatus === 'Partially Paid') {
-            return paid > 0 && paid < item.total;
-          }
-          if (targetStatus === 'Paid') {
-            return item.total > 0 && paid >= item.total;
-          }
-          return true;
-        },
-        orderField: 'boardOrder',
-        onDropDenied({ item, targetStatus }) {
-          if (targetStatus !== 'Partially Paid' && targetStatus !== 'Paid') return;
-          const paid = self.getPaidAmount(item);
-          if (targetStatus === 'Partially Paid') {
-            if (paid <= 0) {
-              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Partially Paid — no payments have been recorded.`, 'warning');
-            } else if (paid >= item.total) {
-              Workflow.showMessage('Already Fully Paid', `Invoice "${item.invoiceNumber}" has payments totaling ${formatPHP(paid)}. Use the Paid status instead.`, 'warning');
-            }
-          } else if (targetStatus === 'Paid') {
-            if (item.total <= 0) {
-              Workflow.showMessage('Invalid Invoice', `Invoice "${item.invoiceNumber}" has no billable amount and cannot be marked Paid.`, 'warning');
-            } else if (paid <= 0) {
-              Workflow.showMessage('Payment Required', `Invoice "${item.invoiceNumber}" cannot be marked Paid — no payments have been recorded.`, 'warning');
-            } else if (paid < item.total) {
-              const balance = item.total - paid;
-              Workflow.showMessage('Balance Remaining', `Invoice "${item.invoiceNumber}" still has a balance of ${formatPHP(balance)}. Record the remaining payment before marking Paid.`, 'warning');
-            }
-          }
-        },
-        onDrop({ item, targetStatus, newOrder, fromStatus }) {
-          if (fromStatus === targetStatus) {
-            DB.update('invoices', item.id, { boardOrder: newOrder });
-            App.handleRoute();
-            return;
-          }
-
-          // Permission gate: only billing:approve can move to Approved
-          if (targetStatus === 'Approved' && !Auth.can('billing:approve')) {
-            Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve invoices.', 'danger');
-            return;
-          }
-
-          // Block if pending admin approval
-          if (item.pendingChangeId) {
-            Workflow.showMessage('Pending Approval', `Invoice "${item.invoiceNumber}" is pending administrative approval and cannot be moved.`, 'warning');
-            return;
-          }
-
-          // Block Draft → beyond Pending if no line items
-          if (fromStatus === 'Draft' && targetStatus !== 'Pending') {
-            const hasItems = item.items && item.items.length > 0;
-            if (!hasItems && (!item.total || item.total <= 0)) {
-              Workflow.showMessage('Incomplete Invoice', 'Cannot advance — invoice has no line items or amount.', 'warning');
-              return;
-            }
-          }
-
-          const applyMove = () => {
-            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
-            DB.update('invoices', item.id, changes);
-            App.handleRoute();
-          };
-
-          // Confirm critical transitions
-          if (['Approved', 'Sent', 'Paid'].includes(targetStatus)) {
-            const labels = {
-              'Approved': { msg: `Approve invoice "${item.invoiceNumber}" (${formatPHP(item.total)})?`, type: 'success' },
-              'Sent': { msg: `Mark invoice "${item.invoiceNumber}" as Sent to client?`, type: 'success' },
-              'Paid': { msg: `Mark invoice "${item.invoiceNumber}" (${formatPHP(item.total)}) as fully Paid?`, type: 'success' }
-            };
-            const cfg = labels[targetStatus];
-            Workflow.showConfirm('Confirm Status Change', cfg.msg, applyMove, cfg.type);
-            return;
-          }
-
-          applyMove();
-        }
-      }
+      columns: makeColumns(),
+      renderCard,
+      cardMenuItems,
+      drag: boardDrag
     });
   },
 
   refreshListCompact(container, invoices) {
     if (invoices.length === 0) {
-      container.appendChild(el('p', { text: 'No invoices found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No invoices found', null, { variant: 'zero-state' }));
       return;
     }
     const list = el('div', { class: 'list-view' });
@@ -797,7 +927,7 @@ const Billing = {
       'Overdue': 'badge-danger',
       'Cancelled': 'badge-danger'
     };
-    return el('span', { class: 'badge ' + (map[status] || ''), text: status });
+    return el('span', { class: 'badge ' + (map[status] || ''), text: this.getInvoiceDisplayStatus(status) });
   },
 
   recurringBadge(inv) {
@@ -1709,20 +1839,23 @@ const Billing = {
         actions.appendChild(sendBtn);
       }
     } else if (inv.status === 'Approved' && canEdit) {
-      // Mark as Sent — billing:edit (Accounting), pending Admin approval
-      const sentBtn = el('button', { class: 'btn btn-primary', text: 'Mark as Sent' });
+      // Mark as Released — billing:edit (Accounting), pending Admin approval
+      const isAdmin = Auth.user?.role === 'Admin';
+      const sentBtn = el('button', { class: 'btn btn-primary', text: isAdmin ? 'Release Invoice' : 'Submit for Release' });
       sentBtn.addEventListener('click', () => {
-        if (canApprove) {
-          // Admin: direct update
+        if (isAdmin) {
           DB.update('invoices', inv.id, { status: 'Sent', updatedAt: new Date().toISOString() });
         } else {
-          // Accounting: submit for Admin approval
-          PendingChanges.submit('invoices', { ...inv, status: 'Sent', updatedAt: new Date().toISOString() }, false);
-          Workflow.showMessage('Submitted', 'Mark as Sent has been submitted for administrative approval.', 'success');
+          DB.update('invoices', inv.id, { status: 'Release Pending Approval', updatedAt: new Date().toISOString() });
+          Workflow.showMessage('Submitted', 'Invoice release has been submitted for administrative approval.', 'success');
         }
         App.handleRoute();
       });
       actions.appendChild(sentBtn);
+    } else if (inv.status === 'Paid' && !inv.archived) {
+      const archiveBtn = el('button', { class: 'btn btn-primary', text: 'Archive Invoice', style: 'margin-right:8px;' });
+      archiveBtn.addEventListener('click', () => this.archiveInvoice(inv.id));
+      actions.appendChild(archiveBtn);
     }
     container.appendChild(actions);
 
@@ -2589,97 +2722,160 @@ const Billing = {
   // ============================================================
   renderTemplates() {
     const entity = Auth.activeEntity;
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
 
-    const actions = el('div', { class: 'actions-bar' });
-    const addBtn = el('button', { class: 'btn btn-primary', text: '+ New Template' });
-    addBtn.addEventListener('click', () => this.showTemplateForm());
-    actions.appendChild(addBtn);
-    wrapper.appendChild(actions);
+    const templates = DB.getWhere('billingTemplates', t => t.entity === entity);
 
-    const listContainer = el('div');
-    wrapper.appendChild(listContainer);
-    this.refreshTemplateList(listContainer);
+    const backlogItems = templates.map(t => {
+      const client = DB.getById('clients', t.clientId);
+      return {
+        id: t.id,
+        name: t.name,
+        iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary);"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+        tags: [
+          { text: client?.name || 'No Client', type: 'client' },
+          { text: t.schedule || '—', type: 'schedule', value: t.schedule, style: 'text-transform: capitalize;' },
+          { text: formatPHP(t.pfAmount || 0), type: 'amount' }
+        ]
+      };
+    });
+
+    const backlog = JiraBacklogList.render({
+      title: 'Billing Templates',
+      subtitle: 'recurring professional fee billing and invoice schedules',
+      items: backlogItems,
+      emptyText: 'No billing templates found',
+      rowIdPrefix: 'BL',
+      headerActions: [
+        {
+          text: '+ New Template',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => this.showTemplateForm()
+        }
+      ],
+      rowActions: (item) => {
+        const t = templates.find(temp => temp.id === item.id);
+        return [
+          {
+            text: 'Generate',
+            className: 'btn btn-primary btn-xs',
+            onClick: () => this.generateFromTemplate(t)
+          },
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showTemplateForm(t)
+          },
+          {
+            text: 'Delete',
+            className: 'btn btn-danger btn-xs',
+            onClick: () => {
+              Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${t.name}"?`, () => {
+                DB.delete('billingTemplates', t.id);
+                App.handleRoute();
+              }, 'danger');
+            }
+          }
+        ];
+      },
+      bulkActions: (selectedIds) => [
+        {
+          text: '⚡ Bulk Generate Invoices',
+          className: 'btn btn-primary btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Bulk Generate Invoices', `Are you sure you want to generate invoices for all ${ids.length} selected templates?`, () => {
+              let count = 0;
+              ids.forEach(id => {
+                const t = templates.find(temp => temp.id === id);
+                if (t) {
+                  const entity = Auth.activeEntity;
+                  const now = new Date();
+                  const inv = {
+                    id: generateSequentialId('inv', 'invoices'),
+                    clientId: t.clientId,
+                    entity: entity,
+                    invoiceNumber: this.nextInvoiceNumber(entity),
+                    issueDate: now.toISOString().slice(0, 10),
+                    dueDate: new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()).toISOString().slice(0, 10),
+                    status: 'Draft',
+                    lineItems: deepClone(t.lineItems || []),
+                    subtotal: t.pfAmount || 0,
+                    vat: 0,
+                    total: t.pfAmount || 0,
+                    paidAmount: 0,
+                    payments: [],
+                    fromTemplate: t.id,
+                    createdBy: Auth.user.id,
+                    createdAt: now.toISOString(),
+                    updatedAt: now.toISOString()
+                  };
+                  DB.insert('invoices', inv);
+                  count++;
+                }
+              });
+              Workflow.showMessage('Success', `Generated ${count} invoices successfully.`, 'success');
+              this.view = 'list';
+              App.handleRoute();
+            });
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${ids.length} selected templates?`, () => {
+              ids.forEach(id => {
+                DB.delete('billingTemplates', id);
+              });
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ]
+    });
+
+    wrapper.appendChild(backlog);
     return wrapper;
   },
 
   refreshTemplateList(container) {
+    // Legacy method preserved for compatibility/no-op
     while (container.firstChild) container.removeChild(container.firstChild);
-    const entity = Auth.activeEntity;
-    const templates = DB.getWhere('billingTemplates', t => t.entity === entity);
-    if (templates.length === 0) {
-      container.appendChild(el('p', { text: 'No billing templates found.', class: 'empty-state' }));
-      return;
-    }
-    
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    thead.appendChild(el('tr', {}, [
-      el('th', { text: 'Template Name' }),
-      el('th', { text: 'Client' }),
-      el('th', { text: 'Schedule' }),
-      el('th', { text: 'Fee' }),
-      el('th', { text: 'Actions' })
-    ]));
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    templates.forEach(t => {
-      const client = DB.getById('clients', t.clientId);
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.name, style: 'font-weight:600;' }));
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: t.schedule, style: 'text-transform:capitalize;' }));
-      tr.appendChild(el('td', { text: formatPHP(t.pfAmount) }));
-      
-      const tdAct = el('td');
-      const genBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate' });
-      genBtn.addEventListener('click', () => this.generateFromTemplate(t));
-      tdAct.appendChild(genBtn);
-      
-      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
-      editBtn.addEventListener('click', () => this.showTemplateForm(t));
-      tdAct.appendChild(editBtn);
-
-      const delBtn = el('button', { class: 'btn btn-danger btn-sm', text: '×', style: 'margin-left:4px;' });
-      delBtn.addEventListener('click', () => {
-        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${t.name}"?`, () => {
-          DB.delete('billingTemplates', t.id);
-          App.handleRoute();
-        }, 'danger');
-      });
-      tdAct.appendChild(delBtn);
-
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    container.appendChild(table);
   },
 
-  showTemplateForm(existing = null) {
+  renderTemplateForm() {
     const entity = Auth.activeEntity;
-    const container = el('div');
+    const template = this.templateEditingId ? DB.getById('billingTemplates', this.templateEditingId) : null;
+    const container = el('div', { class: 'page' });
 
-    // Notion-style icon header (title is now the inline borderless title field)
-    const titleSec = el('div', { class: 'side-pane-form-title' });
-    titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📋' }));
-    container.appendChild(titleSec);
+    const form = el('form', { id: 'billing-tpl-form', class: 'form-stacked notion-form' });
 
-    const formWrap = el('div', { class: 'side-pane-form-content' });
-    const form = el('form', { class: 'form-stacked notion-form', id: 'billing-tpl-form' });
-    
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const topActions = el('div', { class: 'form-actions-top' });
+    topActions.appendChild(el('button', { type: 'submit', form: 'billing-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
+    if (template) {
+      const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
+      delBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${template.name}"?`, () => {
+          DB.delete('billingTemplates', template.id);
+          this.view = 'templates';
+          this.templateEditingId = null;
+          closeFormPanelAndRoute('#billing');
+        }, 'danger');
+      });
+      topActions.appendChild(delBtn);
+    }
+    headerBar.appendChild(topActions);
+    form.appendChild(headerBar);
+
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
     titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Template Name' }));
     const nameInput = el('input', {
       type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input',
-      placeholder: 'New Billing Template', required: true, value: existing?.name || ''
+      placeholder: 'New Billing Template', required: true, value: template?.name || ''
     });
     titleSection.appendChild(nameInput);
-    if (!existing) {
-      setTimeout(() => { nameInput.focus(); }, 60);
-    }
     form.appendChild(titleSection);
 
     const clientGroup = el('div', { class: 'form-group' });
@@ -2688,7 +2884,7 @@ const Billing = {
     clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
       const opt = el('option', { value: c.id, text: c.name });
-      if (existing && existing.clientId === c.id) opt.selected = true;
+      if (template && template.clientId === c.id) opt.selected = true;
       clientSel.appendChild(opt);
     });
     clientGroup.appendChild(clientSel);
@@ -2699,13 +2895,16 @@ const Billing = {
     const schedSel = el('select', { name: 'schedule', required: true });
     ['monthly', 'quarterly'].forEach(s => {
       const opt = el('option', { value: s, text: s });
-      if (existing && existing.schedule === s) opt.selected = true;
+      if (template && template.schedule === s) opt.selected = true;
       schedSel.appendChild(opt);
     });
     schedGroup.appendChild(schedSel);
     form.appendChild(schedGroup);
 
-    form.appendChild(el('div', { class: 'form-group' }, [el('label', { text: 'Professional Fee Amount *' }), el('input', { type: 'number', name: 'pfAmount', min: 0, step: 0.01, required: true, value: existing?.pfAmount || '' })]));
+    form.appendChild(el('div', { class: 'form-group' }, [
+      el('label', { text: 'Professional Fee Amount *' }),
+      el('input', { type: 'number', name: 'pfAmount', min: 0, step: 0.01, required: true, value: template?.pfAmount || '' })
+    ]));
 
     form.addEventListener('submit', e => {
       e.preventDefault();
@@ -2722,34 +2921,38 @@ const Billing = {
         updatedAt: new Date().toISOString()
       };
 
-      if (existing) {
-        DB.update('billingTemplates', existing.id, record);
+      if (template) {
+        DB.update('billingTemplates', template.id, record);
       } else {
         record.id = generateId('bt');
         record.createdAt = new Date().toISOString();
         DB.insert('billingTemplates', record);
       }
-      closeFormPanelAndRoute();
+      this.view = 'templates';
+      this.templateEditingId = null;
+      closeFormPanelAndRoute('#billing');
     });
 
-    formWrap.appendChild(form);
-    container.appendChild(formWrap);
+    container.appendChild(form);
+    return container;
+  },
 
-    // Sticky footer
-    const footer = el('div', { class: 'side-pane-form-footer' });
-    footer.appendChild(el('button', { type: 'submit', form: 'billing-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute());
-    footer.appendChild(cancelBtn);
-    container.appendChild(footer);
-
-    if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
-      window.SidePaneInstance.open({
-        title: existing ? 'Edit Billing Template' : 'New Billing Template',
-        content: container,
-        viewContext: 'billing-template-form'
-      });
-    }
+  showTemplateForm(existing = null) {
+    this.templateEditingId = existing ? existing.id : null;
+    const fullPageRoute = this.templateEditingId ? `#billing/templateForm/${this.templateEditingId}` : '#billing/templateForm/new';
+    openFormPanel({
+      icon: '📋',
+      title: ' ',
+      formContent: this.renderTemplateForm(),
+      formId: 'billing-tpl-form',
+      viewContext: 'billing-template-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      actions: [
+        { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'billing-tpl-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#billing') }
+      ]
+    });
   },
 
   generateFromTemplate(t) {
@@ -2803,69 +3006,170 @@ const Billing = {
   restoreInvoice(id) {
     const inv = DB.getById('invoices', id);
     if (!inv || inv.status !== 'Cancelled') return;
-    DB.update('invoices', id, { status: 'Draft', updatedAt: new Date().toISOString() });
+    DB.update('invoices', id, { status: 'Draft', archived: false, updatedAt: new Date().toISOString() });
     if (inv.workRequestId) {
       const wr = DB.getById('workRequests', inv.workRequestId);
       if (wr) {
         DB.update('workRequests', wr.id, { linkedInvoiceId: inv.id });
       }
     }
+    Workflow.showMessage('Restored', 'Invoice has been restored to the active list.', 'success');
     App.handleRoute();
   },
 
-  renderTrash() {
-    const entity = Auth.activeEntity;
-    const trashed = DB.getWhere('invoices', inv => {
-      const invEnt = (inv.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(invEnt);
-      }
-      return invEnt === entity.toUpperCase();
-    }).filter(inv => inv.status === 'Cancelled');
+  archiveInvoice(id) {
+    const inv = DB.getById('invoices', id);
+    if (!inv || inv.status !== 'Paid' || inv.archived) return;
+    DB.update('invoices', id, { archived: true, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Archived', 'Invoice has been archived.', 'success');
+    App.handleRoute();
+  },
 
-    const container = el('div');
-    const topActions = el('div', { class: 'form-header-bar', style: 'margin-bottom: var(--spacing-lg);' });
-    topActions.appendChild(el('h2', { text: 'Archived Invoices' }));
-    container.appendChild(topActions);
+  unarchiveInvoice(id) {
+    const inv = DB.getById('invoices', id);
+    if (!inv || inv.status !== 'Paid' || !inv.archived) return;
+    DB.update('invoices', id, { archived: false, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Restored', 'Invoice has been restored to the active list.', 'success');
+    App.handleRoute();
+  },
 
-    if (trashed.length === 0) {
-      container.appendChild(el('p', { text: 'Archive is empty.', class: 'empty-state' }));
-      return container;
+  permanentDeleteInvoice(id) {
+    const inv = DB.getById('invoices', id);
+    if (!inv) return;
+    if (Auth.user?.role !== 'Admin') {
+      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete invoices.', 'danger');
+      return;
     }
+    Workflow.showConfirm('Permanently Delete Invoice',
+      `Are you sure you want to permanently delete invoice "${inv.invoiceNumber}"? This action cannot be undone.`,
+      () => {
+        if (inv.workRequestId) {
+          const wr = DB.getById('workRequests', inv.workRequestId);
+          if (wr && wr.linkedInvoiceId === inv.id) {
+            DB.update('workRequests', wr.id, { linkedInvoiceId: null });
+          }
+        }
+        DB.delete('invoices', id);
+        Workflow.showMessage('Deleted', 'Invoice has been permanently deleted.', 'success');
+        App.handleRoute();
+      },
+      'danger'
+    );
+  },
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Invoice #', 'Client', 'Issue Date', 'Total', 'Archived At', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
+  renderArchive() {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
 
-    const tbody = el('tbody');
-    trashed.forEach(inv => {
-      const client = DB.getById('clients', inv.clientId);
-      const tr = el('tr');
-      const tdInvoice = el('td');
-      tdInvoice.appendChild(el('span', { text: inv.invoiceNumber }));
-      if (inv.fromTemplate) tdInvoice.appendChild(this.recurringBadge(inv));
-      tr.appendChild(tdInvoice);
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: formatDate(inv.issueDate) }));
-      tr.appendChild(el('td', { text: formatPHP(inv.total) }));
-      tr.appendChild(el('td', { text: formatDate(inv.updatedAt) }));
-      const tdAct = el('td');
-      const restoreBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Restore' });
-      restoreBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.restoreInvoice(inv.id);
-      });
-      tdAct.appendChild(restoreBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const entFilter = ent => {
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent.toUpperCase());
+      return ent.toUpperCase() === entity.toUpperCase();
+    };
+
+    const paid = DB.getWhere('invoices', inv => entFilter(inv.entity || '') && inv.status === 'Paid' && inv.archived === true);
+    const cancelled = DB.getWhere('invoices', inv => entFilter(inv.entity || '') && inv.status === 'Cancelled');
+
+    const rejectedInvoiceChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'invoices' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity || '')) return false;
+      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      return true;
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
 
-    return container;
+    const rejectedBillingRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'billing' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity || '')) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const buildInvItem = (inv, category) => {
+      const client = DB.getById('clients', inv.clientId);
+      return {
+        id: inv.id,
+        category,
+        title: inv.invoiceNumber || '(no number)',
+        meta: [
+          { icon: ArchivePage.icons.client, text: client?.name || '—' },
+          { icon: ArchivePage.icons.amount, text: formatPHP(inv.total) },
+          { icon: ArchivePage.icons.date, text: formatDate(inv.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#billing/detail/' + inv.id; }
+          },
+          ...(category === 'accomplished' ? [{
+            label: 'Unarchive',
+            icon: ArchivePage.icons.unarchive,
+            className: 'primary',
+            onClick: () => self.unarchiveInvoice(inv.id)
+          }] : []),
+          ...(category === 'cancelled' ? [{
+            label: 'Restore to Draft',
+            icon: ArchivePage.icons.restore,
+            className: 'primary',
+            onClick: () => self.restoreInvoice(inv.id)
+          }] : []),
+          ...(isAdmin ? [{
+            label: 'Delete Permanently',
+            icon: ArchivePage.icons.delete,
+            className: 'danger',
+            onClick: () => self.permanentDeleteInvoice(inv.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = (record) => {
+      const isOpReq = record.hasOwnProperty('requestedBy');
+      const pc = isOpReq ? null : record;
+      const r = isOpReq ? record : null;
+      const data = pc ? (pc.proposedData || {}) : r;
+      const clientName = (DB.getById('clients', data.clientId) || DB.getById('clients', r?.clientId))?.name || '—';
+      const title = isOpReq
+        ? `Billing Request ${r.workRequestId ? 'for WR' : ''}`
+        : `Invoice Change: ${data.invoiceNumber || '(untitled)'}`;
+      const reason = data.rejectionReason || r?.rejectionReason || 'Rejected';
+      return {
+        id: record.id,
+        category: 'rejected',
+        title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: clientName },
+          { icon: ArchivePage.icons.date, text: formatDate(pc?.reviewedAt || pc?.updatedAt || r?.requestedAt || r?.updatedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${reason}` }
+        ],
+        actions: [
+          ...(data.id || r?.workRequestId ? [{
+            label: 'View Related',
+            icon: ArchivePage.icons.view,
+            onClick: () => {
+              if (data.id) location.hash = '#billing/detail/' + data.id;
+              else if (r?.workRequestId) location.hash = '#operations/detail/' + r.workRequestId;
+            }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'billing',
+      categoryLabels: { accomplished: 'Paid', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: paid.map(inv => buildInvItem(inv, 'accomplished')),
+        cancelled: cancelled.map(inv => buildInvItem(inv, 'cancelled')),
+        rejected: [
+          ...rejectedInvoiceChanges.map(buildRejectedItem),
+          ...rejectedBillingRequests.map(buildRejectedItem)
+        ]
+      },
+      emptyText: 'Archive is empty.',
+      renderCallback: () => self.renderArchive()
+    });
   },
 
   // ============================================================
@@ -2874,7 +3178,9 @@ const Billing = {
   renderAging() {
     const entity = Auth.activeEntity;
     const today = new Date();
-    const invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Paid' && inv.status !== 'Cancelled');
+    const invoices = DB.getWhere('invoices', inv => inv.entity === entity && inv.status !== 'Paid' && inv.status !== 'Cancelled' && !inv.archived);
+
+    const container = el('div', { class: 'page-content-section' });
 
     const buckets = { '0-30': [], '31-60': [], '61-90': [], '90+': [] };
     invoices.forEach(inv => {
@@ -2884,8 +3190,6 @@ const Billing = {
       else if (days <= 90) buckets['61-90'].push(inv);
       else buckets['90+'].push(inv);
     });
-
-    const container = el('div');
 
     const grid = el('div', { class: 'kpi-grid' });
     Object.entries(buckets).forEach(([label, invs]) => {

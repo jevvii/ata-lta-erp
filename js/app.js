@@ -132,22 +132,13 @@ const App = {
   },
 
   updateSidebarNotifications() {
-    const canApprove = Auth.can('disbursement:approve');
     const entity = Auth.activeEntity;
 
+    // Disbursement nav badge only surfaces work awaiting the assigned handler's final release.
+    // Pending approvals and release requests are handled in the dedicated Admin > Pending Approvals page.
     const items = DB.getWhere('disbursements', d => d.entity === entity);
     let count = 0;
-
     items.forEach(d => {
-      // Admin sees count of submissions awaiting approval
-      if (canApprove && (d.status === 'Submitted' || d.status === 'Under Review')) {
-        count++;
-      }
-      // Admin also sees count of Manager release requests pending approval
-      if (canApprove && d.status === 'Release Pending Approval') {
-        count++;
-      }
-      // Handlers see count of disbursements awaiting their final release
       if (d.status === 'Approved' && d.paymentHandledBy === Auth.user.id) {
         count++;
       }
@@ -168,86 +159,38 @@ const App = {
       }
     }
 
-    // Also badge the Admin nav link for pending changes and disbursement submissions
-    if (canApprove) {
-      const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getAllPending === 'function') ? PendingChanges.getAllPending() : [];
-      const adminCount = count + pendingChanges.length;
-      const adminNav = document.querySelector('nav a[href="#admin"]');
-      if (adminNav && Auth.user?.role !== 'Manager') {
-        let adminBadge = adminNav.querySelector('.nav-badge');
-        if (adminCount > 0) {
-          if (!adminBadge) {
-            adminBadge = document.createElement('span');
-            adminBadge.className = 'nav-badge';
-            adminNav.appendChild(adminBadge);
-          }
-          adminBadge.textContent = adminCount > 99 ? '99+' : adminCount;
-        } else if (adminBadge) {
-          adminBadge.remove();
+    // Admin nav badge: reflect pending approvals / pending submissions to draw attention.
+    const adminNav = document.querySelector('nav a[href="#admin"]');
+    if (adminNav && Auth.user?.role !== 'Manager') {
+      const canManageUsers = Auth.can('users:view');
+      let adminCount = 0;
+      if (canManageUsers) {
+        // For admins/managers-with-user-access: count all pending approvals.
+        if (typeof Users !== 'undefined' && typeof Users.getPendingCategories === 'function') {
+          const categories = Users.getPendingCategories();
+          adminCount = Object.values(categories).reduce((sum, arr) => sum + (arr || []).length, 0);
         }
+      } else {
+        // For staff: count their own pending submissions.
+        const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
+        const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
+        adminCount = pendingChanges.length + myReqs.length;
       }
-    } else {
-      // Staff-level: badge count of user's own pending changes, rejected changes, and pending requests
-      const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
-      const rejectedChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getRejectedForUser === 'function') ? PendingChanges.getRejectedForUser(Auth.user.id) : [];
-      const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
-      const staffCount = pendingChanges.length + rejectedChanges.length + myReqs.length;
-      const adminNav = document.querySelector('nav a[href="#admin"]');
-      if (adminNav && Auth.user?.role !== 'Manager') {
-        let adminBadge = adminNav.querySelector('.nav-badge');
-        if (staffCount > 0) {
-          if (!adminBadge) {
-            adminBadge = document.createElement('span');
-            adminBadge.className = 'nav-badge';
-            adminNav.appendChild(adminBadge);
-          }
-          adminBadge.textContent = staffCount > 99 ? '99+' : staffCount;
-        } else if (adminBadge) {
-          adminBadge.remove();
+
+      let adminBadge = adminNav.querySelector('.nav-badge');
+      if (adminCount > 0) {
+        if (!adminBadge) {
+          adminBadge = document.createElement('span');
+          adminBadge.className = 'nav-badge';
+          adminNav.appendChild(adminBadge);
         }
+        adminBadge.textContent = adminCount > 99 ? '99+' : adminCount;
+      } else if (adminBadge) {
+        adminBadge.remove();
       }
     }
 
-    // Badge Billing nav for pending billing operations requests
-    const billingReqRole = Auth.user?.role;
-    if (billingReqRole === 'Accounting' || billingReqRole === 'Admin' || billingReqRole === 'Manager') {
-      const billingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'billing');
-      const billingNav = document.querySelector('nav a[href="#billing"]');
-      if (billingNav) {
-        let bBadge = billingNav.querySelector('.nav-badge');
-        if (billingReqs.length > 0) {
-          if (!bBadge) { bBadge = document.createElement('span'); bBadge.className = 'nav-badge'; billingNav.appendChild(bBadge); }
-          bBadge.textContent = billingReqs.length > 99 ? '99+' : billingReqs.length;
-        } else if (bBadge) { bBadge.remove(); }
-      }
-    }
-
-    // Badge Disbursement nav for pending disbursement operations requests
-    if (billingReqRole === 'Accounting' || billingReqRole === 'Admin' || billingReqRole === 'Manager') {
-      const disbReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'disbursement');
-      const disbNav = document.querySelector('nav a[href="#disbursement"]');
-      if (disbNav) {
-        let dBadge = disbNav.querySelector('.nav-badge');
-        if (disbReqs.length > 0) {
-          if (!dBadge) { dBadge = document.createElement('span'); dBadge.className = 'nav-badge'; disbNav.appendChild(dBadge); }
-          dBadge.textContent = disbReqs.length > 99 ? '99+' : disbReqs.length;
-        } else if (dBadge) { dBadge.remove(); }
-      }
-    }
-
-    // Badge Transmittal nav for pending transmittal operations requests
-    // Only Documentation and Admin can fulfill transmittal requests, so only they see the badge.
-    if (billingReqRole === 'Documentation' || billingReqRole === 'Admin') {
-      const transReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'transmittal');
-      const transNav = document.querySelector('nav a[href="#transmittal"]');
-      if (transNav) {
-        let tBadge = transNav.querySelector('.nav-badge');
-        if (transReqs.length > 0) {
-          if (!tBadge) { tBadge = document.createElement('span'); tBadge.className = 'nav-badge'; transNav.appendChild(tBadge); }
-          tBadge.textContent = transReqs.length > 99 ? '99+' : transReqs.length;
-        } else if (tBadge) { tBadge.remove(); }
-      }
-    }
+    // Pending requests are centralized on the Admin page; no module-level nav badges needed.
   },
 
   renderShell() {
@@ -267,8 +210,8 @@ const App = {
 
     // Configure Admin / My Submissions nav link dynamically based on role/permissions
     const adminNav = document.querySelector('nav a[href="#admin"]');
+    const canManageUsers = Auth.can('users:view');
     if (adminNav) {
-      const canManageUsers = Auth.can('users:view');
       const labelEl = adminNav.querySelector('.nav-link-text');
       if (Auth.user.role === 'Manager') {
         adminNav.parentElement.style.display = 'none';
@@ -384,7 +327,8 @@ const App = {
           '#operations': () => { Workflow.view = 'list'; Workflow.detailWrId = null; Workflow.editingId = null; },
           '#billing': () => { Billing.view = 'list'; Billing.detailId = null; },
           '#disbursement': () => { Disbursement.view = 'list'; Disbursement.detailId = null; },
-          '#transmittal': () => { if (typeof Transmittal !== 'undefined') { Transmittal.view = 'list'; Transmittal.detailId = null; } }
+          '#transmittal': () => { if (typeof Transmittal !== 'undefined') { Transmittal.view = 'list'; Transmittal.detailId = null; } },
+          '#admin': () => { if (typeof Users !== 'undefined') { Users.view = 'users'; Users.editingId = null; Users.pendingDetailId = null; } }
         };
         if (moduleViewMap[href]) moduleViewMap[href]();
         if (location.hash === href) {
@@ -478,11 +422,15 @@ const App = {
       } else if (pathParts[1] === 'templateForm') {
         Workflow.view = 'templateForm';
         Workflow.templateEditingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
-      } else if (!Workflow.view || Workflow.view === 'detail' || Workflow.view === 'form' || Workflow.view === 'templateForm') {
+      } else if (pathParts[1] === 'addTask' && pathParts[2]) {
+        Workflow.view = 'addTask';
+        Workflow.addTaskWrId = pathParts[2];
+      } else if (!Workflow.view || Workflow.view === 'detail' || Workflow.view === 'form' || Workflow.view === 'templateForm' || Workflow.view === 'addTask') {
         Workflow.view = 'list';
         Workflow.detailWrId = null;
         Workflow.editingId = null;
         Workflow.templateEditingId = null;
+        Workflow.addTaskWrId = null;
       }
     } else if (baseHash === '#billing') {
       if (pathParts[1] === 'detail' && pathParts[2]) {
@@ -491,9 +439,13 @@ const App = {
       } else if (pathParts[1] === 'form') {
         Billing.view = 'form';
         Billing.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
-      } else if (!Billing.view || Billing.view === 'detail' || Billing.view === 'form') {
+      } else if (pathParts[1] === 'templateForm') {
+        Billing.view = 'templateForm';
+        Billing.templateEditingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else if (!Billing.view || Billing.view === 'detail' || Billing.view === 'form' || Billing.view === 'templateForm') {
         Billing.view = 'list';
         Billing.detailId = null;
+        Billing.templateEditingId = null;
       }
     } else if (baseHash === '#disbursement') {
       if (pathParts[1] === 'detail' && pathParts[2]) {
@@ -502,9 +454,13 @@ const App = {
       } else if (pathParts[1] === 'form') {
         Disbursement.view = 'form';
         Disbursement.detailId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
-      } else if (!Disbursement.view || Disbursement.view === 'detail' || Disbursement.view === 'form') {
+      } else if (pathParts[1] === 'templateForm') {
+        Disbursement.view = 'templateForm';
+        Disbursement.templateEditingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else if (!Disbursement.view || Disbursement.view === 'detail' || Disbursement.view === 'form' || Disbursement.view === 'templateForm') {
         Disbursement.view = 'list';
         Disbursement.detailId = null;
+        Disbursement.templateEditingId = null;
       }
     } else if (baseHash === '#transmittal') {
       if (pathParts[1] === 'detail' && pathParts[2]) {
@@ -549,10 +505,16 @@ const App = {
     }
 
     const module = moduleMap[baseHash];
+    const previousModuleKey = this.currentModule;
     this.currentModule = baseHash.replace('#', '');
     const content = document.getElementById('content');
 
     if (module && module.render) {
+      const previousModule = moduleMap[`#${previousModuleKey}`];
+      if (previousModule && previousModule !== module && typeof previousModule.cleanup === 'function') {
+        previousModule.cleanup();
+      }
+
       content.innerHTML = '';
       const rendered = module.render();
       if (typeof rendered === 'string') {
@@ -605,8 +567,32 @@ const App = {
     } catch (e) { return null; }
   },
 
+  hasSavedFilters(module, keys = ['assignee', 'status', 'client', 'fund', 'priority', 'dueDate']) {
+    const saved = this.restoreFilters(module);
+    if (!saved) return false;
+    return keys.some(key => {
+      const v = saved[key];
+      return Array.isArray(v) ? v.length > 0 : Boolean(v && String(v).trim());
+    });
+  },
+
   clearSavedFilters(module) {
     const key = `erp_filters_${module}`;
+    try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
+  },
+
+  saveGroupBy(module, groupBy) {
+    const key = `erp_group_${module}`;
+    try { sessionStorage.setItem(key, groupBy); } catch (e) { /* ignore */ }
+  },
+
+  restoreGroupBy(module) {
+    const key = `erp_group_${module}`;
+    try { return sessionStorage.getItem(key) || ''; } catch (e) { return ''; }
+  },
+
+  clearGroupBy(module) {
+    const key = `erp_group_${module}`;
     try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
   },
 
@@ -657,6 +643,9 @@ const App = {
     container.style.setProperty('--project-detail-toolbar-height', `${detailToolbarHeight}px`);
   }
 };
+
+// Expose App globally so helpers loaded earlier (e.g. js/utils.js) can invoke routing.
+window.App = App;
 
 // Login form wiring
 document.addEventListener('DOMContentLoaded', () => {

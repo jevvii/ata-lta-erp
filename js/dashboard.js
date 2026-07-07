@@ -1498,7 +1498,7 @@ const Dashboard = {
 
       const dayEvents = events[this.selectedDay] || [];
       if (dayEvents.length === 0) {
-        sidebar.appendChild(el('p', { class: 'empty-state', text: 'Nothing scheduled for this day.' }));
+        sidebar.appendChild(renderEmptyState('Nothing scheduled for this day'));
       } else {
         const wrs = dayEvents.filter(e => e.type === 'wr');
         const dbs = dayEvents.filter(e => e.type === 'db');
@@ -1532,7 +1532,7 @@ const Dashboard = {
       });
 
       if (upcomingEvents.length === 0) {
-        sidebar.appendChild(el('p', { class: 'empty-state', text: 'No items due this week.' }));
+        sidebar.appendChild(renderEmptyState('No items due this week'));
       } else {
         upcomingEvents.sort((a, b) => {
           const dateA = new Date(a.type === 'wr' ? a.data.dueDate : (a.data.dueDate || a.data.submittedAt));
@@ -1641,20 +1641,5 @@ const Dashboard = {
     return row;
   },
 
-  fulfillOperationsRequest(req) {
-    if (req.type === 'billing') {
-      Billing.prefilledWrId = req.workRequestId;
-      Billing.prefilledClientId = req.clientId;
-      Billing.prefilledRequestId = req.id;
-      location.hash = '#billing/form';
-    } else if (req.type === 'disbursement') {
-      Disbursement.prefilledWrId = req.workRequestId;
-      Disbursement.prefilledClientId = req.clientId;
-      Disbursement.prefilledRequestId = req.id;
-      location.hash = '#disbursement/form';
-    } else if (req.type === 'transmittal') {
-      Workflow.prefilledTransmittalRequestId = req.id;
-      location.hash = '#operations/detail/' + req.workRequestId;
-    }
-  }
+
 };

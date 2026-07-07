@@ -4,8 +4,9 @@
  */
 
 const Disbursement = {
-  view: 'list', // 'list' | 'form' | 'detail' | 'report' | 'templates'
+  view: 'list', // 'list' | 'form' | 'detail' | 'report' | 'templates' | 'templateForm'
   detailId: null,
+  templateEditingId: null,
   listViewMode: 'table', // 'table' | 'board' | 'list'
   EDITABLE_STATUSES: ['Draft', 'Submitted', 'Under Review', 'Pending'],
   PENDING_APPROVAL_STATUSES: ['Submitted', 'Under Review', 'Pending'],
@@ -60,7 +61,7 @@ const Disbursement = {
                   DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
                 }
               }
-              DB.remove('disbursements', d.id);
+              DB.delete('disbursements', d.id);
               location.hash = '#disbursement';
               Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
             }, 'danger');
@@ -111,7 +112,19 @@ const Disbursement = {
           { text: '← Back to List', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#disbursement'; } }
         ]
       }));
-    } else if (this.view === 'list' || this.view === 'templates' || this.view === 'report') {
+    } else if (this.view === 'templateForm') {
+      container.classList.add('disbursement-tab-page');
+      const isNew = !this.templateEditingId;
+      const template = isNew ? null : DB.getById('disbursementTemplates', this.templateEditingId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Disbursement',
+        baseHash: '#disbursement',
+        currentText: isNew ? 'New Disbursement Template' : (template?.name || 'Edit Template'),
+        actions: [
+          { text: '← Back to Disbursement', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#disbursement'; } }
+        ]
+      }));
+    } else if (['list', 'templates', 'report', 'archive'].includes(this.view)) {
       container.classList.add('disbursement-tab-page');
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       titleBar.appendChild(el('h1', { text: 'Disbursement' }));
@@ -124,6 +137,8 @@ const Disbursement = {
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'report') container.appendChild(this.renderReport());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
+    else if (this.view === 'archive') container.appendChild(this.renderArchive());
+    else if (this.view === 'templateForm') container.appendChild(this.renderTemplateForm());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -138,15 +153,16 @@ const Disbursement = {
   },
 
   renderTabNav() {
-    const tabNav = el('div', { class: 'module-tab-nav' });
-
     const entity = Auth.activeEntity;
+    const entMatch = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
     const dbCount = DB.getWhere('disbursements', d => {
-      const dEnt = (d.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(dEnt);
-      }
-      return dEnt === entity.toUpperCase();
+      if (!entMatch(d.entity)) return false;
+      return d.status !== 'Cancelled' && !(d.status === 'Funded' && d.archived);
     }).length;
 
     const templateCount = DB.getWhere('disbursementTemplates', t => {
@@ -157,25 +173,38 @@ const Disbursement = {
       return tEnt === entity.toUpperCase();
     }).length;
 
+    const archiveDbCount = DB.getWhere('disbursements', d => {
+      if (!entMatch(d.entity)) return false;
+      if (d.status === 'Cancelled') return true;
+      if (d.status === 'Funded' && d.archived) return true;
+      return false;
+    }).length;
+
+    const rejectedCount = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'disbursements' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entMatch(data.entity)) return false;
+      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    }).length + DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'disbursement' || r.status !== 'rejected') return false;
+      if (!entMatch(r.entity)) return false;
+      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    }).length;
+
+    const archiveCount = archiveDbCount + rejectedCount;
+
     const tabs = [
       { key: 'list', label: 'Disbursements', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: dbCount },
       { key: 'templates', label: 'Templates', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>', count: templateCount },
-      { key: 'report', label: 'Summary Report', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' }
+      { key: 'report', label: 'Summary Report', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' },
+      { key: 'archive', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
-    tabs.forEach(tab => {
-      const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
-      btn.appendChild(parseHTML(tab.icon));
-      btn.appendChild(document.createTextNode(' ' + tab.label));
-      if (tab.count !== undefined) {
-        btn.appendChild(document.createTextNode(' '));
-        btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
-      }
-      btn.addEventListener('click', () => {
-        this.view = tab.key;
-        App.handleRoute();
-      });
-      tabNav.appendChild(btn);
+    const tabNav = renderModuleTabNav(tabs, this.view, (key) => {
+      this.view = key;
+      App.handleRoute();
     });
 
     const canCreate = Auth.can('disbursement:create');
@@ -289,8 +318,8 @@ const Disbursement = {
       'Under Review': 'badge-warning',
       'Pending': 'badge-warning',
       'Approved': 'badge-info',
-      'Release Pending Approval': 'badge-warning',
       'Released': 'badge-success',
+      'Funded': 'badge-success',
       'Rejected': 'badge-danger',
       'Cancelled': 'badge-danger'
     };
@@ -317,7 +346,26 @@ const Disbursement = {
   // ============================================================
   renderList() {
     const entity = Auth.activeEntity;
-    const viewMode = App.getPreferredViewMode('disbursement');
+    let viewMode = App.getPreferredViewMode('disbursement');
+    let groupBy = App.restoreGroupBy('disbursement') || 'none';
+
+    const groupOptions = [
+      { key: 'none', label: 'None' },
+      { key: 'employee', label: 'Employee', getName: d => {
+        const u = DB.getById('users', this.getEmployeeId(d));
+        return u?.name || 'Unassigned';
+      }},
+      { key: 'workRequest', label: 'Work Request', getName: d => {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        return wr?.title || 'No Work Request';
+      }},
+      { key: 'client', label: 'Client', getName: d => {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        const client = wr ? DB.getById('clients', wr.clientId) : null;
+        return client?.name || 'No Client';
+      }},
+      { key: 'fund', label: 'Fund', getName: d => this.getFundSource(d) || 'No Fund' }
+    ];
 
     const wrapper = el('div');
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
@@ -325,304 +373,210 @@ const Disbursement = {
 
 
 
-    // Pending operations requests banner
-    if (Auth.can('disbursement:create')) {
-      const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'disbursement');
-      if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:var(--color-bg-muted);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:var(--color-text);margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
-        bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Disbursement Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
-        banner.appendChild(bannerTitle);
-        pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid var(--color-border);' });
-          const client = DB.getById('clients', req.clientId);
-          const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:var(--color-text);' });
-          info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
-          row.appendChild(info);
-          const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
-          fulfillBtn.addEventListener('click', () => { Disbursement.prefilledWrId = req.workRequestId; Disbursement.prefilledClientId = req.clientId; Disbursement.prefilledRequestId = req.id; location.hash = '#disbursement/form'; });
-          row.appendChild(fulfillBtn);
-          banner.appendChild(row);
-        });
-        wrapper.appendChild(banner);
-      }
-    }
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      workRequest: new Set(),
+      client: new Set(),
+      employee: new Set(),
+      fund: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
 
-    // "Pending for Release" Section for Handlers
-    const pendingForRelease = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Approved' && d.paymentHandledBy === Auth.user.id);
-    if (pendingForRelease.length > 0) {
-      const pfrSection = el('div', { class: 'form-section', style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); padding: var(--spacing-md); border-radius: 12px; margin-bottom: var(--spacing-lg);' });
-      pfrSection.appendChild(el('h3', { text: '⚠️ Pending for Release', style: 'color: var(--color-warning); margin-top: 0;' }));
-      pfrSection.appendChild(el('p', { text: 'The following disbursements have been approved by Admin and are waiting for your final authorization and fund release.', style: 'font-size: 0.875rem; color: var(--color-text-muted); margin-bottom: var(--spacing-md);' }));
-      
-      const pfrTable = el('table', { class: 'task-table-v2' });
-      pfrTable.appendChild(el('thead', {}, [
-        el('tr', {}, [
-          el('th', { text: 'Category' }),
-          el('th', { text: 'Amount' }),
-          el('th', { text: 'Requested By' }),
-          el('th', { text: 'Actions', class: 'text-right' })
-        ])
-      ]));
-      const pfrBody = el('tbody');
-      pendingForRelease.forEach(d => {
-        const tr = el('tr');
-        tr.appendChild(el('td', { text: d.category, style: 'font-weight:600;' }));
-        tr.appendChild(el('td', { text: formatPHP(d.amount) }));
-        const req = DB.getById('users', d.requestedBy);
-        tr.appendChild(el('td', { text: req?.name || '—' }));
-        const tdAct = el('td', { class: 'text-right' });
-        const authBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Authorize Release' });
-        authBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-        tdAct.appendChild(authBtn);
-        tr.appendChild(tdAct);
-        pfrBody.appendChild(tr);
-      });
-      pfrTable.appendChild(pfrBody);
-      pfrSection.appendChild(pfrTable);
-      wrapper.appendChild(pfrSection);
-    }
-
-    // "Release Pending Admin Approval" Section — visible to Admin
-    if (Auth.can('disbursement:approve')) {
-      const releasePending = DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Release Pending Approval');
-      if (releasePending.length > 0) {
-        const rpSection = el('div', { class: 'form-section', style: 'background: #fdf4ff; border: 1px solid #f0abfc; padding: var(--spacing-md); border-radius: 12px; margin-bottom: var(--spacing-lg);' });
-        rpSection.appendChild(el('h3', { text: '📋 Release Requests Pending Approval', style: 'color: #86198f; margin-top: 0;' }));
-        rpSection.appendChild(el('p', { text: 'A Manager has marked the following disbursements for release. Please review and approve or reject.', style: 'font-size: 0.875rem; color: #a21caf; margin-bottom: var(--spacing-md);' }));
-
-        const rpTable = el('table', { class: 'task-table-v2' });
-        rpTable.appendChild(el('thead', {}, [
-          el('tr', {}, [
-            el('th', { text: 'Category' }),
-            el('th', { text: 'Amount' }),
-            el('th', { text: 'Requested By' }),
-            el('th', { text: 'Marked By' }),
-            el('th', { text: 'Actions', class: 'text-right' })
-          ])
-        ]));
-        const rpBody = el('tbody');
-        releasePending.forEach(d => {
-          const tr = el('tr');
-          tr.appendChild(el('td', { text: d.category, style: 'font-weight:600;' }));
-          tr.appendChild(el('td', { text: formatPHP(d.amount) }));
-          const req = DB.getById('users', d.requestedBy);
-          tr.appendChild(el('td', { text: req?.name || '—' }));
-          const marker = d.releaseRequestedBy ? DB.getById('users', d.releaseRequestedBy) : null;
-          tr.appendChild(el('td', { text: marker?.name || '—' }));
-          const tdAct = el('td', { class: 'text-right' });
-          const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review & Approve' });
-          reviewBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-          tdAct.appendChild(reviewBtn);
-          tr.appendChild(tdAct);
-          rpBody.appendChild(tr);
-        });
-        rpTable.appendChild(rpBody);
-        rpSection.appendChild(rpTable);
-        wrapper.appendChild(rpSection);
-      }
-    }
-
-    const wrFilter = el('select', { class: 'form-select', style: 'max-width:180px' });
-    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
-    DB.getWhere('workRequests', wr => {
-      const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).filter(wr => {
-      return Auth.canViewWr(wr);
-    }).forEach(wr => {
-      const client = DB.getById('clients', wr.clientId);
-      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title + ' — ' + (client?.name || '—') }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(wrFilter));
-
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '180px' });
-    filters.appendChild(clientFilter);
-
-    const empOptions = [{ value: '', text: 'All Employees' }];
-    DB.getWhere('users', u => Auth.ALL_ROLES.includes(u.role)).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions, maxWidth: '180px' });
-    filters.appendChild(empFilter);
-
-    const fundFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
-    fundFilter.appendChild(el('option', { value: '', text: 'All Funds' }));
-    ['Firm Fund', 'Client Fund'].forEach(f => fundFilter.appendChild(el('option', { value: f, text: f })));
-    filters.appendChild(wrapFilterFieldWithClear(fundFilter));
-
-    const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
-    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released', 'Rejected'].forEach(s => {
-      statusFilter.appendChild(el('option', { value: s, text: s }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filters.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      wrFilter.value = '';
-      clientFilter.value = '';
-      empFilter.value = '';
-      fundFilter.value = '';
-      statusFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      App.clearSavedFilters('disbursement');
-      refresh();
-    });
-    filters.appendChild(clearBtn);
-
-    // Restore saved filters
     const savedFilters = App.restoreFilters('disbursement');
     if (savedFilters) {
-      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.fund) fundFilter.value = savedFilters.fund;
-      if (savedFilters.status) statusFilter.value = savedFilters.status;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+      if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
+      else if (savedFilters.workRequest) activeFilters.workRequest.add(savedFilters.workRequest);
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      else if (savedFilters.client) activeFilters.client.add(savedFilters.client);
+      if (Array.isArray(savedFilters.employee)) savedFilters.employee.forEach(v => activeFilters.employee.add(v));
+      else if (savedFilters.employee) activeFilters.employee.add(savedFilters.employee);
+      if (Array.isArray(savedFilters.fund)) savedFilters.fund.forEach(v => activeFilters.fund.add(v));
+      else if (savedFilters.fund) activeFilters.fund.add(savedFilters.fund);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
     const saveCurrentFilters = () => {
       App.saveFilters('disbursement', {
-        workRequest: wrFilter.value,
-        client: clientFilter.value,
-        employee: empFilter.value,
-        fund: fundFilter.value,
-        status: statusFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value
+        workRequest: Array.from(activeFilters.workRequest),
+        client: Array.from(activeFilters.client),
+        employee: Array.from(activeFilters.employee),
+        fund: Array.from(activeFilters.fund),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
       });
     };
 
-    // View mode toggle
-    const vmToggle = el('div', { class: 'view-mode-toggle' });
-    const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
-    [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: viewMode === mode ? 'active' : '' });
-      btn.addEventListener('click', () => {
-        saveCurrentFilters();
-        App.setPreferredViewMode('disbursement', mode);
-        App.handleRoute();
-      });
-      vmToggle.appendChild(btn);
+    const getWorkRequestOptions = () => DB.getWhere('workRequests', wr => {
+      const wrEnt = (wr.entity || '').toUpperCase();
+      return (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase()) && Auth.canViewWr(wr);
+    }).map(wr => {
+      const client = DB.getById('clients', wr.clientId);
+      return { value: wr.id, label: wr.title + ' — ' + (client?.name || '—') };
     });
 
-    stickyContainer.appendChild(filters);
-    stickyContainer.appendChild(vmToggle);
+    const getClientOptions = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt) : clientEnt === entity.toUpperCase();
+    }).map(c => ({ value: c.id, label: c.name }));
+
+    const getEmployeeOptions = () => {
+      const set = new Set();
+      DB.getWhere('users', u => Auth.ALL_ROLES.includes(u.role)).forEach(u => set.add(u.name));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) set.add(name);
+      });
+      return Array.from(set).map(n => ({ value: n, label: n }));
+    };
+
+    const getFundOptions = () => [
+      { value: 'Firm Fund', label: 'Firm Fund' },
+      { value: 'Client Fund', label: 'Client Fund' }
+    ];
+
+    const getStatusOptions = () => [
+      { value: 'Draft', label: 'Draft' },
+      { value: 'Pending', label: 'Pending' },
+      { value: 'Approved', label: 'Approved' },
+      { value: 'Released', label: 'Released' },
+      { value: 'Funded', label: 'Funded' },
+      { value: 'Rejected', label: 'Rejected' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      workRequest: { label: 'Work Request', getOptions: getWorkRequestOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      employee: { label: 'Employee', getOptions: getEmployeeOptions },
+      fund: { label: 'Fund', getOptions: getFundOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'disbursement',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        refresh();
+      },
+      viewMode,
+      onViewModeChange: (newMode) => {
+        viewMode = newMode;
+        App.setPreferredViewMode('disbursement', newMode);
+        saveCurrentFilters();
+        refresh();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: (newGroupBy) => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('disbursement', groupBy);
+        refresh();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const refresh = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, fundFilter.value, statusFilter.value, dateFrom.value, dateTo.value, viewMode, empFilter.searchText, clientFilter.searchText);
-    [wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); refresh(); }));
-
+    const refresh = () => this.refreshList(listContainer, activeFilters, viewMode, groupBy, groupOptions, stickyContainer);
     refresh();
 
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, empFilter, fundFilter, statusFilter, dateFrom, dateTo, viewMode, empSearchText, clientSearchText) {
+  refreshList(container, activeFilters, viewMode, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
     let items = DB.getWhere('disbursements', d => (entity === 'ALL' ? Auth.user.entities.includes(d.entity) : d.entity === entity));
 
     items = items.filter(d => Auth.canViewDisbursement(d));
+    items = items.filter(d => d.status !== 'Cancelled' && !(d.status === 'Funded' && d.archived));
+    const hasItems = items.length > 0;
 
-    if (wrFilter) items = items.filter(d => d.linkedWorkRequestId === wrFilter);
-    if (clientFilter || (clientSearchText && clientSearchText.trim() !== '')) {
-      const selectedClient = clientFilter ? DB.getById('clients', clientFilter) : null;
-      if (selectedClient && selectedClient.name === clientSearchText) {
-        items = items.filter(d => {
-          if (!d.linkedWorkRequestId) return false;
-          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-          return wr && wr.clientId === clientFilter;
-        });
-      } else if (clientSearchText && clientSearchText.trim() !== '') {
-        const query = clientSearchText.trim().toLowerCase();
-        items = items.filter(d => {
-          if (!d.linkedWorkRequestId) return false;
-          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-          if (!wr) return false;
-          const client = DB.getById('clients', wr.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
-      }
+    if (activeFilters.workRequest && activeFilters.workRequest.size > 0) {
+      items = items.filter(d => activeFilters.workRequest.has(d.linkedWorkRequestId));
     }
-    if (empSearchText && empSearchText.trim() !== '') {
-      const query = empSearchText.trim().toLowerCase();
+    if (activeFilters.client && activeFilters.client.size > 0) {
+      items = items.filter(d => {
+        if (!d.linkedWorkRequestId) return false;
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        return wr && activeFilters.client.has(wr.clientId);
+      });
+    }
+    if (activeFilters.employee && activeFilters.employee.size > 0) {
       items = items.filter(d => {
         const empId = d.employeeId || d.requestedBy;
         const u = empId ? DB.getById('users', empId) : null;
-        return u && u.name.toLowerCase().includes(query);
+        return u && activeFilters.employee.has(u.name);
       });
-    } else if (empFilter) {
-      items = items.filter(d => this.getEmployeeId(d) === empFilter);
     }
-    if (fundFilter) items = items.filter(d => this.getFundSource(d) === fundFilter);
-    if (statusFilter) {
-      if (statusFilter === 'Draft') {
-        items = items.filter(d => d.status === 'Draft');
-      } else if (statusFilter === 'Pending') {
-        items = items.filter(d => this.PENDING_APPROVAL_STATUSES.includes(d.status));
-      } else {
-        items = items.filter(d => d.status === statusFilter);
-      }
+    if (activeFilters.fund && activeFilters.fund.size > 0) {
+      items = items.filter(d => activeFilters.fund.has(this.getFundSource(d)));
     }
-    if (dateFrom) {
-      const fromDate = new Date(dateFrom).getTime();
-      items = items.filter(d => new Date(d.submittedAt).getTime() >= fromDate);
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      items = items.filter(d => {
+        if (activeFilters.status.has(d.status)) return true;
+        if (activeFilters.status.has('Pending') && this.PENDING_APPROVAL_STATUSES.includes(d.status)) return true;
+        return false;
+      });
     }
-    if (dateTo) {
-      const toDate = new Date(dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      items = items.filter(d => new Date(d.submittedAt).getTime() <= toDate.getTime());
-    }
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
 
+      items = items.filter(d => {
+        const dStr = (d.date || d.requestedDate || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
+    }
     items.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
     if (items.length === 0) {
-      container.appendChild(el('p', { text: 'No expenses found.', class: 'empty-state' }));
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No expenses match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('disbursement'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No expenses found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 
     if (viewMode === 'table') {
       this.renderTableView(container, items);
     } else if (viewMode === 'board') {
-      this.renderBoardView(container, items);
+      this.renderBoardView(container, items, groupBy, groupOptions, toolbarContainer);
     } else {
       this.renderCompactListView(container, items);
     }
@@ -683,6 +637,11 @@ const Disbursement = {
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(d.id); });
         tdAct.appendChild(editBtn);
       }
+      if (d.status === 'Funded' && !d.archived) {
+        const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
+        archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveDisbursement(d.id); });
+        tdAct.appendChild(archiveBtn);
+      }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
     });
@@ -690,7 +649,66 @@ const Disbursement = {
     container.appendChild(table);
   },
 
-  renderBoardView(container, items) {
+  /**
+   * Role-aware board columns for Disbursement.
+   *
+   * - Admin: Draft | Released | Funded | Rejected
+   *   Pending/Approved/Release Pending Approval are funnelled to the Admin Console.
+   * - Accounting: Draft | Pending | Released | Funded | Rejected
+   *   Approved/Release Pending Approval are funnelled to the Admin Console / handler list.
+   * - Operations: Requested | Released | Funded | Rejected
+   *   Draft is hidden; Pending maps the pre-approval statuses.
+   * - Others: Released | Funded | Rejected
+   */
+  getBoardColumns() {
+    const role = Auth.user?.role;
+    const isAdmin = role === 'Admin';
+    const isAccounting = role === 'Accounting';
+    const isOperations = role === 'Operations';
+
+    if (isAdmin) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+        { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+        { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+      ];
+    }
+
+    if (isAccounting) {
+      return [
+        { key: 'Draft', label: 'Draft', statuses: ['Draft'], targetStatus: 'Draft', color: '#94a3b8' },
+        { key: 'Pending', label: 'Pending', statuses: this.PENDING_APPROVAL_STATUSES, targetStatus: 'Pending', color: '#f59e0b' },
+        { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+        { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+        { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+      ];
+    }
+
+    if (isOperations) {
+      return [
+        { key: 'Requested', label: 'Requested', statuses: this.PENDING_APPROVAL_STATUSES, targetStatus: 'Pending', color: '#94a3b8' },
+        { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+        { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+        { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+      ];
+    }
+
+    return [
+      { key: 'Released', label: 'Released', statuses: ['Released'], targetStatus: 'Released', color: '#10b981' },
+      { key: 'Funded', label: 'Funded', statuses: ['Funded'], targetStatus: 'Funded', color: '#059669' },
+      { key: 'Rejected', label: 'Rejected', statuses: ['Rejected'], targetStatus: 'Rejected', color: '#ef4444' }
+    ];
+  },
+
+  getDisbursementDisplayStatus(status) {
+    if (status === 'Released') return 'Released';
+    if (status === 'Funded') return 'Funded';
+    return status;
+  },
+
+  renderBoardView(container, items, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
+    toolbarContainer?.classList.remove('grouped-board-active');
     if (items.length === 0) {
       container.appendChild(renderEmptyStateV2({
         variant: 'zero-state',
@@ -706,26 +724,21 @@ const Disbursement = {
     const canDelete = Auth.can('disbursement:delete');
     const self = this;
 
-    const statuses = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released', 'Rejected'];
+    const boardPhases = this.getBoardColumns();
     const statusColors = {
       'Draft': '#94a3b8',
+      'Submitted': '#f59e0b',
+      'Under Review': '#f59e0b',
       'Pending': '#f59e0b',
       'Approved': '#3b82f6',
-      'Release Pending Approval': '#e879f9',
       'Released': '#10b981',
+      'Funded': '#059669',
       'Rejected': '#ef4444'
     };
 
-    // Normalize boardOrder within each column (skip pending-change proxies).
-    statuses.forEach(st => {
-      let colItems = [];
-      if (st === 'Draft') {
-        colItems = items.filter(d => d.status === 'Draft' && !d.pendingChangeId);
-      } else if (st === 'Pending') {
-        colItems = items.filter(d => this.PENDING_APPROVAL_STATUSES.includes(d.status) && !d.pendingChangeId);
-      } else {
-        colItems = items.filter(d => d.status === st && !d.pendingChangeId);
-      }
+    // Normalize boardOrder within each visible column (skip pending-change proxies).
+    boardPhases.forEach(phase => {
+      const colItems = items.filter(d => phase.statuses.includes(d.status) && !d.pendingChangeId);
       colItems.sort((a, b) => {
         const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
         const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
@@ -743,188 +756,235 @@ const Disbursement = {
       });
     });
 
+    const makeColumns = () => boardPhases.map(phase => {
+      const col = {
+        ...phase,
+        icon: 'phase',
+        emptyState: { variant: 'compact', title: 'No expenses', body: '' }
+      };
+      if (phase.key === 'Draft' && canCreate) {
+        col.addButton = { label: 'Add Expense', onClick: () => self.showForm() };
+      }
+      return col;
+    });
+
     let cardNumber = 1;
+
+    const renderCard = (d) => {
+      const emp = DB.getById('users', self.getEmployeeId(d));
+      const source = self.getFundSource(d);
+
+      const statusPriorityClass = {
+        'Draft': 'card-v2-priority-normal',
+        'Submitted': 'card-v2-priority-medium',
+        'Under Review': 'card-v2-priority-medium',
+        'Pending': 'card-v2-priority-medium',
+        'Approved': 'card-v2-priority-medium',
+        'Released': 'card-v2-priority-low',
+        'Funded': 'card-v2-priority-low',
+        'Rejected': 'card-v2-priority-urgent'
+      }[d.status] || 'card-v2-priority-normal';
+
+      const progressMap = {
+        'Draft': 0,
+        'Submitted': 15,
+        'Under Review': 25,
+        'Pending': 35,
+        'Approved': 50,
+        'Released': 100,
+        'Funded': 100,
+        'Rejected': 0
+      };
+      const progress = progressMap[d.status] || 0;
+
+      const descParts = [];
+      if (d.linkedWorkRequestId) {
+        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+        if (wr) {
+          let linked = wr.title;
+          if (d.linkedTaskId) {
+            const task = DB.getById('tasks', d.linkedTaskId);
+            if (task) linked += ` (Task: ${task.title})`;
+          }
+          descParts.push(linked);
+        }
+      }
+      if (d.fromTemplate) descParts.push('Recurring');
+
+      const card = buildCompactBoardCard({
+        key: 'DIS-' + cardNumber++,
+        progress,
+        statusColor: statusColors[d.status] || '#cbd5e1',
+        title: d.category,
+        description: `${emp?.name || '—'} • ${source}`,
+        detail: descParts.join(' • '),
+        date: d.submittedAt ? formatDate(d.submittedAt) : '',
+        priority: self.getDisbursementDisplayStatus(d.status),
+        priorityClass: statusPriorityClass,
+        onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
+      });
+
+      const footerRight = card.querySelector('.card-v2-footer-right');
+      footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);' }));
+      return card;
+    };
+
+    const cardMenuItems = (d) => {
+      const menu = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
+      }];
+      if (canEdit && d.status === 'Draft' && !d.pendingChangeId) {
+        menu.push({
+          label: 'Edit',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+          onClick: () => self.showForm(d.id)
+        });
+      }
+      if (canDelete && !d.pendingChangeId) {
+        menu.push({
+          label: 'Delete',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          onClick: () => Workflow.showConfirm('Delete Expense', 'Are you sure you want to permanently delete this disbursement? This cannot be undone.', () => {
+            if (d.linkedWorkRequestId) {
+              const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+              if (wr) {
+                const linkedIds = (wr.linkedDisbursementIds || []).filter(id => id !== d.id);
+                DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
+              }
+            }
+            DB.delete('disbursements', d.id);
+            App.handleRoute();
+            Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
+          }, 'danger')
+        });
+      }
+      if (canCreate && d.status === 'Draft' && !d.pendingChangeId) {
+        menu.push({
+          label: 'Submit Expense',
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+          onClick: () => Workflow.showConfirm('Submit Expense', 'Are you sure you want to submit this expense for approval?', () => {
+            DB.update('disbursements', d.id, { status: 'Submitted', submittedAt: new Date().toISOString() });
+            App.handleRoute();
+          }, 'success')
+        });
+      }
+      if (d.status === 'Funded' && !d.archived) {
+        menu.push({
+          label: 'Archive',
+          className: 'primary',
+          icon: ArchivePage.icons.archive,
+          onClick: () => self.archiveDisbursement(d.id)
+        });
+      }
+      return menu;
+    };
+
+    const boardDrag = {
+      enabled: true,
+      canDrag: d => canEdit && !d.pendingChangeId,
+      canDrop: ({ item, targetStatus }) => {
+        if (item.status === targetStatus) return true;
+        // Map pre-approval statuses to the canonical Pending step.
+        const preApproval = ['Submitted', 'Under Review', 'Pending'];
+        const effectiveStatus = preApproval.includes(item.status) ? 'Pending' : item.status;
+        const flow = ['Draft', 'Pending', 'Approved', 'Released', 'Funded'];
+        const currentIdx = flow.indexOf(effectiveStatus);
+        const targetIdx = flow.indexOf(targetStatus);
+        if (currentIdx === -1 || targetIdx === -1) return false;
+        return targetIdx > currentIdx;
+      },
+      orderField: 'boardOrder',
+      onDrop({ item, targetStatus, newOrder, fromStatus }) {
+        if (fromStatus === targetStatus) {
+          DB.update('disbursements', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+          return;
+        }
+
+        // Permission gate: Approved requires disbursement:approve
+        if (targetStatus === 'Approved' && !Auth.can('disbursement:approve')) {
+          Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve disbursements.', 'danger');
+          return;
+        }
+
+        // Permission gate: Released requires mark_released or approve
+        if (targetStatus === 'Released' && !Auth.can('disbursement:mark_released') && !Auth.can('disbursement:approve')) {
+          Workflow.showMessage('Permission Denied', 'You do not have permission to release disbursements.', 'danger');
+          return;
+        }
+
+        // Block if pending admin approval
+        if (item.pendingChangeId) {
+          Workflow.showMessage('Pending Approval', 'This disbursement is pending administrative approval and cannot be moved.', 'warning');
+          return;
+        }
+
+        // Block Draft → beyond Pending if no amount
+        if (fromStatus === 'Draft' && targetStatus !== 'Pending' && (!item.amount || item.amount <= 0)) {
+          Workflow.showMessage('Incomplete Disbursement', 'Cannot advance — disbursement has no amount specified.', 'warning');
+          return;
+        }
+
+        const label = item.category + ' — ' + formatPHP(item.amount);
+        const isAdmin = Auth.user?.role === 'Admin';
+        const applyMove = () => {
+          // Non-Admin marking as Released must submit for admin approval.
+          const nextStatus = (targetStatus === 'Released' && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+          const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
+          if (nextStatus === 'Release Pending Approval') {
+            changes.releaseRequestedBy = Auth.user.id;
+            changes.releaseRequestedAt = new Date().toISOString();
+          }
+          DB.update('disbursements', item.id, changes);
+          App.handleRoute();
+        };
+
+        // Confirm critical transitions
+        if (['Approved', 'Released', 'Funded'].includes(targetStatus)) {
+          const msgs = {
+            'Approved': `Approve disbursement "${label}"?`,
+            'Released': isAdmin ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
+            'Funded': `Mark disbursement "${label}" as Funded? This confirms funds have been credited.`
+          };
+          Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
+          return;
+        }
+
+        applyMove();
+      }
+    };
+
+    if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
+      cardNumber = 1;
+      renderGroupedKanbanBoard({
+        container,
+        items,
+        columns: makeColumns(),
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        renderCard,
+        cardMenuItems,
+        storageKey: 'erp_disbursement_grouped_collapsed',
+        drag: boardDrag
+      });
+      return;
+    }
+
+    cardNumber = 1;
 
     KanbanBoard.render({
       container,
       items,
-      columns: statuses.map(st => {
-        const col = {
-          key: st,
-          label: st,
-          targetStatus: st,
-          color: statusColors[st] || '#cbd5e1',
-          statuses: st === 'Pending' ? this.PENDING_APPROVAL_STATUSES : [st],
-          emptyState: st === 'Draft' && canCreate ? false : { variant: 'compact', title: 'No expenses', body: '' }
-        };
-        if (st === 'Draft' && canCreate) {
-          col.addButton = { label: 'Add Expense', onClick: () => self.showForm() };
-          col.addCard = { label: 'Add Expense', onClick: () => self.showForm() };
-        }
-        return col;
-      }),
-      renderCard(d) {
-        const emp = DB.getById('users', self.getEmployeeId(d));
-        const source = self.getFundSource(d);
-
-        const statusPriorityClass = {
-          'Draft': 'card-v2-priority-normal',
-          'Pending': 'card-v2-priority-medium',
-          'Approved': 'card-v2-priority-medium',
-          'Release Pending Approval': 'card-v2-priority-medium',
-          'Released': 'card-v2-priority-low',
-          'Rejected': 'card-v2-priority-urgent'
-        }[d.status] || 'card-v2-priority-normal';
-
-        const progressMap = {
-          'Draft': 0,
-          'Pending': 25,
-          'Approved': 50,
-          'Release Pending Approval': 75,
-          'Released': 100,
-          'Rejected': 0
-        };
-        const progress = progressMap[d.status] || 0;
-
-        const descParts = [];
-        if (d.linkedWorkRequestId) {
-          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-          if (wr) {
-            let linked = wr.title;
-            if (d.linkedTaskId) {
-              const task = DB.getById('tasks', d.linkedTaskId);
-              if (task) linked += ` (Task: ${task.title})`;
-            }
-            descParts.push(linked);
-          }
-        }
-        if (d.fromTemplate) descParts.push('Recurring');
-
-        const card = buildCompactBoardCard({
-          key: 'DIS-' + cardNumber++,
-          progress,
-          statusColor: statusColors[d.status] || '#cbd5e1',
-          title: d.category,
-          description: `${emp?.name || '—'} • ${source}`,
-          detail: descParts.join(' • '),
-          date: d.submittedAt ? formatDate(d.submittedAt) : '',
-          priority: d.status,
-          priorityClass: statusPriorityClass,
-          onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
-        });
-
-        const footerRight = card.querySelector('.card-v2-footer-right');
-        footerRight.appendChild(el('div', { class: 'card-v2-footer-item', text: formatPHP(d.amount), style: 'font-weight:700;color:var(--color-text);' }));
-        return card;
-      },
-      cardMenuItems(d) {
-        const menu = [{
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
-        }];
-        if (canEdit && d.status === 'Draft' && !d.pendingChangeId) {
-          menu.push({
-            label: 'Edit',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-            onClick: () => self.showForm(d.id)
-          });
-        }
-        if (canDelete && !d.pendingChangeId) {
-          menu.push({
-            label: 'Delete',
-            className: 'danger',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-            onClick: () => Workflow.showConfirm('Delete Expense', 'Are you sure you want to permanently delete this disbursement? This cannot be undone.', () => {
-              if (d.linkedWorkRequestId) {
-                const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-                if (wr) {
-                  const linkedIds = (wr.linkedDisbursementIds || []).filter(id => id !== d.id);
-                  DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
-                }
-              }
-              DB.remove('disbursements', d.id);
-              App.handleRoute();
-              Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
-            }, 'danger')
-          });
-        }
-        if (canCreate && d.status === 'Draft' && !d.pendingChangeId) {
-          menu.push({
-            label: 'Submit Expense',
-            className: 'primary',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
-            onClick: () => Workflow.showConfirm('Submit Expense', 'Are you sure you want to submit this expense for approval?', () => {
-              DB.update('disbursements', d.id, { status: 'Submitted', submittedAt: new Date().toISOString() });
-              App.handleRoute();
-            }, 'success')
-          });
-        }
-        return menu;
-      },
-      drag: {
-        enabled: true,
-        canDrag: d => canEdit && !d.pendingChangeId,
-        canDrop: ({ item, targetStatus }) => {
-          if (item.status === targetStatus) return true;
-          const flow = ['Draft', 'Pending', 'Approved', 'Release Pending Approval', 'Released'];
-          const currentIdx = flow.indexOf(item.status);
-          const targetIdx = flow.indexOf(targetStatus);
-          if (currentIdx === -1 || targetIdx === -1) return false;
-          return targetIdx > currentIdx;
-        },
-        orderField: 'boardOrder',
-        onDrop({ item, targetStatus, newOrder, fromStatus }) {
-          if (fromStatus === targetStatus) {
-            DB.update('disbursements', item.id, { boardOrder: newOrder });
-            App.handleRoute();
-            return;
-          }
-
-          // Permission gate: Approved requires disbursement:approve
-          if (targetStatus === 'Approved' && !Auth.can('disbursement:approve')) {
-            Workflow.showMessage('Permission Denied', 'Only users with approval rights can approve disbursements.', 'danger');
-            return;
-          }
-
-          // Permission gate: Released requires mark_released or approve
-          if (targetStatus === 'Released' && !Auth.can('disbursement:mark_released') && !Auth.can('disbursement:approve')) {
-            Workflow.showMessage('Permission Denied', 'You do not have permission to release disbursements.', 'danger');
-            return;
-          }
-
-          // Block if pending admin approval
-          if (item.pendingChangeId) {
-            Workflow.showMessage('Pending Approval', 'This disbursement is pending administrative approval and cannot be moved.', 'warning');
-            return;
-          }
-
-          // Block Draft → beyond Pending if no amount
-          if (fromStatus === 'Draft' && targetStatus !== 'Pending' && (!item.amount || item.amount <= 0)) {
-            Workflow.showMessage('Incomplete Disbursement', 'Cannot advance — disbursement has no amount specified.', 'warning');
-            return;
-          }
-
-          const label = item.category + ' — ' + formatPHP(item.amount);
-          const applyMove = () => {
-            const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
-            DB.update('disbursements', item.id, changes);
-            App.handleRoute();
-          };
-
-          // Confirm critical transitions
-          if (['Approved', 'Released'].includes(targetStatus)) {
-            const msgs = {
-              'Approved': `Approve disbursement "${label}"?`,
-              'Released': `Mark disbursement "${label}" as Released? This confirms funds have been disbursed.`
-            };
-            Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
-            return;
-          }
-
-          applyMove();
-        }
-      }
+      columns: makeColumns(),
+      renderCard,
+      cardMenuItems,
+      drag: boardDrag
     });
   },
 
@@ -1487,29 +1547,6 @@ const Disbursement = {
         actions.appendChild(rejectBtn);
         container.appendChild(actions);
       }
-    } else if (d.status === 'Release Pending Approval' && canApprove) {
-      // Admin approves a Manager's mark-as-released action
-      const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
-      actions.appendChild(el('p', { style: 'font-size:0.875rem;color:#64748b;margin-bottom:var(--spacing-sm);' , text: `A Manager has marked this disbursement for release. Please approve or reject.` }));
-      const approveReleaseBtn = el('button', { class: 'btn btn-success', text: 'Approve & Release Funds' });
-      approveReleaseBtn.addEventListener('click', () => {
-        this.showReleaseDialog(d.id, true);
-      });
-      actions.appendChild(approveReleaseBtn);
-
-      const rejectReleaseBtn = el('button', { class: 'btn btn-danger', text: 'Reject Release', style: 'margin-left: 8px;' });
-      rejectReleaseBtn.addEventListener('click', () => {
-        Workflow.showConfirm('Reject Release', 'Are you sure you want to reject this release request?', () => {
-          const reason = prompt('Enter rejection reason:');
-          if (reason) {
-            DB.update('disbursements', d.id, { status: 'Approved', releaseRejectionReason: reason, releaseRejectedBy: Auth.user.id, releaseRejectedAt: new Date().toISOString() });
-            Workflow.showMessage('Release Rejected', 'The release has been rejected and returned to Approved status.', 'warning');
-            App.handleRoute();
-          }
-        }, 'danger');
-      });
-      actions.appendChild(rejectReleaseBtn);
-      container.appendChild(actions);
     } else if (d.status === 'Approved') {
         const isHandler = d.paymentHandledBy === Auth.user.id;
         const canMarkReleased = Auth.can('disbursement:mark_released');
@@ -1541,8 +1578,27 @@ const Disbursement = {
           container.appendChild(actions);
         } else {
           const handler = DB.getById('users', d.paymentHandledBy);
-          container.appendChild(el('p', { class: 'empty-state', text: `Waiting for release authorization from ${handler?.name || 'assigned handler'}.` }));
+          container.appendChild(renderEmptyState(`Waiting for release authorization from ${handler?.name || 'assigned handler'}`));
         }
+    } else if (d.status === 'Released' && (canApprove || Auth.user?.role === 'Accounting')) {
+      // Final funding step after release.
+      const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
+      const fundBtn = el('button', { class: 'btn btn-success', text: 'Mark as Funded' });
+      fundBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Mark as Funded', `Confirm that funds for "${d.category}" have been credited?`, () => {
+          DB.update('disbursements', d.id, { status: 'Funded', fundedBy: Auth.user.id, fundedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+          Workflow.showMessage('Funded', 'Disbursement marked as funded.', 'success');
+          App.handleRoute();
+        }, 'success');
+      });
+      actions.appendChild(fundBtn);
+      container.appendChild(actions);
+    } else if (d.status === 'Funded' && !d.archived) {
+      const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
+      const archiveBtn = el('button', { class: 'btn btn-primary', text: 'Archive Disbursement', style: 'margin-right:8px;' });
+      archiveBtn.addEventListener('click', () => this.archiveDisbursement(d.id));
+      actions.appendChild(archiveBtn);
+      container.appendChild(actions);
     }
 
     return container;
@@ -2210,69 +2266,160 @@ const Disbursement = {
     const entity = Auth.activeEntity;
     const templates = DB.getWhere('disbursementTemplates', t => t.entity === entity);
 
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
 
-    const actions = el('div', { class: 'actions-bar' });
-    const newTemplateBtn = el('button', { class: 'btn btn-primary btn-sm', text: '+ New Template' });
-    newTemplateBtn.addEventListener('click', () => this.showTemplateForm());
-    actions.appendChild(newTemplateBtn);
-
-    wrapper.appendChild(actions);
-
-    if (templates.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No templates found.', class: 'empty-state' }));
-      return wrapper;
-    }
-
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Name', 'Category', 'Amount', 'Fund Source', 'Schedule', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    templates.forEach(t => {
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.name }));
-      tr.appendChild(el('td', { text: t.category }));
-      tr.appendChild(el('td', { text: formatPHP(t.amount) }));
-      tr.appendChild(el('td', { text: t.fundSource }));
-      tr.appendChild(el('td', { text: t.schedule || '—' }));
-      const tdAct = el('td');
-      const genBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Generate Next Period' });
-      genBtn.addEventListener('click', () => this.generateFromTemplate(t));
-      tdAct.appendChild(genBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const backlogItems = templates.map(t => {
+      return {
+        id: t.id,
+        name: t.name,
+        iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary);"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+        tags: [
+          { text: t.category || 'Other', type: 'category' },
+          { text: t.fundSource || 'Firm Fund', type: 'fund', value: t.fundSource },
+          { text: t.schedule || '—', type: 'schedule', value: t.schedule, style: 'text-transform: capitalize;' },
+          { text: formatPHP(t.amount || 0), type: 'amount' }
+        ]
+      };
     });
-    table.appendChild(tbody);
-    wrapper.appendChild(table);
 
+    const backlog = JiraBacklogList.render({
+      title: 'Disbursement Templates',
+      subtitle: 'recurring expense presets, fund source categories, and schedule billing configurations',
+      items: backlogItems,
+      emptyText: 'No templates found',
+      rowIdPrefix: 'DT',
+      headerActions: [
+        {
+          text: '+ New Template',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => this.showTemplateForm()
+        }
+      ],
+      rowActions: (item) => {
+        const t = templates.find(temp => temp.id === item.id);
+        return [
+          {
+            text: 'Generate',
+            className: 'btn btn-primary btn-xs',
+            onClick: () => this.generateFromTemplate(t)
+          },
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showTemplateForm(t)
+          },
+          {
+            text: 'Delete',
+            className: 'btn btn-danger btn-xs',
+            onClick: () => {
+              Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${t.name}"?`, () => {
+                DB.delete('disbursementTemplates', t.id);
+                App.handleRoute();
+              }, 'danger');
+            }
+          }
+        ];
+      },
+      bulkActions: (selectedIds) => [
+        {
+          text: '⚡ Bulk Generate Disbursements',
+          className: 'btn btn-primary btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Bulk Generate Disbursements', `Are you sure you want to generate disbursements for all ${ids.length} selected templates?`, () => {
+              let count = 0;
+              ids.forEach(id => {
+                const t = templates.find(temp => temp.id === id);
+                if (t) {
+                  const record = {
+                    id: generateSequentialId('dis', 'disbursements'),
+                    category: t.category,
+                    description: t.description || t.name,
+                    amount: t.amount,
+                    fundSource: t.fundSource,
+                    linkedInvoiceId: t.linkedInvoiceId || null,
+                    linkedWorkRequestId: t.linkedWorkRequestId || null,
+                    entity: t.entity,
+                    fromTemplate: t.id,
+                    employeeId: Auth.user.id,
+                    requestedBy: Auth.user.id,
+                    status: 'Draft',
+                    submittedAt: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
+                    receiptFilename: null,
+                    paymentHandledBy: '',
+                    paymentDetails: { method: '', reference: '', bank: '', date: '', processedBy: '' }
+                  };
+                  DB.insert('disbursements', record);
+
+                  if (record.linkedWorkRequestId) {
+                    const wr = DB.getById('workRequests', record.linkedWorkRequestId);
+                    if (wr) {
+                      const linkedIds = new Set(wr.linkedDisbursementIds || []);
+                      linkedIds.add(record.id);
+                      DB.update('workRequests', wr.id, { linkedDisbursementIds: Array.from(linkedIds) });
+                    }
+                  }
+                  count++;
+                }
+              });
+              Workflow.showMessage('Success', `Generated ${count} disbursements successfully.`, 'success');
+              this.view = 'list';
+              App.handleRoute();
+            });
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${ids.length} selected templates?`, () => {
+              ids.forEach(id => {
+                DB.delete('disbursementTemplates', id);
+              });
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ]
+    });
+
+    wrapper.appendChild(backlog);
     return wrapper;
   },
 
-  showTemplateForm() {
+  renderTemplateForm() {
     const entity = Auth.activeEntity;
-    const container = el('div');
+    const template = this.templateEditingId ? DB.getById('disbursementTemplates', this.templateEditingId) : null;
+    const container = el('div', { class: 'page' });
 
-    // Notion-style icon header (title is now the inline borderless title field)
-    const titleSec = el('div', { class: 'side-pane-form-title' });
-    titleSec.appendChild(el('div', { class: 'side-pane-icon', text: '📋' }));
-    container.appendChild(titleSec);
+    const form = el('form', { id: 'disb-tpl-form', class: 'form-stacked notion-form' });
 
-    const formWrap = el('div', { class: 'side-pane-form-content' });
-    const form = el('form', { class: 'form-stacked notion-form', id: 'disb-tpl-form' });
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const topActions = el('div', { class: 'form-actions-top' });
+    topActions.appendChild(el('button', { type: 'submit', form: 'disb-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
+    if (template) {
+      const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
+      delBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${template.name}"?`, () => {
+          DB.delete('disbursementTemplates', template.id);
+          this.view = 'templates';
+          this.templateEditingId = null;
+          closeFormPanelAndRoute('#disbursement');
+        }, 'danger');
+      });
+      topActions.appendChild(delBtn);
+    }
+    headerBar.appendChild(topActions);
+    form.appendChild(headerBar);
 
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
     titleSection.appendChild(el('label', { class: 'notion-section-label', text: 'Template Name' }));
     const nameInput = el('input', {
       type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input',
-      placeholder: 'New Disbursement Template', required: true
+      placeholder: 'New Disbursement Template', required: true, value: template?.name || ''
     });
     titleSection.appendChild(nameInput);
-    setTimeout(() => { nameInput.focus(); }, 60);
     form.appendChild(titleSection);
 
     const catGroup = el('div', { class: 'form-group' });
@@ -2281,12 +2428,14 @@ const Disbursement = {
     ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
       catSel.appendChild(el('option', { value: c, text: c }));
     });
+    if (template) catSel.value = template.category || '';
     catGroup.appendChild(catSel);
     form.appendChild(catGroup);
 
     const amtGroup = el('div', { class: 'form-group' });
     amtGroup.appendChild(el('label', { text: 'Amount (₱) *' }));
-    amtGroup.appendChild(el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true }));
+    const amtInput = el('input', { type: 'number', name: 'amount', min: 0, step: 0.01, required: true, value: template?.amount || '' });
+    amtGroup.appendChild(amtInput);
     form.appendChild(amtGroup);
 
     const fundGroup = el('div', { class: 'form-group' });
@@ -2295,7 +2444,8 @@ const Disbursement = {
     ['Firm Fund', 'Client Fund'].forEach(f => {
       const label = el('label', { class: 'radio-label' });
       const radio = el('input', { type: 'radio', name: 'fundSource', value: f, required: true });
-      if (f === 'Firm Fund') radio.checked = true;
+      if (!template && f === 'Firm Fund') radio.checked = true;
+      if (template && f === template.fundSource) radio.checked = true;
       label.appendChild(radio);
       label.appendChild(document.createTextNode(' ' + f));
       fundWrap.appendChild(label);
@@ -2305,12 +2455,14 @@ const Disbursement = {
 
     const scheduleGroup = el('div', { class: 'form-group' });
     scheduleGroup.appendChild(el('label', { text: 'Schedule' }));
-    scheduleGroup.appendChild(el('input', { type: 'text', name: 'schedule', placeholder: 'e.g. Monthly, Weekly, Quarterly' }));
+    const schedInput = el('input', { type: 'text', name: 'schedule', placeholder: 'e.g. Monthly, Weekly, Quarterly', value: template?.schedule || '' });
+    scheduleGroup.appendChild(schedInput);
     form.appendChild(scheduleGroup);
 
     const descGroup = el('div', { class: 'form-group' });
     descGroup.appendChild(el('label', { text: 'Description' }));
-    descGroup.appendChild(el('textarea', { name: 'description', rows: 3 }));
+    const descInput = el('textarea', { name: 'description', rows: 3, text: template?.description || '' });
+    descGroup.appendChild(descInput);
     form.appendChild(descGroup);
 
     const wrGroup = el('div', { class: 'form-group' });
@@ -2321,6 +2473,7 @@ const Disbursement = {
       const client = DB.getById('clients', wr.clientId);
       wrSel.appendChild(el('option', { value: wr.id, text: wr.title + ' — ' + (client?.name || '—') }));
     });
+    if (template) wrSel.value = template.linkedWorkRequestId || '';
     wrGroup.appendChild(wrSel);
     form.appendChild(wrGroup);
 
@@ -2332,6 +2485,7 @@ const Disbursement = {
       const client = DB.getById('clients', inv.clientId);
       invSel.appendChild(el('option', { value: inv.id, text: inv.invoiceNumber + ' — ' + (client?.name || '—') }));
     });
+    if (template) invSel.value = template.linkedInvoiceId || '';
     invGroup.appendChild(invSel);
     form.appendChild(invGroup);
 
@@ -2339,8 +2493,8 @@ const Disbursement = {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;
       const data = Object.fromEntries(new FormData(form).entries());
-      const template = {
-        id: generateId('dtpl'),
+      const templateData = {
+        id: template ? template.id : generateId('dtpl'),
         entity: entity,
         name: data.name.trim(),
         category: data.category,
@@ -2350,32 +2504,39 @@ const Disbursement = {
         description: data.description || '',
         linkedWorkRequestId: data.linkedWorkRequestId || null,
         linkedInvoiceId: data.linkedInvoiceId || null,
-        createdAt: new Date().toISOString(),
-        createdBy: Auth.user.id
+        createdAt: template ? template.createdAt : new Date().toISOString(),
+        createdBy: template ? template.createdBy : Auth.user.id
       };
-      DB.insert('disbursementTemplates', template);
+      if (template) {
+        DB.update('disbursementTemplates', template.id, templateData);
+      } else {
+        DB.insert('disbursementTemplates', templateData);
+      }
       this.view = 'templates';
-      closeFormPanelAndRoute();
+      this.templateEditingId = null;
+      closeFormPanelAndRoute('#disbursement');
     });
 
-    formWrap.appendChild(form);
-    container.appendChild(formWrap);
+    container.appendChild(form);
+    return container;
+  },
 
-    // Sticky footer
-    const footer = el('div', { class: 'side-pane-form-footer' });
-    footer.appendChild(el('button', { type: 'submit', form: 'disb-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute());
-    footer.appendChild(cancelBtn);
-    container.appendChild(footer);
-
-    if (window.SidePaneInstance && typeof window.SidePaneInstance.open === 'function') {
-      window.SidePaneInstance.open({
-        title: 'New Disbursement Template',
-        content: container,
-        viewContext: 'disbursement-template-form'
-      });
-    }
+  showTemplateForm(existing = null) {
+    this.templateEditingId = existing ? existing.id : null;
+    const fullPageRoute = this.templateEditingId ? `#disbursement/templateForm/${this.templateEditingId}` : '#disbursement/templateForm/new';
+    openFormPanel({
+      icon: '📋',
+      title: ' ',
+      formContent: this.renderTemplateForm(),
+      formId: 'disb-tpl-form',
+      viewContext: 'disbursement-template-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      actions: [
+        { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'disb-tpl-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#disbursement') }
+      ]
+    });
   },
 
   generateFromTemplate(template) {
@@ -2414,6 +2575,154 @@ const Disbursement = {
     Workflow.showMessage('Template Success', 'Disbursement generated from template: ' + template.name, 'success');
     this.view = 'list';
     App.handleRoute();
+  },
+
+  archiveDisbursement(id) {
+    const d = DB.getById('disbursements', id);
+    if (!d || d.status !== 'Funded' || d.archived) return;
+    DB.update('disbursements', id, { archived: true, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Archived', 'Disbursement has been archived.', 'success');
+    App.handleRoute();
+  },
+
+  unarchiveDisbursement(id) {
+    const d = DB.getById('disbursements', id);
+    if (!d || d.status !== 'Funded' || !d.archived) return;
+    DB.update('disbursements', id, { archived: false, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Restored', 'Disbursement has been restored to the active list.', 'success');
+    App.handleRoute();
+  },
+
+  permanentDeleteDisbursement(id) {
+    const d = DB.getById('disbursements', id);
+    if (!d) return;
+    if (Auth.user?.role !== 'Admin' && !Auth.can('disbursement:delete')) {
+      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete disbursements.', 'danger');
+      return;
+    }
+    Workflow.showConfirm('Permanently Delete Disbursement',
+      `Are you sure you want to permanently delete disbursement "${d.description || d.category}"? This action cannot be undone.`,
+      () => {
+        if (d.linkedWorkRequestId) {
+          const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+          if (wr) {
+            const linkedIds = (wr.linkedDisbursementIds || []).filter(x => x !== d.id);
+            DB.update('workRequests', wr.id, { linkedDisbursementIds: linkedIds });
+          }
+        }
+        DB.delete('disbursements', id);
+        App.handleRoute();
+        Workflow.showMessage('Deleted', 'Disbursement has been permanently deleted.', 'success');
+      },
+      'danger'
+    );
+  },
+
+  renderArchive() {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
+
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    const funded = DB.getWhere('disbursements', d => entFilter(d.entity) && d.status === 'Funded' && d.archived === true);
+    const cancelled = DB.getWhere('disbursements', d => entFilter(d.entity) && d.status === 'Cancelled');
+
+    const rejectedDisbursementChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'disbursements' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity)) return false;
+      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const rejectedDisbursementRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'disbursement' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const buildItem = (d, category) => {
+      const emp = DB.getById('users', this.getEmployeeId(d));
+      return {
+        id: d.id,
+        category,
+        title: d.description || d.category || '(untitled)',
+        meta: [
+          { icon: ArchivePage.icons.client, text: emp?.name || '—' },
+          { icon: ArchivePage.icons.amount, text: formatPHP(d.amount) },
+          { icon: ArchivePage.icons.date, text: formatDate(d.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#disbursement/detail/' + d.id; }
+          },
+          ...(category === 'accomplished' ? [{
+            label: 'Unarchive',
+            icon: ArchivePage.icons.unarchive,
+            className: 'primary',
+            onClick: () => self.unarchiveDisbursement(d.id)
+          }] : []),
+          ...(isAdmin || Auth.can('disbursement:delete') ? [{
+            label: 'Delete Permanently',
+            icon: ArchivePage.icons.delete,
+            className: 'danger',
+            onClick: () => self.permanentDeleteDisbursement(d.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = record => {
+      const isOpReq = record.hasOwnProperty('requestedBy');
+      const data = isOpReq ? record : (record.proposedData || {});
+      const title = isOpReq
+        ? `Disbursement Request ${record.workRequestId ? 'for WR' : ''}`
+        : `Disbursement Change: ${data.description || data.category || '(untitled)'}`;
+      const reason = data.rejectionReason || record.rejectionReason || 'Rejected';
+      return {
+        id: record.id,
+        category: 'rejected',
+        title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: (DB.getById('users', isOpReq ? record.requestedBy : data.requestedBy)?.name) || '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(record.reviewedAt || record.updatedAt || record.requestedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${reason}` }
+        ],
+        actions: [
+          ...(data.id || record.workRequestId ? [{
+            label: 'View Related',
+            icon: ArchivePage.icons.view,
+            onClick: () => {
+              if (data.id) location.hash = '#disbursement/detail/' + data.id;
+              else if (record.workRequestId) location.hash = '#operations/detail/' + record.workRequestId;
+            }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'disbursement',
+      categoryLabels: { accomplished: 'Funded', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: funded.map(d => buildItem(d, 'accomplished')),
+        cancelled: cancelled.map(d => buildItem(d, 'cancelled')),
+        rejected: [
+          ...rejectedDisbursementChanges.map(buildRejectedItem),
+          ...rejectedDisbursementRequests.map(buildRejectedItem)
+        ]
+      },
+      emptyText: 'Archive is empty.',
+      renderCallback: () => self.renderArchive()
+    });
   },
 
   // ============================================================

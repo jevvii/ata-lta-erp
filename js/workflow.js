@@ -114,6 +114,38 @@ const Workflow = {
     return this.isCompleted(itemOrTask) ? 'is-completed' : '';
   },
 
+  getWorkRequestAssigneeNames(r, taskMap) {
+    const names = new Set();
+    const assignedUser = r.assignedTo ? DB.getById('users', r.assignedTo) : null;
+    if (assignedUser?.name) names.add(assignedUser.name);
+    const resolvedTaskMap = taskMap || this._tempTaskMap || buildTaskMap();
+    const tasks = resolvedTaskMap[r.id] || [];
+    tasks.forEach(t => {
+      if (t.assigneeId) {
+        const u = DB.getById('users', t.assigneeId);
+        if (u?.name) names.add(u.name);
+      }
+      if (t.assigneeName) names.add(t.assigneeName);
+      (t.coAssignees || []).forEach(n => { if (n) names.add(n); });
+    });
+    return names;
+  },
+
+  cleanup() {
+    if (this._jiraToolbarClickListener) {
+      document.removeEventListener('click', this._jiraToolbarClickListener);
+      this._jiraToolbarClickListener = null;
+    }
+    if (this._syncHeaderTopResizeListener) {
+      window.removeEventListener('resize', this._syncHeaderTopResizeListener);
+      this._syncHeaderTopResizeListener = null;
+    }
+    const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
+    if (operationsContainer) {
+      operationsContainer.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+    }
+  },
+
   standardTaskTemplates: [
     { title: 'Gathering requirements and preparing documents for preprocessing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }] },
     { title: 'Gather requirements and prepare documents needed for processing', defaultChecklist: [{ text: 'SEC Certificate', category: 'document' }, { text: "Mayor's Permit", category: 'document' }, { text: 'BIR Form 1901/1903', category: 'document' }, { text: 'Articles of Incorporation', category: 'document' }], coAssignees: ['Employee 1', 'Employee 2', 'Employee 3'] },
@@ -430,37 +462,148 @@ const Workflow = {
    */
   getRoutingHint(blockerMessage) {
     const msg = blockerMessage.toLowerCase();
-    if (msg.includes('invoice')) return { text: 'Go to Billing module to create and link an invoice.', route: '#billing' };
-    if (msg.includes('disbursement') || msg.includes('expense') || msg.includes('reimburse')) return { text: 'Go to Disbursement module to file and link an expense.', route: '#disbursement' };
-    if (msg.includes('task') && msg.includes('completed')) return { text: 'Mark all tasks as Completed in the task list below.', route: null };
-    if (msg.includes('requirement')) return { text: 'Complete the requirement gathering tasks below.', route: null };
-    if (msg.includes('client assignment')) return { text: 'Edit the work request and assign a client.', route: null };
-    if (msg.includes('employee assignment')) return { text: 'Edit the work request and assign an employee.', route: null };
-    if (msg.includes('released')) return { text: 'Wait for admin to approve and release all linked disbursements.', route: '#disbursement' };
+    if (msg.includes('invoice')) return { text: 'Go to Billing', route: '#billing', action: 'billing' };
+    if (msg.includes('disbursement') || msg.includes('expense') || msg.includes('reimburse')) return { text: 'Go to Disbursement', route: '#disbursement', action: 'disbursement' };
+    if (msg.includes('task') && msg.includes('completed')) return { text: 'Open Tasks', route: null, action: 'tasks' };
+    if (msg.includes('requirement')) return { text: 'Open Tasks', route: null, action: 'tasks' };
+    if (msg.includes('client assignment')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
+    if (msg.includes('employee assignment')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
+    if (msg.includes('all tasks must be assigned')) return { text: 'Edit Work Request', route: null, action: 'edit_wr' };
+    if (msg.includes('at least one task')) return { text: 'Open Tasks', route: null, action: 'tasks' };
+    if (msg.includes('no tasks defined')) return { text: 'Open Tasks', route: null, action: 'tasks' };
+    if (msg.includes('released')) return { text: 'View Disbursements', route: '#disbursement', action: 'disbursement' };
     return null;
   },
 
-  transitionWorkRequest(wrId) {
-    if (!Auth.can('workflow:approve')) {
-      this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
-      return;
-    }
-    const status = this.getPhaseTransitionStatus(wrId);
-    if (!status || !status.canTransition) {
-      this.showMessage('Routing Error', 'Cannot transition phase:\n- ' + (status?.missing.join('\n- ') || 'Requirements not met'), 'danger');
+  /**
+   * Show a dedicated routing blocker modal with actionable next steps and a cancel button.
+   * @param {string} title
+   * @param {string|string[]} blockers - blocker message(s)
+   * @param {Object} [ctx] - optional context { wrId }
+   */
+  showRoutingBlocker(title, blockers, ctx = {}) {
+    const messages = Array.isArray(blockers) ? blockers : [blockers];
+    const wrapper = el('div', { class: 'modal-message-wrapper type-warning' });
+    const icon = el('div', { class: 'modal-icon-v2', html: SignalIcons.warning });
+    wrapper.appendChild(icon);
+
+    const body = el('div', { class: 'modal-text', style: 'text-align:left; width:100%;' });
+    body.appendChild(el('p', { text: 'Resolve the following before routing:', style: 'margin-bottom:8px; font-weight:600;' }));
+    const list = el('ul', { class: 'routing-blocker-list', style: 'margin:0 0 12px 0; padding-left:20px; line-height:1.5;' });
+    messages.forEach(m => list.appendChild(el('li', { text: m })));
+    body.appendChild(list);
+    wrapper.appendChild(body);
+
+    // Build actionable hints from blocker messages so each blocker can offer a next step.
+    const hints = [];
+    messages.forEach(m => {
+      const hint = this.getRoutingHint(m);
+      if (hint && !hints.some(h => h.action === hint.action)) hints.push(hint);
+    });
+
+    // Footer is centered via CSS (.modal-message-wrapper .modal-footer); keep it unstyled
+    // so the action + cancel buttons line up in the middle of the modal.
+    const footer = el('div', { class: 'modal-footer' });
+
+    hints.forEach(hint => {
+      const actionBtn = el('button', {
+        class: 'btn btn-primary modal-btn-action',
+        text: hint.text
+      });
+      actionBtn.addEventListener('click', () => {
+        const overlay = actionBtn.closest('.modal-overlay');
+        if (overlay) overlay.remove();
+        if (hint.route) {
+          location.hash = hint.route;
+        } else if (hint.action === 'edit_wr' && ctx.wrId) {
+          location.hash = '#operations/form/' + ctx.wrId;
+        } else if (hint.action === 'tasks' && ctx.wrId) {
+          location.hash = '#operations/detail/' + ctx.wrId;
+        }
+      });
+      footer.appendChild(actionBtn);
+    });
+
+    const cancelBtn = el('button', { class: 'btn modal-btn-cancel', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => {
+      const overlay = cancelBtn.closest('.modal-overlay');
+      if (overlay) overlay.remove();
+    });
+    footer.appendChild(cancelBtn);
+
+    wrapper.appendChild(footer);
+
+    // Dismiss any existing modal with the same title so fresh blocker content is always shown.
+    document.querySelectorAll('.modal-overlay').forEach(o => {
+      const titleEl = o.querySelector('.modal-title');
+      if (titleEl && titleEl.textContent.trim() === title.trim()) o.remove();
+    });
+
+    this.showModal(title, wrapper);
+  },
+
+  canRequestPhaseRouting() {
+    const role = Auth.user?.role;
+    if (role === 'Admin') return false;
+    return Auth.can('workflow:edit') || Auth.can('workflow:task_add') || Auth.can('workflow:task_approve');
+  },
+
+  requestPhaseRouting(wrId, nextPhase) {
+    const wr = DB.getById('workRequests', wrId);
+    if (!wr) return;
+    const existing = DB.getWhere('pendingChanges', pc =>
+      pc.status === 'pending' && pc.table === 'workRequestPhaseRouting' && pc.parentRecordId === wrId
+    )[0];
+    if (existing) {
+      this.showMessage('Request Pending', 'A phase routing request for this work request is already pending Admin approval.', 'warning');
       return;
     }
 
-    this.showConfirm('Confirm Routing', `Are you sure you want to transition this Work Request to ${status.nextPhase}?`, () => {
-      DB.update('workRequests', wrId, {
-        status: status.nextPhase,
-        updatedAt: new Date().toISOString()
-      });
-      App.handleRoute();
-    }, 'success');
+    const record = {
+      id: wrId,
+      status: nextPhase,
+      previousStatus: wr.status,
+      requestedAt: new Date().toISOString()
+    };
+    PendingChanges.submit('workRequestPhaseRouting', record, false);
+    this.showMessage('Routing Requested', `Phase routing to "${nextPhase}" has been submitted for Admin approval.`, 'success');
+  },
+
+  transitionWorkRequest(wrId) {
+    const status = this.getPhaseTransitionStatus(wrId);
+    if (!status || !status.canTransition) {
+      const blockers = status?.missing?.length ? status.missing : ['Requirements not met'];
+      this.showRoutingBlocker('Routing Blocked', blockers, { wrId: wrId });
+      return;
+    }
+
+    if (Auth.can('workflow:approve')) {
+      this.showConfirm('Confirm Routing', `Are you sure you want to transition this Work Request to ${status.nextPhase}?`, () => {
+        DB.update('workRequests', wrId, {
+          status: status.nextPhase,
+          updatedAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+      return;
+    }
+
+    if (this.canRequestPhaseRouting()) {
+      this.showConfirm('Request Phase Routing', `Submit request to route this Work Request to ${status.nextPhase}? An Admin must approve it.`, () => {
+        this.requestPhaseRouting(wrId, status.nextPhase);
+        App.handleRoute();
+      }, 'success');
+      return;
+    }
+
+    this.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
   },
 
   cancelWorkRequest(wrId) {
+    if (Auth.user?.role !== 'Admin') {
+      this.showMessage('Permission Denied', 'Only Admin can cancel work requests.', 'danger');
+      return;
+    }
     const wr = DB.getById('workRequests', wrId);
     if (!wr) return;
     if (wr.status === 'Completed' || wr.status === 'Cancelled') {
@@ -484,6 +627,7 @@ const Workflow = {
 
         DB.update('workRequests', wrId, {
           status: 'Cancelled',
+          archived: true,
           updatedAt: now
         });
 
@@ -495,6 +639,22 @@ const Workflow = {
       },
       'danger'
     );
+  },
+
+  archiveWorkRequest(wrId) {
+    const wr = DB.getById('workRequests', wrId);
+    if (!wr || wr.status !== 'Completed') return;
+    DB.update('workRequests', wrId, { archived: true, updatedAt: new Date().toISOString() });
+    this.showMessage('Archived', 'Work Request has been archived.', 'success');
+    App.handleRoute();
+  },
+
+  unarchiveWorkRequest(wrId) {
+    const wr = DB.getById('workRequests', wrId);
+    if (!wr) return;
+    DB.update('workRequests', wrId, { archived: false, updatedAt: new Date().toISOString() });
+    this.showMessage('Restored', 'Work Request has been restored to the active list.', 'success');
+    App.handleRoute();
   },
 
   /**
@@ -1847,6 +2007,17 @@ const Workflow = {
           { text: '← Back to Operations', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } }
         ]
       }));
+    } else if (this.view === 'addTask' && this.addTaskWrId) {
+      container.classList.add('operations-tab-page');
+      const wr = DB.getById('workRequests', this.addTaskWrId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Operations',
+        baseHash: '#operations',
+        currentText: 'Add Task',
+        actions: [
+          { text: '← Back to Work Request', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations/detail/' + this.addTaskWrId; } }
+        ]
+      }));
     }
 
     if (this.view === 'list') {
@@ -1861,6 +2032,13 @@ const Workflow = {
       container.appendChild(this.renderTemplateForm());
     } else if (this.view === 'archive') {
       container.appendChild(this.renderArchive());
+    } else if (this.view === 'addTask' && this.addTaskWrId) {
+      const form = this.renderAddTaskForm(this.addTaskWrId);
+      if (form) {
+        container.appendChild(el('div', { class: 'page-content-section' }, [form]));
+      } else {
+        location.hash = '#operations/detail/' + this.addTaskWrId;
+      }
     }
 
     setTimeout(() => this.updateStickyOffsets(), 0);
@@ -1893,14 +2071,12 @@ const Workflow = {
   },
 
   renderTabNav() {
-    const tabNav = el('div', { class: 'module-tab-nav' });
-
     const entity = Auth.activeEntity;
     const taskMap = this._tempTaskMap || buildTaskMap();
     const wrCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
-      return matchesEntity && wr.status !== 'Cancelled' && Auth.canViewWrWithTasks(wr, taskMap);
+      return matchesEntity && !wr.archived && wr.status !== 'Cancelled' && Auth.canViewWrWithTasks(wr, taskMap);
     }).length;
 
     const templateCount = DB.getWhere('retainerTemplates', t => {
@@ -1911,11 +2087,29 @@ const Workflow = {
       return tEnt === entity.toUpperCase();
     }).length;
 
-    const archiveCount = DB.getWhere('workRequests', wr => {
+    const archiveWrCount = DB.getWhere('workRequests', wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
-      return matchesEntity && wr.status === 'Cancelled' && Auth.canViewWrWithTasks(wr, taskMap);
+      if (!matchesEntity || !Auth.canViewWrWithTasks(wr, taskMap)) return false;
+      if (wr.status === 'Cancelled') return true;
+      if (wr.status === 'Completed' && wr.archived) return true;
+      return false;
     }).length;
+
+    const rejectedCount = DB.getWhere('pendingChanges', pc => {
+      if (pc.status !== 'rejected') return false;
+      if (!['workRequests', 'tasks'].includes(pc.table)) return false;
+      const data = pc.proposedData || {};
+      const wrId = pc.table === 'tasks' ? data.workRequestId : data.id;
+      const wr = wrId ? DB.getById('workRequests', wrId) : null;
+      const ent = (wr?.entity || data.entity || '').toUpperCase();
+      const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(ent) : ent === entity.toUpperCase());
+      if (!matchesEntity) return false;
+      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    }).length;
+
+    const archiveCount = archiveWrCount + rejectedCount;
 
     const tabs = [
       { key: 'list', label: 'Work Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: wrCount }
@@ -1927,19 +2121,9 @@ const Workflow = {
 
     tabs.push({ key: 'archive', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount });
 
-    tabs.forEach(tab => {
-      const btn = el('button', { class: 'module-tab-link' + (this.view === tab.key ? ' active' : '') });
-      btn.appendChild(parseHTML(tab.icon));
-      btn.appendChild(document.createTextNode(' ' + tab.label));
-      if (tab.count !== undefined) {
-        btn.appendChild(document.createTextNode(' '));
-        btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
-      }
-      btn.addEventListener('click', () => {
-        this.view = tab.key;
-        App.handleRoute();
-      });
-      tabNav.appendChild(btn);
+    const tabNav = renderModuleTabNav(tabs, this.view, (key) => {
+      this.view = key;
+      App.handleRoute();
     });
 
     if (Auth.can('workflow:edit')) {
@@ -1979,7 +2163,7 @@ const Workflow = {
 
     const wrapper = el('div');
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
-    const filters = el('div', { class: 'filters-bar' });
+    const jiraToolbar = el('div', { class: 'jira-toolbar' });
 
     // View mode toggle
     const viewMode = App.getPreferredViewMode('operations') || 'table';
@@ -1994,102 +2178,523 @@ const Workflow = {
     vmToggle.appendChild(vmBoard);
     vmToggle.appendChild(vmList);
 
-    // Filters inside the toolbar
-    const priorityFilter = el('select', { class: 'form-select' });
-    priorityFilter.appendChild(el('option', { value: '', text: 'All Priorities' }));
-    ['Urgent', 'Priority', 'Low Priority'].forEach(p => priorityFilter.appendChild(el('option', { value: p, text: p })));
-    filters.appendChild(wrapFilterFieldWithClear(priorityFilter));
+    // Group-by state
+    let groupBy = App.restoreGroupBy('operations') || 'none';
+    const groupOptions = [
+      { key: 'none', label: 'None' },
+      { key: 'assignee', label: 'Assignee' },
+      { key: 'client', label: 'Client' },
+      { key: 'priority', label: 'Priority' }
+    ];
 
-    const empOptions = [{ value: '', text: 'All Employees' }];
-    DB.getWhere('users', u => {
-      const userEnts = (u.entities || []).map(e => e.toUpperCase());
-      if (entity === 'ALL') {
-        return userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e));
-      }
-      return userEnts.includes(entity.toUpperCase());
-    }).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions });
-    filters.appendChild(empFilter);
+    // Active filter state (Jira-style multi-select per category)
+    const activeFilters = {
+      assignee: new Set(),
+      priority: new Set(),
+      dueDate: new Set(),
+      client: new Set()
+    };
 
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions });
-    filters.appendChild(clientFilter);
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(el('span', { text: 'Due From', style: 'font-size:0.875rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filters.appendChild(el('span', { text: 'Due To', style: 'font-size:0.875rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const statusFilter = el('select', { class: 'form-select' });
-    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Pre-processing', 'Processing', 'Billing', 'Disbursement', 'Completed'].forEach(s => {
-      statusFilter.appendChild(el('option', { value: s, text: s }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      priorityFilter.value = '';
-      empFilter.value = '';
-      clientFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      statusFilter.value = '';
-      App.clearSavedFilters('operations');
-      refresh();
-    });
-    filters.appendChild(clearBtn);
-
-    stickyContainer.appendChild(filters);
-    stickyContainer.appendChild(vmToggle);
-    wrapper.appendChild(stickyContainer);
-
-    // Restore saved filters
+    // Restore saved filters (v2 format)
     const savedFilters = App.restoreFilters('operations');
-    if (savedFilters) {
-      if (savedFilters.priority) priorityFilter.value = savedFilters.priority;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
-      if (savedFilters.status) statusFilter.value = savedFilters.status;
+    if (savedFilters && savedFilters.v2) {
+      Object.keys(activeFilters).forEach(cat => {
+        if (Array.isArray(savedFilters[cat])) savedFilters[cat].forEach(v => activeFilters[cat].add(v));
+      });
     }
+
+    // Category value sources
+    const getScopedUsers = () => DB.getWhere('users', u => {
+      const userEnts = (u.entities || []).map(e => e.toUpperCase());
+      if (entity === 'ALL') return userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e));
+      return userEnts.includes(entity.toUpperCase());
+    });
+
+    const getScopedClients = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
+      return clientEnt === entity.toUpperCase();
+    });
+
+    const getAssigneeOptions = () => {
+      const options = new Map();
+      options.set('__UNASSIGNED__', { value: '__UNASSIGNED__', label: 'Unassigned' });
+      getScopedUsers().forEach(u => options.set(u.name, { value: u.name, label: u.name }));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) options.set(name, { value: name, label: name });
+      });
+      return Array.from(options.values());
+    };
+
+    const getPriorityOptions = () => {
+      const defaultPriorities = ['Urgent', 'Priority', 'Low Priority'];
+      const set = new Set(defaultPriorities);
+      DB.getWhere('workRequests', r => {
+        const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
+      }).forEach(r => {
+        if (r.priority) set.add(r.priority);
+      });
+      return Array.from(set).map(p => ({ value: p, label: p }));
+    };
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' },
+      { value: 'No Due Date', label: 'No Due Date' }
+    ];
+
+    const getClientOptions = () => getScopedClients().map(c => ({ value: c.id, label: c.name }));
+
+    const categories = {
+      assignee: { label: 'Assignee', getOptions: getAssigneeOptions },
+      priority: { label: 'Priority', getOptions: getPriorityOptions },
+      dueDate: { label: 'Due date', getOptions: getDueDateOptions },
+      client: { label: 'Client', getOptions: getClientOptions }
+    };
+    let selectedCategory = 'assignee';
+
+    const getActiveFilterCount = () => Object.values(activeFilters).reduce((sum, set) => sum + set.size, 0);
 
     const saveCurrentFilters = () => {
       App.saveFilters('operations', {
-        priority: priorityFilter.value,
-        employee: empFilter.value,
-        client: clientFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value,
-        status: statusFilter.value
+        v2: true,
+        assignee: Array.from(activeFilters.assignee),
+        priority: Array.from(activeFilters.priority),
+        dueDate: Array.from(activeFilters.dueDate),
+        client: Array.from(activeFilters.client)
       });
     };
 
+    const applyFilters = (wrs, taskMap) => {
+      let result = wrs.slice();
+      const resolvedTaskMap = taskMap || this._tempTaskMap || buildTaskMap();
+
+      if (activeFilters.assignee.size > 0) {
+        const hasUnassigned = activeFilters.assignee.has('__UNASSIGNED__');
+        result = result.filter(r => {
+          const names = this.getWorkRequestAssigneeNames(r, resolvedTaskMap);
+          if (names.size === 0) return hasUnassigned;
+          return Array.from(names).some(name => activeFilters.assignee.has(name));
+        });
+      }
+
+      if (activeFilters.priority.size > 0) {
+        result = result.filter(r => {
+          const wrPriority = r.priority || 'Normal';
+          if (activeFilters.priority.has(wrPriority)) return true;
+          const tasks = resolvedTaskMap[r.id] || [];
+          return tasks.some(t => activeFilters.priority.has(t.priority || 'Normal'));
+        });
+      }
+
+      if (activeFilters.dueDate.size > 0) {
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+
+        const endOfWeek = new Date(now);
+        const dayOfWeek = now.getDay();
+        const distanceToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+        endOfWeek.setDate(now.getDate() + distanceToSunday);
+        const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
+        result = result.filter(r => {
+          if (!r.dueDate) {
+            return activeFilters.dueDate.has('No Due Date');
+          }
+          const dStr = r.dueDate.slice(0, 10);
+
+          if (activeFilters.dueDate.has(`DATE:${dStr}`)) return true;
+
+          let bucket = 'No Due Date';
+          if (dStr < todayStr) bucket = 'Overdue';
+          else if (dStr === todayStr) bucket = 'Due Today';
+          else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+          else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+          else bucket = 'Due Later';
+
+          return activeFilters.dueDate.has(bucket);
+        });
+      }
+
+      if (activeFilters.client.size > 0) {
+        result = result.filter(r => activeFilters.client.has(r.clientId));
+      }
+
+      return result;
+    };
+
+    // Group dropdown
+    const groupWrap = el('div', { class: 'jira-group-wrap' });
+    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
+    const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    const groupTrigger = el('button', {
+      type: 'button',
+      class: 'jira-group-trigger'
+    });
+    const renderGroupTrigger = () => {
+      const selected = groupOptions.find(opt => opt.key === groupBy);
+      const label = groupBy === 'none' ? 'Group' : 'Group: ' + (selected ? selected.label : 'Group');
+      groupTrigger.classList.toggle('active', groupBy !== 'none');
+      groupTrigger.innerHTML = groupIconSvg + ' <span>' + escapeHtml(label) + '</span> ' + groupCaretSvg;
+    };
+    renderGroupTrigger();
+    const groupDropdown = el('div', { class: 'jira-dropdown jira-group-dropdown hidden' });
+    const renderGroupDropdown = () => {
+      groupDropdown.innerHTML = '';
+      groupOptions.forEach(opt => {
+        const active = groupBy === opt.key;
+        const btn = el('button', {
+          type: 'button',
+          class: 'jira-group-option' + (active ? ' active' : ''),
+          html: escapeHtml(opt.label) + (active ? ' <span class="checkmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '')
+        });
+        btn.addEventListener('click', () => {
+          groupBy = opt.key;
+          App.saveGroupBy('operations', groupBy);
+          renderGroupTrigger();
+          renderGroupDropdown();
+          groupDropdown.classList.add('hidden');
+          refresh();
+        });
+        groupDropdown.appendChild(btn);
+      });
+    };
+    renderGroupDropdown();
+    groupTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      filterDropdown.classList.add('hidden');
+      groupDropdown.classList.toggle('hidden');
+    });
+    groupWrap.appendChild(groupTrigger);
+    groupWrap.appendChild(groupDropdown);
+
+    // Filter dropdown
+    const filterWrap = el('div', { class: 'jira-filter-wrap' });
+    const filterTrigger = el('button', {
+      type: 'button',
+      class: 'jira-filter-trigger',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="11" y2="16"/></svg> Filter'
+    });
+    const filterBadge = el('span', { class: 'jira-filter-badge hidden' });
+    filterTrigger.appendChild(filterBadge);
+    const filterDropdown = el('div', { class: 'jira-dropdown jira-filter-dropdown hidden' });
+
+    const renderFilterValues = () => {
+      const options = categories[selectedCategory].getOptions();
+      const list = filterDropdown.querySelector('.jira-filter-values-list');
+      if (!list) return;
+      list.innerHTML = '';
+
+      const searchInput = filterDropdown.querySelector('.jira-filter-search');
+      const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+      let visibleCount = 0;
+      const allOptions = options.slice();
+
+      if (selectedCategory === 'dueDate') {
+        const dateWrap = el('div', { class: 'jira-filter-select-date-wrap' });
+
+        let activeCustomDate = '';
+        activeFilters.dueDate.forEach(val => {
+          if (val.startsWith('DATE:')) activeCustomDate = val.slice(5);
+        });
+
+        const dateInput = el('input', {
+          type: 'date',
+          class: 'jira-filter-date-input',
+          value: activeCustomDate || ''
+        });
+
+        dateInput.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const val = dateInput.value;
+          Array.from(activeFilters.dueDate).forEach(v => {
+            if (v.startsWith('DATE:')) activeFilters.dueDate.delete(v);
+          });
+          if (val) {
+            activeFilters.dueDate.add(`DATE:${val}`);
+          }
+          saveCurrentFilters();
+          updateFilterUI();
+          refresh();
+          updateToolbar();
+        });
+
+        dateWrap.appendChild(dateInput);
+        list.appendChild(dateWrap);
+
+        if (!dateInput.dataset.mdpAttached && typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
+          setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
+        }
+      }
+
+      if (allOptions.length === 0) {
+        list.appendChild(el('div', { class: 'jira-filter-values-empty', text: 'No results' }));
+      } else {
+        allOptions.forEach(opt => {
+          const isChecked = activeFilters[selectedCategory].has(opt.value);
+          const isVisible = !query || opt.label.toLowerCase().includes(query);
+          if (isVisible) visibleCount++;
+
+          const row = el('button', {
+            type: 'button',
+            class: 'jira-filter-value-item' + (isVisible ? '' : ' hidden')
+          });
+          const checkbox = el('input', { type: 'checkbox', class: 'jira-filter-checkbox' });
+          checkbox.checked = isChecked;
+          checkbox.addEventListener('click', (e) => e.stopPropagation());
+
+          const label = el('span', { text: opt.label });
+          row.appendChild(checkbox);
+          row.appendChild(label);
+
+          row.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (activeFilters[selectedCategory].has(opt.value)) {
+              activeFilters[selectedCategory].delete(opt.value);
+            } else {
+              activeFilters[selectedCategory].add(opt.value);
+            }
+            saveCurrentFilters();
+            updateFilterUI();
+            refresh();
+            updateToolbar();
+          });
+
+          list.appendChild(row);
+        });
+      }
+
+      const footer = filterDropdown.querySelector('.jira-filter-values-footer');
+      if (footer) {
+        footer.innerHTML = '';
+        const selectedInCat = activeFilters[selectedCategory].size;
+        const clearCatBtn = el('button', {
+          type: 'button',
+          class: 'jira-filter-clear-cat' + (selectedInCat > 0 ? '' : ' disabled'),
+          text: 'Clear'
+        });
+        if (selectedInCat > 0) {
+          clearCatBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            activeFilters[selectedCategory].clear();
+            saveCurrentFilters();
+            updateFilterUI();
+            refresh();
+            updateToolbar();
+          });
+        }
+        footer.appendChild(clearCatBtn);
+        footer.appendChild(el('span', { class: 'jira-filter-footer-count', text: `${visibleCount} of ${allOptions.length}` }));
+      }
+    };
+
+    const updateFilterUI = () => {
+      const catList = filterDropdown.querySelector('.jira-filter-categories-list');
+      if (catList) {
+        const catKeys = Object.keys(categories);
+        catKeys.forEach((cat, index) => {
+          const catBtn = catList.children[index];
+          if (catBtn) {
+            catBtn.className = 'jira-filter-category' + (selectedCategory === cat ? ' active' : '');
+            catBtn.textContent = categories[cat].label;
+            if (activeFilters[cat].size > 0) {
+              catBtn.appendChild(el('span', { class: 'cat-count', text: String(activeFilters[cat].size) }));
+            }
+          }
+        });
+      }
+
+      const clearAllBtn = filterDropdown.querySelector('.jira-filter-clear-all');
+      if (clearAllBtn) {
+        const totalActive = getActiveFilterCount();
+        clearAllBtn.className = 'jira-filter-clear-all' + (totalActive > 0 ? '' : ' disabled');
+      }
+
+      renderFilterValues();
+    };
+
+    const renderFilterDropdown = () => {
+      filterDropdown.innerHTML = '';
+
+      const body = el('div', { class: 'jira-filter-body' });
+
+      // Left Pane: Categories
+      const leftPane = el('div', { class: 'jira-filter-categories' });
+      const catList = el('div', { class: 'jira-filter-categories-list' });
+
+      Object.keys(categories).forEach(cat => {
+        const catBtn = el('button', {
+          type: 'button',
+          class: 'jira-filter-category' + (selectedCategory === cat ? ' active' : '')
+        });
+        catBtn.appendChild(document.createTextNode(categories[cat].label));
+        if (activeFilters[cat].size > 0) {
+          catBtn.appendChild(el('span', { class: 'cat-count', text: String(activeFilters[cat].size) }));
+        }
+        catBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectedCategory = cat;
+          renderFilterDropdown();
+        });
+        catList.appendChild(catBtn);
+      });
+      leftPane.appendChild(catList);
+
+      const catFooter = el('div', { class: 'jira-filter-categories-footer' });
+      const totalActive = getActiveFilterCount();
+      const clearAllBtn = el('button', {
+        type: 'button',
+        class: 'jira-filter-clear-all' + (totalActive > 0 ? '' : ' disabled'),
+        text: 'Clear all'
+      });
+      clearAllBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (getActiveFilterCount() === 0) return;
+        Object.keys(activeFilters).forEach(cat => activeFilters[cat].clear());
+        App.clearSavedFilters('operations');
+        updateFilterUI();
+        refresh();
+        updateToolbar();
+      });
+      catFooter.appendChild(clearAllBtn);
+      leftPane.appendChild(catFooter);
+
+      // Right Pane: Values for selected category
+      const rightPane = el('div', { class: 'jira-filter-values' });
+      const valuesHeader = el('div', { class: 'jira-filter-values-header' });
+      const searchIcon = el('span', {
+        class: 'jira-filter-search-icon',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+      });
+      const searchInput = el('input', {
+        type: 'text',
+        class: 'jira-filter-search',
+        placeholder: `Search ${categories[selectedCategory].label.toLowerCase()}`
+      });
+      searchInput.addEventListener('input', () => {
+        renderFilterValues();
+      });
+      valuesHeader.appendChild(searchIcon);
+      valuesHeader.appendChild(searchInput);
+      rightPane.appendChild(valuesHeader);
+
+      const valuesList = el('div', { class: 'jira-filter-values-list' });
+      rightPane.appendChild(valuesList);
+
+      const valuesFooter = el('div', { class: 'jira-filter-values-footer' });
+      rightPane.appendChild(valuesFooter);
+
+      body.appendChild(leftPane);
+      body.appendChild(rightPane);
+      filterDropdown.appendChild(body);
+
+      // Global Footer: Keyboard shortcut hint
+      const globalFooter = el('div', { class: 'jira-filter-global-footer' });
+      const shortcutHint = el('div', {
+        class: 'jira-filter-shortcut-hint',
+        html: 'Press <kbd>Shift</kbd> + <kbd>F</kbd> to open and close'
+      });
+      globalFooter.appendChild(shortcutHint);
+      filterDropdown.appendChild(globalFooter);
+
+      renderFilterValues();
+    };
+
+    const toggleFilterDropdown = (e) => {
+      if (e) e.stopPropagation();
+      groupDropdown.classList.add('hidden');
+      const isHidden = filterDropdown.classList.contains('hidden');
+      if (isHidden) {
+        filterDropdown.classList.remove('hidden');
+        renderFilterDropdown();
+        const searchInput = filterDropdown.querySelector('.jira-filter-search');
+        if (searchInput) searchInput.focus();
+      } else {
+        filterDropdown.classList.add('hidden');
+      }
+    };
+
+    filterTrigger.addEventListener('click', (e) => {
+      toggleFilterDropdown(e);
+    });
+    filterTrigger._toggleFilterDropdown = toggleFilterDropdown;
+
+    filterWrap.appendChild(filterTrigger);
+    filterWrap.appendChild(filterDropdown);
+
+    // Clear filters button
+    const clearFiltersBtn = el('button', { type: 'button', class: 'jira-clear-filters hidden', text: 'Clear filters' });
+    clearFiltersBtn.addEventListener('click', () => {
+      Object.keys(activeFilters).forEach(cat => activeFilters[cat].clear());
+      App.clearSavedFilters('operations');
+      updateFilterUI();
+      refresh();
+      updateToolbar();
+    });
+
+    const updateToolbar = () => {
+      const count = getActiveFilterCount();
+      filterBadge.textContent = String(count);
+      filterBadge.classList.toggle('hidden', count === 0);
+      clearFiltersBtn.classList.toggle('hidden', count === 0);
+    };
+    updateToolbar();
+
+    jiraToolbar.appendChild(vmToggle);
+    jiraToolbar.appendChild(filterWrap);
+    jiraToolbar.appendChild(clearFiltersBtn);
+    if (viewMode === 'board') {
+      jiraToolbar.appendChild(groupWrap);
+    }
+    stickyContainer.appendChild(jiraToolbar);
+    wrapper.appendChild(stickyContainer);
+
+    // Use the shared global Shift+F shortcut listener (Operations builds its own toolbar)
+    if (typeof attachJiraGlobalShortcuts === 'function') attachJiraGlobalShortcuts();
+
+    // Close dropdowns when clicking outside (setup once)
+    if (!this._jiraToolbarClickListener) {
+      this._jiraToolbarClickListener = (e) => {
+        // If the target element was detached during click handling (e.g. datepicker OK/close or re-rendered list item), do NOT treat as outside click
+        if (!e.target || !e.target.isConnected) return;
+
+        const operationsContainer = document.querySelector('.operations-list-page, .operations-tab-page');
+        if (!operationsContainer) return;
+        if (
+          e.target.closest('.jira-group-wrap') ||
+          e.target.closest('.jira-filter-wrap') ||
+          e.target.closest('.mdp-overlay') ||
+          e.target.closest('.mdp-dialog') ||
+          e.target.closest('.mdp-wrapper') ||
+          e.target.closest('.mdp-container')
+        ) {
+          return;
+        }
+        operationsContainer.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+
+      };
+      document.addEventListener('click', this._jiraToolbarClickListener);
+    }
+
     const contentContainer = el('div');
     wrapper.appendChild(contentContainer);
+
+    // Grouped/phase board headers share the same sticky top as the ungrouped
+    // column headers. Use the module CSS variables so the value stays in sync
+    // when the toolbar wraps or the grouped-board-active class changes.
+    contentContainer.style.setProperty(
+      '--board-column-header-top',
+      'calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + var(--operations-toolbar-height, 0px))'
+    );
 
     const refresh = () => {
       while (contentContainer.firstChild) contentContainer.removeChild(contentContainer.firstChild);
@@ -2099,13 +2704,13 @@ const Workflow = {
         wr.isPendingApproval = true;
         wr.pendingChangeId = pc.id;
         wr.submittedBy = pc.submittedBy;
-        wr.status = 'Draft'; // Staged creations are draft
+        wr.status = 'Draft';
         return wr;
       });
 
       let wrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
 
       wrs = wrs.concat(pendingWrs.filter(r => {
@@ -2113,84 +2718,44 @@ const Workflow = {
         return matchesEntity;
       }));
 
-      // Scope visibility for Manager and Staff roles using central visibility helper
       const listTaskMap = this._tempTaskMap || buildTaskMap();
       wrs = wrs.filter(r => Auth.canViewWrWithTasks(r, listTaskMap));
-      if (priorityFilter.value) wrs = wrs.filter(r => r.priority === priorityFilter.value);
-      if (empFilter.searchText && empFilter.searchText.trim() !== '') {
-        const query = empFilter.searchText.trim().toLowerCase();
-        wrs = wrs.filter(r => {
-          const assignedUser = r.assignedTo ? DB.getById('users', r.assignedTo) : null;
-          if (assignedUser && assignedUser.name.toLowerCase().includes(query)) return true;
-          const tasks = DB.getWhere('tasks', t => t.workRequestId === r.id);
-          return tasks.some(t => {
-            if (t.assigneeId) {
-              const u = DB.getById('users', t.assigneeId);
-              if (u && u.name.toLowerCase().includes(query)) return true;
-            }
-            if (t.assigneeName && t.assigneeName.toLowerCase().includes(query)) return true;
-            return false;
-          });
-        });
-      } else if (empFilter.value) {
-        wrs = wrs.filter(r => r.assignedTo === empFilter.value);
-      }
-      const selectedClient = clientFilter.value ? DB.getById('clients', clientFilter.value) : null;
-      if (selectedClient && selectedClient.name === clientFilter.searchText) {
-        wrs = wrs.filter(r => r.clientId === clientFilter.value);
-      } else if (clientFilter.searchText && clientFilter.searchText.trim() !== '') {
-        const query = clientFilter.searchText.trim().toLowerCase();
-        wrs = wrs.filter(r => {
-          const client = DB.getById('clients', r.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
-      }
-      if (dateFrom.value) wrs = wrs.filter(r => r.dueDate && r.dueDate >= dateFrom.value);
-      if (dateTo.value) wrs = wrs.filter(r => r.dueDate && r.dueDate <= dateTo.value);
-      if (statusFilter.value) wrs = wrs.filter(r => r.status === statusFilter.value);
+      wrs = applyFilters(wrs, listTaskMap);
 
-      if (viewMode === 'table') this.refreshTable(contentContainer, wrs);
-      else if (viewMode === 'board') this.refreshBoard(contentContainer, wrs);
-      else this.refreshListCompact(contentContainer, wrs);
+      const hasActiveFilters = getActiveFilterCount() > 0;
+      if (viewMode === 'table') this.refreshTable(contentContainer, wrs, hasActiveFilters);
+      else if (viewMode === 'board') this.refreshBoard(contentContainer, wrs, groupBy, stickyContainer);
+      else this.refreshListCompact(contentContainer, wrs, hasActiveFilters);
+
+      // Re-measure sticky offsets after the next paint so toolbar height changes
+      // (grouped-board-active toggle, wrapping filters) are reflected.
+      requestAnimationFrame(() => this.updateStickyOffsets());
     };
 
-    [priorityFilter, empFilter, clientFilter, dateFrom, dateTo, statusFilter].forEach(el => el.addEventListener('change', () => { saveCurrentFilters(); refresh(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); refresh(); }));
     refresh();
 
     return wrapper;
   },
 
-  refreshTable(container, wrs) {
+  refreshTable(container, wrs, hasActiveFilters = false) {
     const canEdit = Auth.can('workflow:edit');
     const canApprove = Auth.can('workflow:approve');
     if (wrs.length === 0) {
       const entity = Auth.activeEntity;
       const allWrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
-      const savedFilters = App.restoreFilters('operations');
-      const hasActiveFilters = savedFilters && Object.values(savedFilters).some(v => v && String(v).trim() !== '');
+      const savedHasFilters = App.hasSavedFilters('operations');
+      hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
       if (hasWorkRequests && hasActiveFilters) {
-        container.appendChild(renderEmptyStateV2({
-          variant: 'filtered-empty',
-          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-          title: 'No work requests match your filters',
-          body: 'Try adjusting or clearing the active filters to see more results.',
-          actions: [
-            {
-              text: 'Clear filters',
-              className: 'btn btn-primary btn-sm',
-              onClick: () => {
-                App.clearSavedFilters('operations');
-                App.handleRoute();
-              }
-            }
-          ]
-        }));
+        container.appendChild(renderFilterEmptyState(
+          'No work requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('operations'); App.handleRoute(); } }]
+        ));
       } else {
         const actions = [];
         if (canEdit) {
@@ -2267,10 +2832,16 @@ const Workflow = {
       tr.appendChild(statusTd);
       
       tr.appendChild(el('td', { text: wr.dueDate ? formatDate(wr.dueDate) : '—' }));
-      tr.appendChild(el('td', { text: assignedUser?.name || '—' }));
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', (e) => {
+        if (!e.target.closest('button, a, input, select')) {
+          location.hash = '#operations/detail/' + wr.id;
+        }
+      });
+
       const tdAct = el('td');
       const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#operations/detail/' + wr.id; });
+      viewBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#operations/detail/' + wr.id; });
       tdAct.appendChild(viewBtn);
       
       if (isPendingWr(wr)) {
@@ -2318,6 +2889,32 @@ const Workflow = {
             tdAct.appendChild(blockerBadge);
           }
         }
+
+        if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+          const cancelBtn = el('button', {
+            class: 'btn btn-danger btn-sm',
+            text: 'Cancel',
+            style: 'margin-left: 4px;'
+          });
+          cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.cancelWorkRequest(wr.id);
+          });
+          tdAct.appendChild(cancelBtn);
+        }
+
+        if (wr.status === 'Completed' && !wr.archived) {
+          const archiveBtn = el('button', {
+            class: 'btn btn-primary btn-sm',
+            text: 'Archive',
+            style: 'margin-left: 4px;'
+          });
+          archiveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.archiveWorkRequest(wr.id);
+          });
+          tdAct.appendChild(archiveBtn);
+        }
       }
       tr.appendChild(tdAct);
       tbody.appendChild(tr);
@@ -2326,34 +2923,23 @@ const Workflow = {
     container.appendChild(table);
   },
 
-  refreshBoard(container, wrs) {
+  refreshBoard(container, wrs, groupBy = 'none', hasActiveFilters = false, toolbarContainer = null) {
     if (wrs.length === 0) {
       const entity = Auth.activeEntity;
       const allWrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
-      const savedFilters = App.restoreFilters('operations');
-      const hasActiveFilters = savedFilters && Object.values(savedFilters).some(v => v && String(v).trim() !== '');
+      const savedHasFilters = App.hasSavedFilters('operations');
+      hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
       if (hasWorkRequests && hasActiveFilters) {
-        container.appendChild(renderEmptyStateV2({
-          variant: 'filtered-empty',
-          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-          title: 'No work requests match your filters',
-          body: 'Try adjusting or clearing the active filters to see more results.',
-          actions: [
-            {
-              text: 'Clear filters',
-              className: 'btn btn-primary btn-sm',
-              onClick: () => {
-                App.clearSavedFilters('operations');
-                App.handleRoute();
-              }
-            }
-          ]
-        }));
+        container.appendChild(renderFilterEmptyState(
+          'No work requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('operations'); App.handleRoute(); } }]
+        ));
       } else {
         const canEdit = Auth.can('workflow:edit');
         const actions = [];
@@ -2419,246 +3005,486 @@ const Workflow = {
       { key: 'completed', label: 'Completed', statuses: ['Completed'], targetStatus: 'Completed', color: '#10b981' }
     ];
 
-    // Normalize per-column board orders so cards render consistently and gaps
-    // from deleted/moved cards do not break drop midpoint calculations.
-    const sortedWrs = [];
-    boardPhases.forEach(phase => {
-      const phaseWrs = wrs.filter(wr => phase.statuses.includes(wr.status));
-      phaseWrs.sort((a, b) => {
-        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
-        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
-        if (oa !== null && ob !== null) return oa - ob;
-        if (oa !== null) return -1;
-        if (ob !== null) return 1;
-        return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-      });
-      phaseWrs.forEach((wr, idx) => {
-        const newOrder = (idx + 1) * 1000;
-        if (wr.boardOrder !== newOrder) {
-          wr.boardOrder = newOrder;
-          DB.update('workRequests', wr.id, { boardOrder: newOrder });
-        }
-      });
-      sortedWrs.push(...phaseWrs);
-    });
-
     let cardNumber = 1;
 
-    KanbanBoard.render({
-      container,
-      items: sortedWrs,
-      columns: boardPhases.map(phase => {
-        const isDraft = phase.key === 'draft';
-        const col = {
-          ...phase,
-          icon: 'phase',
-          emptyState: (isDraft && canEdit)
-            ? false
-            : { variant: 'compact', title: 'No work requests', body: '' }
-        };
-        if (isDraft && canEdit) {
-          col.addButton = { label: 'Add Work Request', onClick: openNewWrForm };
-          col.addCard = {
-            label: 'Add Work Request',
-            onClick: openNewWrForm
-          };
-        }
-        return col;
-      }),
-      renderCard(wr, phase) {
-        const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
-        const completedTasks = tasks.filter(t => t.status === 'Completed').length;
-        const totalTasks = tasks.length;
-        const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-        const allComments = tasks.reduce((acc, t) => acc + (t.comments?.length || 0), 0);
+    const renderBoardCard = (wr, phase) => {
+      const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
+      const completedTasks = tasks.filter(t => t.status === 'Completed').length;
+      const totalTasks = tasks.length;
+      const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      const allComments = tasks.reduce((acc, t) => acc + (t.comments?.length || 0), 0);
 
-        const assigneeIds = [...new Set(tasks.map(t => t.assigneeId || t.assignedTo).filter(Boolean))];
-        let assignees = assigneeIds.map(id => DB.getById('users', id)).filter(Boolean);
-        if (wr.isPendingApproval && assignees.length === 0) {
-          const names = [...new Set(tasks.map(t => t.assigneeName).filter(Boolean))];
-          names.forEach(name => {
-            const u = DB.getWhere('users', usr => usr.name.toLowerCase() === name.toLowerCase())[0];
-            if (u) assignees.push(u);
-          });
-        }
-
-        const client = DB.getById('clients', wr.clientId);
-        const priorityConfig = {
-          'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
-          'Priority': { label: 'Priority', cls: 'card-v2-priority-urgent' },
-          'High': { label: 'High', cls: 'card-v2-priority-urgent' },
-          'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
-          'Low': { label: 'Low', cls: 'card-v2-priority-low' }
-        }[wr.priority] || { label: wr.priority || 'Normal', cls: 'card-v2-priority-normal' };
-
-        const allChecklistItems = tasks.flatMap(t => t.checklist || []);
-        const documentItems = allChecklistItems.filter(c => c.category === 'document');
-        const subtaskItems = allChecklistItems.filter(c => c.category === 'subtask');
-        const completedDocs = documentItems.filter(c => c.completed).length;
-        const completedSubtasks = subtaskItems.filter(c => c.completed).length;
-
-        const counts = [{
-          icon: BoardCardIcons.task,
-          value: `${completedTasks}/${totalTasks}`,
-          title: `${completedTasks} of ${totalTasks} tasks completed`
-        }];
-        if (documentItems.length > 0) {
-          counts.push({
-            icon: BoardCardIcons.document,
-            value: `${completedDocs}/${documentItems.length}`,
-            title: `${completedDocs} of ${documentItems.length} required documents complete`
-          });
-        }
-        if (subtaskItems.length > 0) {
-          counts.push({
-            icon: BoardCardIcons.checklist,
-            value: `${completedSubtasks}/${subtaskItems.length}`,
-            title: `${completedSubtasks} of ${subtaskItems.length} sub-tasks complete`
-          });
-        }
-        if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
-
-        return buildCompactBoardCard({
-          key: 'WR-' + cardNumber++,
-          progress,
-          statusColor: phase.color,
-          title: wr.title,
-          description: client?.name || '—',
-          detail: (wr.description || '').trim(),
-          date: wr.dueDate ? formatDate(wr.dueDate) : '',
-          priority: priorityConfig.label,
-          priorityClass: priorityConfig.cls,
-          avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
-          counts,
-          onClick: () => { location.hash = '#operations/detail/' + wr.id; }
+      const assigneeIds = [...new Set(tasks.map(t => t.assigneeId || t.assignedTo).filter(Boolean))];
+      let assignees = assigneeIds.map(id => DB.getById('users', id)).filter(Boolean);
+      if (wr.isPendingApproval && assignees.length === 0) {
+        const names = [...new Set(tasks.map(t => t.assigneeName).filter(Boolean))];
+        names.forEach(name => {
+          const u = DB.getWhere('users', usr => usr.name.toLowerCase() === name.toLowerCase())[0];
+          if (u) assignees.push(u);
         });
-      },
-      cardMenuItems(wr) {
-        const transitionStatus = self.getPhaseTransitionStatus(wr.id);
-        const showQuickRoute = canApprove && transitionStatus && transitionStatus.canTransition && transitionStatus.nextPhase;
-        const items = [];
-
-        items.push({
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { location.hash = '#operations/detail/' + wr.id; }
-        });
-
-        if (showQuickRoute) {
-          items.push({
-            label: `Advance to ${transitionStatus.nextPhase}`,
-            className: 'primary',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
-            onClick: () => self.transitionWorkRequest(wr.id)
-          });
-        }
-
-        if (canEdit && !wr.isPendingApproval) {
-          items.push({
-            label: 'Edit',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-            onClick: () => { location.hash = '#operations/form/' + wr.id; }
-          });
-        }
-
-        if (wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-          items.push({
-            label: 'Cancel',
-            className: 'danger',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
-            onClick: () => self.cancelWorkRequest(wr.id)
-          });
-        }
-
-        if (canEdit && wr.status === 'Draft' && !wr.isPendingApproval) {
-          items.push({
-            label: 'Delete',
-            className: 'danger',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-            onClick: () => self.showConfirm('Delete Work Request', `Are you sure you want to delete "${wr.title}" and all its tasks?`, () => {
-              DB.getWhere('tasks', t => t.workRequestId === wr.id).forEach(t => DB.delete('tasks', t.id));
-              DB.delete('workRequests', wr.id);
-              App.handleRoute();
-            }, 'danger')
-          });
-        }
-
-        return items;
-      },
-      drag: {
-        enabled: true,
-        canDrag: () => canApprove,
-        canDrop: () => true,
-        orderField: 'boardOrder',
-        onDrop({ item, targetStatus, newOrder }) {
-          const wr = item;
-          const isPhaseChange = wr.status !== targetStatus;
-          if (isPhaseChange && !canApprove) {
-            self.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
-            return;
-          }
-
-          const applyMove = () => {
-            const changes = { boardOrder: newOrder };
-            if (isPhaseChange) {
-              changes.status = targetStatus;
-              changes.updatedAt = new Date().toISOString();
-            }
-            DB.update('workRequests', wr.id, changes);
-            App.handleRoute();
-          };
-
-          if (!isPhaseChange) {
-            applyMove();
-            return;
-          }
-
-          const transitionStatus = self.getPhaseTransitionStatus(wr.id);
-          if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
-            const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
-            const blockers = transitionStatus?.missing?.length
-              ? transitionStatus.missing.join('\n- ')
-              : `This Work Request cannot be routed to "${targetPhaseLabel}" yet.`;
-            self.showMessage('Routing Blocked', `Cannot move "${wr.title}" to ${targetPhaseLabel}:\n- ${blockers}`, 'warning');
-            return;
-          }
-
-          self.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
-        }
       }
-    });
+
+      const client = DB.getById('clients', wr.clientId);
+      const priorityConfig = {
+        'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
+        'Priority': { label: 'Priority', cls: 'card-v2-priority-priority' },
+        'High': { label: 'High', cls: 'card-v2-priority-urgent' },
+        'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
+        'Low': { label: 'Low', cls: 'card-v2-priority-low' }
+      }[wr.priority] || { label: wr.priority || 'Priority', cls: 'card-v2-priority-normal' };
+
+      const allChecklistItems = tasks.flatMap(t => t.checklist || []);
+      const documentItems = allChecklistItems.filter(c => c.category === 'document');
+      const subtaskItems = allChecklistItems.filter(c => c.category === 'subtask');
+      const completedDocs = documentItems.filter(c => c.completed).length;
+      const completedSubtasks = subtaskItems.filter(c => c.completed).length;
+
+      const counts = [{
+        icon: BoardCardIcons.task,
+        value: `${completedTasks}/${totalTasks}`,
+        title: `${completedTasks} of ${totalTasks} tasks completed`
+      }];
+      if (documentItems.length > 0) {
+        counts.push({
+          icon: BoardCardIcons.document,
+          value: `${completedDocs}/${documentItems.length}`,
+          title: `${completedDocs} of ${documentItems.length} required documents complete`
+        });
+      }
+      if (subtaskItems.length > 0) {
+        counts.push({
+          icon: BoardCardIcons.checklist,
+          value: `${completedSubtasks}/${subtaskItems.length}`,
+          title: `${completedSubtasks} of ${subtaskItems.length} sub-tasks complete`
+        });
+      }
+      if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
+
+      return buildCompactBoardCard({
+        key: 'WR-' + cardNumber++,
+        progress,
+        statusColor: phase.color,
+        title: wr.title,
+        description: client?.name || '—',
+        detail: (wr.description || '').trim(),
+        date: wr.dueDate ? formatDate(wr.dueDate) : '',
+        priority: priorityConfig.label,
+        priorityClass: priorityConfig.cls,
+        avatars: assignees.slice(0, 3).map(u => ({ name: u.name, avatarUrl: u.avatarUrl })),
+        counts,
+        onClick: () => { location.hash = '#operations/detail/' + wr.id; }
+      });
+    };
+
+    const renderCardMenuItems = (wr) => {
+      const transitionStatus = self.getPhaseTransitionStatus(wr.id);
+      const showQuickRoute = transitionStatus && transitionStatus.canTransition && transitionStatus.nextPhase;
+      const items = [];
+
+      items.push({
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { location.hash = '#operations/detail/' + wr.id; }
+      });
+
+      if (showQuickRoute) {
+        const isAdmin = Auth.user?.role === 'Admin';
+        items.push({
+          label: isAdmin ? `Advance to ${transitionStatus.nextPhase}` : `Request Advance to ${transitionStatus.nextPhase}`,
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+          onClick: () => self.transitionWorkRequest(wr.id)
+        });
+      }
+
+      if (canEdit && !wr.isPendingApproval) {
+        items.push({
+          label: 'Edit',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+          onClick: () => { location.hash = '#operations/form/' + wr.id; }
+        });
+      }
+
+      if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+        items.push({
+          label: 'Cancel',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+          onClick: () => self.cancelWorkRequest(wr.id)
+        });
+      }
+
+      if (wr.status === 'Completed' && !wr.archived) {
+        items.push({
+          label: 'Archive',
+          className: 'primary',
+          icon: ArchivePage.icons.archive,
+          onClick: () => self.archiveWorkRequest(wr.id)
+        });
+      }
+
+      if (canEdit && wr.status === 'Draft' && !wr.isPendingApproval) {
+        items.push({
+          label: 'Delete',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          onClick: () => self.showConfirm('Delete Work Request', `Are you sure you want to delete "${wr.title}" and all its tasks?`, () => {
+            DB.getWhere('tasks', t => t.workRequestId === wr.id).forEach(t => DB.delete('tasks', t.id));
+            DB.delete('workRequests', wr.id);
+            App.handleRoute();
+          }, 'danger')
+        });
+      }
+
+      return items;
+    };
+
+    const handleBoardDrop = ({ item, targetStatus, newOrder }) => {
+      const wr = item;
+      const isPhaseChange = wr.status !== targetStatus;
+      if (isPhaseChange && !canApprove) {
+        self.showMessage('Permission Denied', 'Only Admin can route work request phases.', 'danger');
+        return;
+      }
+
+      const applyMove = () => {
+        const changes = { boardOrder: newOrder };
+        if (isPhaseChange) {
+          changes.status = targetStatus;
+          changes.updatedAt = new Date().toISOString();
+        }
+        DB.update('workRequests', wr.id, changes);
+        App.handleRoute();
+      };
+
+      if (!isPhaseChange) {
+        applyMove();
+        return;
+      }
+
+      const targetPhaseLabel = boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus;
+
+      const transitionStatus = self.getPhaseTransitionStatus(wr.id);
+      if (!transitionStatus || transitionStatus.nextPhase !== targetStatus || !transitionStatus.canTransition) {
+        const blockers = transitionStatus?.missing?.length
+          ? transitionStatus.missing
+          : [`This Work Request cannot be routed to "${targetPhaseLabel}" yet.`];
+        self.showRoutingBlocker('Routing Blocked', blockers, { wrId: wr.id });
+        return;
+      }
+
+      self.showConfirm('Confirm Move', `Move "${wr.title}" to ${boardPhases.find(p => p.targetStatus === targetStatus)?.label || targetStatus}?`, applyMove, 'success');
+    };
+
+    const dragConfig = {
+      enabled: true,
+      canDrag: () => canApprove,
+      canDrop: ({ item, targetStatus }) => {
+        if (item.status === targetStatus) return true;
+        const currentPhaseIdx = boardPhases.findIndex(p => p.statuses.includes(item.status));
+        const targetPhaseIdx = boardPhases.findIndex(p => p.targetStatus === targetStatus);
+        if (currentPhaseIdx === -1 || targetPhaseIdx === -1) return false;
+        // Silently reject backward moves so cards return to their original position.
+        return targetPhaseIdx > currentPhaseIdx;
+      },
+      orderField: 'boardOrder',
+      onDrop: handleBoardDrop
+    };
+
+    if (groupBy === 'none') {
+      // Normalize per-column board orders so cards render consistently and gaps
+      // from deleted/moved cards do not break drop midpoint calculations.
+      toolbarContainer?.classList.remove('grouped-board-active');
+      const sortedWrs = [];
+      boardPhases.forEach(phase => {
+        const phaseWrs = wrs.filter(wr => phase.statuses.includes(wr.status));
+        phaseWrs.sort((a, b) => {
+          const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+          const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+          if (oa !== null && ob !== null) return oa - ob;
+          if (oa !== null) return -1;
+          if (ob !== null) return 1;
+          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+        });
+        phaseWrs.forEach((wr, idx) => {
+          const newOrder = (idx + 1) * 1000;
+          if (wr.boardOrder !== newOrder) {
+            wr.boardOrder = newOrder;
+            DB.update('workRequests', wr.id, { boardOrder: newOrder });
+          }
+        });
+        sortedWrs.push(...phaseWrs);
+      });
+
+      KanbanBoard.render({
+        container,
+        items: sortedWrs,
+        columns: boardPhases.map(phase => {
+          const isDraft = phase.key === 'draft';
+          const col = {
+            ...phase,
+            icon: 'phase',
+            emptyState: { variant: 'compact', title: 'No work requests', body: '' }
+          };
+          if (isDraft && canEdit) {
+            col.addButton = { label: 'Add Work Request', onClick: openNewWrForm };
+          }
+          return col;
+        }),
+        renderCard: renderBoardCard,
+        cardMenuItems: renderCardMenuItems,
+        drag: dragConfig
+      });
+    } else {
+      // Grouped board: extend the toolbar background through its bottom margin
+      // so cards cannot be seen through the gap while scrolling.
+      toolbarContainer?.classList.add('grouped-board-active');
+      // Grouped board: stacked swimlanes. Each group is a collapsible row with a
+      // sticky header that shows the group title and the phase column headings;
+      // deeper headers naturally replace earlier sticky ones as the user scrolls.
+      const getGroupName = (wr) => {
+        if (groupBy === 'assignee') {
+          const names = this.getWorkRequestAssigneeNames(wr);
+          if (names.size === 0) return 'Unassigned';
+          return Array.from(names).sort().join(', ');
+        }
+        if (groupBy === 'client') {
+          const client = DB.getById('clients', wr.clientId);
+          return client?.name || 'No Client';
+        }
+        if (groupBy === 'priority') {
+          const p = (wr.priority || '').toString().trim().toLowerCase();
+          if (p.includes('urg') || p.includes('high')) return 'Urgent';
+          if (p.includes('low')) return 'Low';
+          return 'Priority';
+        }
+        return 'All';
+      };
+
+      const groupMap = new Map();
+      wrs.forEach(wr => {
+        const name = getGroupName(wr);
+        if (!groupMap.has(name)) groupMap.set(name, []);
+        groupMap.get(name).push(wr);
+      });
+
+      const specialLast = groupBy === 'assignee' ? 'Unassigned' : groupBy === 'client' ? 'No Client' : null;
+      const groupNames = Array.from(groupMap.keys()).sort((a, b) => {
+        if (specialLast && a === specialLast) return 1;
+        if (specialLast && b === specialLast) return -1;
+        if (groupBy === 'priority') {
+          const order = { 'Urgent': 0, 'Priority': 1, 'Low': 2 };
+          return (order[a] ?? 99) - (order[b] ?? 99);
+        }
+        return a.localeCompare(b);
+      });
+
+      // Normalize boardOrder within each group-phase so midpoint drops stay clean.
+      groupNames.forEach(name => {
+        const groupWrs = groupMap.get(name);
+        boardPhases.forEach(phase => {
+          const phaseWrs = groupWrs.filter(wr => phase.statuses.includes(wr.status));
+          phaseWrs.sort((a, b) => {
+            const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+            const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+            if (oa !== null && ob !== null) return oa - ob;
+            if (oa !== null) return -1;
+            if (ob !== null) return 1;
+            return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+          });
+          phaseWrs.forEach((wr, idx) => {
+            const newOrder = (idx + 1) * 1000;
+            if (wr.boardOrder !== newOrder) {
+              wr.boardOrder = newOrder;
+              DB.update('workRequests', wr.id, { boardOrder: newOrder });
+            }
+          });
+        });
+      });
+
+      const COLLAPSED_KEY = 'erp_operations_collapsed_groups';
+      const getCollapsedSet = () => {
+        try {
+          const raw = JSON.parse(sessionStorage.getItem(COLLAPSED_KEY) || '[]');
+          return new Set(Array.isArray(raw) ? raw : []);
+        } catch (e) { return new Set(); }
+      };
+      const saveCollapsedSet = (set) => {
+        try { sessionStorage.setItem(COLLAPSED_KEY, JSON.stringify([...set])); } catch (e) { /* ignore */ }
+      };
+
+      const hashString = (str) => {
+        let h = 0;
+        for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+        return h;
+      };
+      const avatarPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+      const groupColor = (str) => avatarPalette[Math.abs(hashString(str)) % avatarPalette.length];
+      const getInitials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('');
+
+      const groupedBoard = el('div', { class: 'board-grouped-rows' });
+
+      groupNames.forEach(name => {
+        const groupWrs = groupMap.get(name);
+        const sectionKey = `group-${groupBy}-${name}`;
+        const collapsedSet = getCollapsedSet();
+        const isCollapsed = collapsedSet.has(sectionKey);
+
+        const section = el('div', { class: 'board-group-section' + (isCollapsed ? ' collapsed' : '') });
+        section.style.setProperty('--phase-count', String(boardPhases.length));
+
+        // Group title row (full-width, sticky)
+        const titleRow = el('div', { class: 'board-group-title-row' });
+        const titleCell = el('div', { class: 'board-group-title' });
+        const chevronBtn = el('button', {
+          type: 'button',
+          class: 'board-group-collapse',
+          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+        });
+        let displayName = name;
+        let avatar;
+        if (groupBy === 'assignee') {
+          const assigneeNames = name === 'Unassigned' ? [] : name.split(', ').filter(Boolean);
+          avatar = el('div', { class: 'board-group-avatars' });
+          if (assigneeNames.length === 0) {
+            const emptyAv = el('div', { class: 'board-group-avatar' });
+            emptyAv.textContent = '—';
+            emptyAv.style.backgroundColor = groupColor(displayName);
+            emptyAv.style.color = '#fff';
+            avatar.appendChild(emptyAv);
+          } else {
+            assigneeNames.slice(0, 5).forEach((assigneeName) => {
+              const user = DB.getWhere('users', u => u.name === assigneeName)[0];
+              const av = el('div', { class: 'avatar-xs', title: assigneeName });
+              av.style.backgroundColor = groupColor(assigneeName);
+              av.style.color = '#fff';
+              if (user?.avatarUrl) {
+                av.style.backgroundImage = "url('" + user.avatarUrl + "')";
+              } else {
+                av.textContent = getInitials(assigneeName);
+              }
+              avatar.appendChild(av);
+            });
+            if (assigneeNames.length > 5) {
+              const overflow = el('div', {
+                class: 'avatar-xs board-group-avatar-overflow',
+                text: '+' + (assigneeNames.length - 5),
+                title: assigneeNames.slice(5).join(', ')
+              });
+              avatar.appendChild(overflow);
+            }
+          }
+        } else {
+          avatar = el('div', { class: 'board-group-avatar' });
+          if (groupBy === 'client') {
+            const client = DB.getWhere('clients', c => c.name === name)[0];
+            displayName = client?.name || name;
+          }
+          avatar.textContent = getInitials(displayName);
+          avatar.style.backgroundColor = groupColor(displayName);
+          avatar.style.color = '#fff';
+        }
+
+        const nameWrap = el('div', { class: 'board-group-name-wrap' });
+        const nameLine = el('div', { class: 'board-group-name' });
+        nameLine.appendChild(document.createTextNode(displayName + ' '));
+        nameLine.appendChild(el('span', {
+          class: 'board-group-count',
+          text: '(' + groupWrs.length + ' item' + (groupWrs.length === 1 ? '' : 's') + ')'
+        }));
+        nameWrap.appendChild(nameLine);
+
+        titleCell.appendChild(chevronBtn);
+        titleCell.appendChild(avatar);
+        titleCell.appendChild(nameWrap);
+        titleRow.appendChild(titleCell);
+
+        const toggleSection = () => {
+          const set = getCollapsedSet();
+          const currently = set.has(sectionKey);
+          if (currently) set.delete(sectionKey);
+          else set.add(sectionKey);
+          saveCollapsedSet(set);
+          section.classList.toggle('collapsed', !currently);
+        };
+        titleCell.addEventListener('click', toggleSection);
+        chevronBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSection(); });
+
+        // Phase heading row (sits beneath the group title inside a single sticky wrapper)
+        const phaseRow = el('div', { class: 'board-group-phase-row' });
+        phaseRow.style.setProperty('--phase-count', String(boardPhases.length));
+        boardPhases.forEach(phase => {
+          const count = groupWrs.filter(wr => phase.statuses.includes(wr.status)).length;
+          const cell = el('div', { class: 'board-group-phase-header' });
+          cell.style.setProperty('--phase-color', phase.color);
+          cell.appendChild(el('div', { class: 'phase-header-top' }));
+          const headerBody = el('div', { class: 'phase-header-body' });
+          headerBody.appendChild(el('span', { class: 'board-column-dot', html: buildColumnStatusIcon({ key: phase.key, color: phase.color, icon: 'phase' }) }));
+          headerBody.appendChild(el('span', { class: 'phase-header-label', text: phase.label.toUpperCase() }));
+          headerBody.appendChild(el('span', { class: 'phase-header-count', text: count + ' OF ' + groupWrs.length }));
+          cell.appendChild(headerBody);
+          phaseRow.appendChild(cell);
+        });
+
+        const stickyWrap = el('div', { class: 'board-group-sticky-wrap' });
+        stickyWrap.appendChild(titleRow);
+        stickyWrap.appendChild(phaseRow);
+        section.appendChild(stickyWrap);
+
+        // Card columns
+        const body = el('div', { class: 'board-group-body' });
+        body.style.setProperty('--phase-count', String(boardPhases.length));
+        boardPhases.forEach(phase => {
+          const col = el('div', { class: 'board-group-column', 'data-target-status': phase.targetStatus });
+          col.style.setProperty('--column-phase-color', phase.color);
+          const phaseWrs = groupWrs.filter(wr => phase.statuses.includes(wr.status));
+          if (phaseWrs.length === 0) {
+            col.appendChild(renderEmptyStateV2({ variant: 'compact', title: 'No ' + phase.label.toLowerCase(), body: '' }));
+          } else {
+            phaseWrs.forEach(wr => {
+              const card = renderBoardCard(wr, phase);
+              card.dataset.itemId = wr.id;
+              const items = renderCardMenuItems(wr);
+              if (items.length > 0) KanbanBoard.attachCardMenu(card, items);
+              col.appendChild(card);
+            });
+          }
+          body.appendChild(col);
+        });
+        section.appendChild(body);
+        groupedBoard.appendChild(section);
+      });
+
+      container.appendChild(groupedBoard);
+
+      // Enable drag-and-drop for grouped board columns using the same rules as ungrouped.
+      KanbanBoard.attachDrag({
+        root: groupedBoard,
+        items: wrs,
+        drag: dragConfig
+      });
+    }
   },
 
-  refreshListCompact(container, wrs) {
+  refreshListCompact(container, wrs, hasActiveFilters = false) {
     const canEdit = Auth.can('workflow:edit');
     const canApprove = Auth.can('workflow:approve');
     if (wrs.length === 0) {
       const entity = Auth.activeEntity;
       const allWrs = DB.getWhere('workRequests', r => {
         const matchesEntity = (entity === 'ALL' ? Auth.user.entities.includes(r.entity) : r.entity === entity);
-        return matchesEntity && r.status !== 'Cancelled';
+        return matchesEntity && !r.archived && r.status !== 'Cancelled';
       });
-      const savedFilters = App.restoreFilters('operations');
-      const hasActiveFilters = savedFilters && Object.values(savedFilters).some(v => v && String(v).trim() !== '');
+      const savedHasFilters = App.hasSavedFilters('operations');
+      hasActiveFilters = hasActiveFilters || savedHasFilters;
       const hasWorkRequests = allWrs.length > 0;
 
       if (hasWorkRequests && hasActiveFilters) {
-        container.appendChild(renderEmptyStateV2({
-          variant: 'filtered-empty',
-          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-          title: 'No work requests match your filters',
-          body: 'Try adjusting or clearing the active filters to see more results.',
-          actions: [
-            {
-              text: 'Clear filters',
-              className: 'btn btn-primary btn-sm',
-              onClick: () => {
-                App.clearSavedFilters('operations');
-                App.handleRoute();
-              }
-            }
-          ]
-        }));
+        container.appendChild(renderFilterEmptyState(
+          'No work requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('operations'); App.handleRoute(); } }]
+        ));
       } else {
         const actions = [];
         if (canEdit) {
@@ -2992,7 +3818,7 @@ const Workflow = {
       const renderChecklist = () => {
         listContainer.innerHTML = '';
         if (normalizedChecklist.length === 0) {
-          listContainer.appendChild(el('div', { class: 'empty-state', text: 'No checklist items.' }));
+          listContainer.appendChild(renderEmptyState('No checklist items'));
         } else {
           normalizedChecklist.forEach((item, idx) => {
             const blocked = isChecklistBlocked(item, normalizedChecklist);
@@ -3289,7 +4115,7 @@ const Workflow = {
 
       const docsList = el('div', { class: 'details-content-list' });
       if ((task.taskDocuments || []).length === 0) {
-        docsList.appendChild(el('div', { class: 'empty-state', text: 'No documents attached.', style: 'margin-bottom: 8px;' }));
+        docsList.appendChild(renderEmptyState('No documents attached', null, { style: 'margin-bottom: 8px;' }));
       } else {
         const canEditDms = Auth.can('dms:edit');
         task.taskDocuments.forEach((d, dIdx) => {
@@ -3429,7 +4255,7 @@ const Workflow = {
       });
 
       if (logs.length === 0 && checklistLogGroups.length === 0) {
-        timeList.appendChild(el('div', { class: 'empty-state', text: 'No logs recorded.' }));
+        timeList.appendChild(renderEmptyState('No logs recorded'));
       } else {
         const buildTimeLogEntry = (l, subtaskName = null) => {
           const [y, m, d] = l.date.split('-').map(Number);
@@ -3497,7 +4323,7 @@ const Workflow = {
       const checklistDeps = (task.checklist || []).filter(item => item.dependsOn);
 
       if (taskPreds.length === 0 && checklistDeps.length === 0) {
-        depList.appendChild(el('div', { class: 'empty-state', text: 'No dependencies.' }));
+        depList.appendChild(renderEmptyState('No dependencies'));
       } else {
         taskPreds.forEach(pid => {
           const pTask = DB.getById('tasks', pid);
@@ -3608,55 +4434,6 @@ const Workflow = {
             e.stopPropagation();
             handler();
           });
-
-          // Status Badge Overlay
-          const req = (wr && wr.id) ? DB.getWhere('operationsRequests', r => r.workRequestId === wr.id && r.type === type).sort((a,b) => new Date(b.requestedAt) - new Date(a.requestedAt))[0] : null;
-          if (req) {
-            let dotColor = '';
-            let badgeText = '';
-            if (req.status === 'pending') {
-              dotColor = '#eab308'; // Amber yellow
-              badgeText = 'Pending';
-            } else if (req.status === 'fulfilled') {
-              dotColor = '#22c55e'; // Emerald green
-              badgeText = 'Fulfilled';
-            } else if (req.status === 'rejected') {
-              dotColor = '#ef4444'; // Red
-              badgeText = 'Rejected';
-            }
-
-            if (badgeText) {
-              const badge = el('span', { 
-                style: `
-                  position: absolute;
-                  top: 6px;
-                  right: 6px;
-                  display: flex;
-                  align-items: center;
-                  gap: 4px;
-                  font-size: 0.6875rem;
-                  font-weight: 500;
-                  padding: 2px 6px;
-                  border-radius: 9999px;
-                  background: ${dotColor}15;
-                  color: ${dotColor};
-                  border: 1px solid ${dotColor}30;
-                `
-              });
-              
-              const dot = el('span', {
-                style: `
-                  width: 6px;
-                  height: 6px;
-                  border-radius: 50%;
-                  background: ${dotColor};
-                `
-              });
-              badge.appendChild(dot);
-              badge.appendChild(document.createTextNode(badgeText));
-              card.appendChild(badge);
-            }
-          }
 
           return card;
         };
@@ -3880,17 +4657,17 @@ const Workflow = {
     const priorityGroup = el('div', { class: 'notion-prop' });
     priorityGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Priority' }));
     const prioritySel = el('select', { name: 'priority', class: 'notion-prop-select', required: true });
-    prioritySel.appendChild(el('option', { value: 'Normal', text: 'Normal' }));
     ['Urgent', 'Priority', 'Low Priority'].forEach(p => {
       const opt = el('option', { value: p, text: p });
       if (wr && wr.priority === p) opt.selected = true;
       prioritySel.appendChild(opt);
     });
-    if (wr && wr.priority && !['Normal','Urgent','Priority','Low Priority'].includes(wr.priority)) {
+    if (wr && wr.priority && !['Urgent','Priority','Low Priority'].includes(wr.priority)) {
       const fallbackOpt = el('option', { value: wr.priority, text: wr.priority });
       fallbackOpt.selected = true;
       prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
     }
+    if (!wr) prioritySel.value = 'Priority';
     priorityGroup.appendChild(prioritySel);
     propsGrid.appendChild(priorityGroup);
 
@@ -3994,7 +4771,7 @@ const Workflow = {
               }
 
               if (clientSel && template.clientId) clientSel.value = template.clientId;
-              if (prioritySel) prioritySel.value = 'Normal';
+              if (prioritySel) prioritySel.value = 'Priority';
 
               // Load template tasks
               this.loadTemplateTasks(templateId, tasksList);
@@ -4752,7 +5529,8 @@ const Workflow = {
     
     const ts = this.getPhaseTransitionStatus(wr.id);
     const showRouteButton = ts && ts.nextPhase && ts.nextPhase !== 'Cancelled';
-    const canCancel = canApprove && wr.status !== 'Completed' && wr.status !== 'Cancelled';
+    const isAdmin = Auth.user?.role === 'Admin';
+    const canCancel = isAdmin && wr.status !== 'Completed' && wr.status !== 'Cancelled';
     const phaseColors = {
       'Draft': '#6b6b6b',
       'Pre-processing': '#2f6feb',
@@ -4776,10 +5554,25 @@ const Workflow = {
       lifecycleActions.appendChild(cancelWrBtn);
     }
 
-    if (showRouteButton && canApprove) {
+    if (wr.status === 'Completed' && !wr.archived) {
+      const archiveBtn = el('button', {
+        class: 'btn btn-sm btn-primary',
+        text: 'Archive Work Request',
+        style: 'font-weight: 600; cursor: pointer; margin-right: 8px;'
+      });
+      archiveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.archiveWorkRequest(wr.id);
+      });
+      lifecycleActions.appendChild(archiveBtn);
+    }
+
+    if (showRouteButton) {
+      const isAdmin = Auth.user?.role === 'Admin';
+      const canRequest = !isAdmin && this.canRequestPhaseRouting();
       const routeBtn = el('button', {
         class: 'btn btn-sm btn-primary',
-        text: `Route to ${ts.nextPhase}`,
+        text: isAdmin ? `Route to ${ts.nextPhase}` : `Request Route to ${ts.nextPhase}`,
         style: `font-weight: 600; cursor: ${ts.canTransition ? 'pointer' : 'not-allowed'};`,
         disabled: !ts.canTransition
       });
@@ -5103,7 +5896,7 @@ const Workflow = {
         actionsWrap.appendChild(note);
       } else {
         addTaskBtn.addEventListener('click', () => {
-          this.showAddTaskModal(wr.id, () => App.handleRoute());
+          this.showAddTaskPanel(wr.id);
         });
         actionsWrap.appendChild(addTaskBtn);
       }
@@ -5184,7 +5977,7 @@ const Workflow = {
           className: 'btn btn-primary btn-sm',
           onClick: () => {
             if (wr.isPendingApproval) return;
-            this.showAddTaskModal(wr.id, () => App.handleRoute());
+            this.showAddTaskPanel(wr.id);
           }
         });
       }
@@ -5522,17 +6315,13 @@ const Workflow = {
             ...(container.employeeFilter ? [`employee: ${container.employeeFilter}`] : []),
             ...activeFilters
           ];
-          listWrapper.appendChild(renderEmptyStateV2({
-            variant: 'filtered-empty',
-            icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
-            title: 'No tasks match your filters',
-            body: filterNames.length > 0
+          listWrapper.appendChild(renderFilterEmptyState(
+            'No tasks match your filters',
+            filterNames.length > 0
               ? `Active filters: ${filterNames.join(', ')}. Clear them to see all ${tasks.length} tasks.`
               : 'Adjust your search or filters to find tasks.',
-            actions: [
-              { text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: clearTaskFilters }
-            ]
-          }));
+            [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: clearTaskFilters }]
+          ));
         } else {
           listWrapper.appendChild(renderEmptyStateV2({
             variant: 'zero-state',
@@ -5544,7 +6333,7 @@ const Workflow = {
                 text: '+ Add Task',
                 className: 'btn btn-primary btn-sm',
                 onClick: () => {
-                  this.showAddTaskModal(wr.id, () => App.handleRoute());
+                  this.showAddTaskPanel(wr.id);
                 }
               }
             ]
@@ -5606,11 +6395,11 @@ const Workflow = {
             const assigneeName = t.assigneeName || (t.assigneeId || t.assignedTo ? DB.getById('users', t.assigneeId || t.assignedTo)?.name : null);
             const priorityConfig = {
               'Urgent': { label: 'Urgent', cls: 'card-v2-priority-urgent' },
-              'Priority': { label: 'Priority', cls: 'card-v2-priority-urgent' },
+              'Priority': { label: 'Priority', cls: 'card-v2-priority-priority' },
               'High': { label: 'High', cls: 'card-v2-priority-urgent' },
               'Low Priority': { label: 'Low', cls: 'card-v2-priority-low' },
               'Low': { label: 'Low', cls: 'card-v2-priority-low' }
-            }[t.priority] || { label: t.priority || 'Normal', cls: 'card-v2-priority-normal' };
+            }[t.priority] || { label: t.priority || 'Priority', cls: 'card-v2-priority-normal' };
 
             const counts = [];
             if (comp.total > 0) counts.push({ icon: BoardCardIcons.checklist, value: `${comp.percent}%` });
@@ -6236,7 +7025,7 @@ const Workflow = {
         const renderChecklist = () => {
           checklistList.innerHTML = '';
           if (normalizedChecklist.length === 0) {
-            checklistList.appendChild(el('div', { class: 'empty-state', text: 'No checklist items.' }));
+            checklistList.appendChild(renderEmptyState('No checklist items'));
           } else {
             normalizedChecklist.forEach((item, idx) => {
               const blocked = isChecklistBlocked(item, normalizedChecklist);
@@ -6578,7 +7367,7 @@ const Workflow = {
 
         const docsList = el('div', { class: 'details-content-list' });
         if ((t.taskDocuments || []).length === 0) {
-          docsList.appendChild(el('div', { class: 'empty-state', text: 'No documents attached.' }));
+          docsList.appendChild(renderEmptyState('No documents attached'));
         } else {
           t.taskDocuments.forEach((d, dIdx) => {
             const item = el('div', { class: 'detail-item-v2', style: 'display:flex; justify-content:space-between; align-items:center;' });
@@ -6645,7 +7434,7 @@ const Workflow = {
               commentContainer.innerHTML = '';
               const list = el('div', { style: 'display:flex; flex-direction:column; gap:8px;' });
               if (!d.comments || d.comments.length === 0) {
-                list.appendChild(el('div', { class: 'empty-state', text: 'No comments for this document.', style: 'padding: 4px 0;' }));
+                list.appendChild(renderEmptyState('No comments for this document', null, { style: 'padding: 4px 0;' }));
               } else {
                 d.comments.forEach((c, cIdx) => {
                   const commentRow = el('div', { style: 'background:var(--surface); padding:8px 12px; border-radius:var(--radius-sm); border: 1px solid var(--border); position:relative;' });
@@ -6761,7 +7550,7 @@ const Workflow = {
           if (item.timeLogs && item.timeLogs.length > 0) checklistLogGroups.push({ item, logs: item.timeLogs });
         });
         if (logs.length === 0 && checklistLogGroups.length === 0) {
-          timeList.appendChild(el('div', { class: 'empty-state', text: isArchived ? 'Archived — time logging disabled.' : 'No logs recorded.' }));
+          timeList.appendChild(renderEmptyState(isArchived ? 'Archived' : 'No logs recorded', isArchived ? 'Time logging is disabled for archived items.' : null));
         } else {
           const buildTimeLogEntry = (l) => {
             const [y, m, d] = l.date.split('-').map(Number);
@@ -6800,7 +7589,7 @@ const Workflow = {
         const taskPreds = t.predecessors || [];
         const checklistDeps = (t.checklist || []).filter(item => item.dependsOn);
         if (taskPreds.length === 0 && checklistDeps.length === 0) {
-          depContent.appendChild(el('div', { class: 'empty-state', text: 'No dependencies.' }));
+          depContent.appendChild(renderEmptyState('No dependencies'));
         } else {
           taskPreds.forEach(pid => {
             const pTask = DB.getById('tasks', pid);
@@ -7788,7 +8577,7 @@ const Workflow = {
     });
   },
 
-  showAddTaskModal(wrId, onAdded) {
+  renderAddTaskForm(wrId) {
     let wr = DB.getById('workRequests', wrId);
     if (!wr) {
       const pc = DB.getById('pendingChanges', wrId) || 
@@ -7801,10 +8590,20 @@ const Workflow = {
     }
     if (wr && wr.isPendingApproval) {
       this.showMessage('Blocked', 'Tasks cannot be added while the Work Request is awaiting approval.', 'danger');
-      return;
+      return null;
     }
 
-    const form = el('form', { class: 'form-stacked' });
+    const form = el('form', { id: 'add-task-form', class: 'form-stacked notion-form' });
+
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const topActions = el('div', { class: 'form-actions-top' });
+    const saveBtn = el('button', { type: 'submit', form: 'add-task-form', class: 'btn btn-primary', text: 'Add Task' });
+    topActions.appendChild(saveBtn);
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#operations/detail/' + wrId));
+    topActions.appendChild(cancelBtn);
+    headerBar.appendChild(topActions);
+    form.appendChild(headerBar);
 
     // Standard Task Template state
     let checklistItems = [];
@@ -7822,12 +8621,14 @@ const Workflow = {
     templateGroup.appendChild(templateSel);
     form.appendChild(templateGroup);
 
-    // Task Title
-    const titleInput = el('input', { type: 'text', name: 'title', required: true });
-    form.appendChild(el('div', { class: 'form-group' }, [
-      el('label', { text: 'Task Title *' }),
-      titleInput
-    ]));
+    // ── Task Title free-form ──
+    const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    const titleInput = el('input', {
+      type: 'text', name: 'title', class: 'notion-freeform-input notion-title-input',
+      placeholder: 'New Task', required: true
+    });
+    titleSection.appendChild(titleInput);
+    form.appendChild(titleSection);
 
     // Checklist builder
     const checklistGroup = el('div', { class: 'form-group' });
@@ -8015,9 +8816,10 @@ const Workflow = {
     const priorityGroup = el('div', { class: 'form-group' });
     priorityGroup.appendChild(el('label', { text: 'Priority' }));
     const prioritySel = el('select', { name: 'priority' });
-    ['Normal', 'Low Priority', 'Priority', 'Urgent'].forEach(p => {
+    ['Priority', 'Low Priority', 'Urgent'].forEach(p => {
       prioritySel.appendChild(el('option', { value: p, text: p }));
     });
+    prioritySel.value = 'Priority';
     priorityGroup.appendChild(prioritySel);
     form.appendChild(priorityGroup);
 
@@ -8123,10 +8925,6 @@ const Workflow = {
       predMenu.appendChild(optionEl);
     });
 
-    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Add Task' });
-    form.appendChild(submitBtn);
-
-    const overlay = this.showModal('Add New Task', form, null);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;
@@ -8145,7 +8943,7 @@ const Workflow = {
         assigneeName: res.name,
         coAssignees: isDraft ? coAssignees.filter(Boolean) : [],
         status: (groundWorkerName || coAssignees.length > 0) ? 'Assigned' : 'Draft',
-        priority: data.priority || 'Normal',
+        priority: data.priority || 'Priority',
         dueDate: data.dueDate || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -8165,14 +8963,35 @@ const Workflow = {
         comments: []
       };
       const result = PendingChanges.submit('tasks', newTask, true);
-      if (result.approved) {
-        overlay.remove();
-        if (onAdded) onAdded();
-      } else {
-        overlay.remove();
-        Workflow.showMessage('Task Submitted', 'Your task has been submitted and is pending Manager approval.', 'success');
-        if (onAdded) onAdded();
-      }
+      const msgConfig = {
+        title: 'Task Added',
+        message: result.approved
+          ? 'Task has been added to the work request.'
+          : 'Task addition has been submitted for Manager approval.',
+        type: 'success'
+      };
+      closeFormPanelAndRoute('#operations/detail/' + wrId, msgConfig);
+    });
+
+    return form;
+  },
+
+  showAddTaskPanel(wrId) {
+    const form = this.renderAddTaskForm(wrId);
+    if (!form) return;
+    const fullPageRoute = '#operations/addTask/' + wrId;
+    openFormPanel({
+      icon: '✅',
+      title: null,
+      formContent: form,
+      formId: 'add-task-form',
+      viewContext: 'add-task-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      actions: [
+        { text: 'Add Task', class: 'btn btn-primary', type: 'submit', form: 'add-task-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations/detail/' + wrId) }
+      ]
     });
   },
 
@@ -8264,11 +9083,15 @@ const Workflow = {
     const priorityGroup = el('div', { class: 'form-group' });
     priorityGroup.appendChild(el('label', { text: 'Priority' }));
     const prioritySel = el('select', { name: 'priority' });
-    ['Normal', 'Low Priority', 'Priority', 'Urgent'].forEach(p => {
+    ['Priority', 'Low Priority', 'Urgent'].forEach(p => {
       const opt = el('option', { value: p, text: p });
       if (p === task.priority) opt.selected = true;
       prioritySel.appendChild(opt);
     });
+    if (task.priority && !['Priority', 'Low Priority', 'Urgent'].includes(task.priority)) {
+      const fallbackOpt = el('option', { value: task.priority, text: task.priority, selected: true });
+      prioritySel.insertBefore(fallbackOpt, prioritySel.firstChild);
+    }
     priorityGroup.appendChild(prioritySel);
     form.appendChild(priorityGroup);
 
@@ -8395,7 +9218,7 @@ const Workflow = {
         assigneeId: res.id,
         assigneeName: res.name,
         coAssignees: isDraft ? coAssignees.filter(Boolean) : task.coAssignees || [],
-        priority: data.priority || 'Normal',
+        priority: data.priority || 'Priority',
         dueDate: data.dueDate || '',
         predecessors: predecessors,
         updatedAt: new Date().toISOString()
@@ -8471,7 +9294,7 @@ const Workflow = {
     section.appendChild(el('h4', { text: 'Time Log' }));
     const logs = task.timeLogs || [];
     if (logs.length === 0) {
-      section.appendChild(el('p', { class: 'empty-state', text: 'No time logs recorded yet.' }));
+      section.appendChild(renderEmptyState('No time logs recorded yet'));
     } else {
       const logTable = el('table', { class: 'data-table' });
       logTable.appendChild(el('thead', {}, [
@@ -8507,7 +9330,7 @@ const Workflow = {
     section.appendChild(el('h4', { text: 'Comments' }));
     const comments = task.comments || [];
     if (comments.length === 0) {
-      section.appendChild(el('p', { class: 'empty-state', text: 'No comments yet.' }));
+      section.appendChild(renderEmptyState('No comments yet'));
     } else {
       const commentList = el('div');
       comments.forEach(c => {
@@ -8713,74 +9536,84 @@ const Workflow = {
     const entity = Auth.activeEntity;
     const templates = DB.getWhere('retainerTemplates', t => t.entity === entity);
 
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
 
-    const actions = el('div', { class: 'actions-bar' });
-    const addBtn = el('button', { class: 'btn btn-primary', text: 'Create Template' });
-    addBtn.addEventListener('click', () => {
-      this.templateEditingId = null;
-      const fullPageRoute = '#operations/templateForm/new';
-      openFormPanel({
-        icon: '📋', title: ' ',
-        formContent: this.renderTemplateForm(), formId: 'template-form',
-        viewContext: 'retainer-template-form',
-        fullPageRoute,
-        newTabRoute: fullPageRoute,
-        actions: [
-          { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-          { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
-        ]
-      });
-    });
-    actions.appendChild(addBtn);
-    wrapper.appendChild(actions);
-
-    if (templates.length === 0) {
-      wrapper.appendChild(el('p', { class: 'empty-state', text: 'No retainer templates found.' }));
-      return wrapper;
-    }
-
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Template', 'Client', 'Schedule', 'Professional Fee Amount', 'Tasks', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    templates.forEach(t => {
+    const backlogItems = templates.map(t => {
       const client = DB.getById('clients', t.clientId);
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.name }));
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: t.schedule || '—' }));
-      tr.appendChild(el('td', { text: formatPHP(t.pfAmount || 0) }));
-      tr.appendChild(el('td', { text: String((t.tasks || []).length) }));
-      const tdAct = el('td');
-
-      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-      editBtn.addEventListener('click', () => {
-        this.templateEditingId = t.id;
-        const tpl = DB.getById('retainerTemplates', t.id);
-        const fullPageRoute = `#operations/templateForm/${this.templateEditingId || 'new'}`;
-        openFormPanel({
-          icon: '📋', title: ' ',
-          formContent: this.renderTemplateForm(), formId: 'template-form',
-          viewContext: 'retainer-template-form',
-          fullPageRoute,
-          newTabRoute: fullPageRoute,
-          actions: [
-            { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-            { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute() }
-          ]
-        });
-      });
-      tdAct.appendChild(editBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+      return {
+        id: t.id,
+        name: t.name,
+        iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        tags: [
+          { text: client?.name || 'No Client', type: 'client' },
+          { text: t.schedule || '—', type: 'schedule', value: t.schedule, style: 'text-transform: capitalize;' },
+          { text: formatPHP(t.pfAmount || 0), type: 'amount' },
+          { text: String((t.tasks || []).length), type: 'points', title: 'Tasks count' }
+        ]
+      };
     });
-    table.appendChild(tbody);
-    wrapper.appendChild(table);
+
+    const backlog = JiraBacklogList.render({
+      title: 'Retainer Templates',
+      subtitle: 'recurring client service agreements, task schedules, and professional fee presets',
+      items: backlogItems,
+      emptyText: 'No retainer templates found',
+      rowIdPrefix: 'RT',
+      headerActions: [
+        {
+          text: '+ Create Template',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => {
+            this.templateEditingId = null;
+            const fullPageRoute = '#operations/templateForm/new';
+            openFormPanel({
+              icon: '📋', title: ' ',
+              formContent: this.renderTemplateForm(), formId: 'template-form',
+              viewContext: 'retainer-template-form',
+              fullPageRoute,
+              newTabRoute: fullPageRoute,
+              actions: [
+                { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
+                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
+              ]
+            });
+          }
+        }
+      ],
+      rowActions: (item) => [
+        {
+          text: 'Edit',
+          className: 'btn btn-secondary btn-xs',
+          onClick: () => {
+            this.templateEditingId = item.id;
+            const fullPageRoute = `#operations/templateForm/${item.id}`;
+            openFormPanel({
+              icon: '📋', title: ' ',
+              formContent: this.renderTemplateForm(), formId: 'template-form',
+              viewContext: 'retainer-template-form',
+              fullPageRoute,
+              newTabRoute: fullPageRoute,
+              actions: [
+                { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
+                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
+              ]
+            });
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-xs',
+          onClick: () => {
+            this.showConfirm('Delete Template', `Are you sure you want to delete "${item.name}"?`, () => {
+              DB.delete('retainerTemplates', item.id);
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ]
+    });
+
+    wrapper.appendChild(backlog);
     return wrapper;
   },
 
@@ -8810,7 +9643,7 @@ const Workflow = {
           DB.delete('retainerTemplates', template.id);
           this.view = 'templates'; 
           this.templateEditingId = null; 
-          App.handleRoute();
+          closeFormPanelAndRoute('#operations');
         }, 'danger');
       });
       topActions.appendChild(delBtn);
@@ -8981,64 +9814,108 @@ const Workflow = {
 
     this.view = 'templates';
     this.templateEditingId = null;
-    closeFormPanelAndRoute();
+    closeFormPanelAndRoute('#operations');
   },
 
   renderArchive() {
     const entity = Auth.activeEntity;
-    const canApprove = Auth.can('workflow:approve');
-    const archived = DB.getWhere('workRequests', wr => {
+    const self = this;
+    const isAdmin = Auth.user?.role === 'Admin';
+
+    const wrFilter = wr => {
       const wrEnt = (wr.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase());
       return matchesEntity && Auth.canViewWr(wr);
-    }).filter(wr => wr.status === 'Cancelled');
+    };
 
-    const container = el('div');
+    const accomplished = DB.getWhere('workRequests', wr => wrFilter(wr) && wr.status === 'Completed' && wr.archived === true);
+    const cancelled = DB.getWhere('workRequests', wr => wrFilter(wr) && wr.status === 'Cancelled');
 
-    if (archived.length === 0) {
-      container.appendChild(el('p', { text: 'Archive is empty.', class: 'empty-state' }));
-      return container;
-    }
-
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Title', 'Client', 'Priority', 'Status', 'Cancelled At', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    archived.forEach(wr => {
-      const client = DB.getById('clients', wr.clientId);
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: wr.title }));
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: wr.priority || '—' }));
-      tr.appendChild(el('td')).appendChild(this.statusBadge(wr.status));
-      tr.appendChild(el('td', { text: formatDate(wr.updatedAt) }));
-      const tdAct = el('td');
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#operations/detail/' + wr.id; });
-      tdAct.appendChild(viewBtn);
-      if (canApprove) {
-        const restoreBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Restore', style: 'margin-left:4px;' });
-        restoreBtn.addEventListener('click', () => {
-          this.showConfirm('Restore Work Request',
-            `Restore "${wr.title}" to Draft? All tasks will remain Cancelled and must be reassigned manually.`,
-            () => {
-              DB.update('workRequests', wr.id, { status: 'Draft', updatedAt: new Date().toISOString() });
-              App.handleRoute();
-            }, 'warning');
-        });
-        tdAct.appendChild(restoreBtn);
-      }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const rejectedRecords = DB.getWhere('pendingChanges', pc => {
+      if (pc.status !== 'rejected') return false;
+      if (pc.table === 'workRequests') return true;
+      if (pc.table === 'tasks' && pc.proposedData && pc.proposedData.workRequestId) return true;
+      return false;
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
 
-    return container;
+    const buildWrItem = (wr, category) => {
+      const client = DB.getById('clients', wr.clientId);
+      return {
+        id: wr.id,
+        category,
+        title: wr.title || '(untitled)',
+        meta: [
+          { icon: ArchivePage.icons.client, text: client?.name || '—' },
+          { icon: ArchivePage.icons.status, text: wr.status || '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(wr.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#operations/detail/' + wr.id; }
+          },
+          ...(category === 'accomplished' ? [{
+            label: 'Unarchive',
+            icon: ArchivePage.icons.unarchive,
+            className: 'primary',
+            onClick: () => self.unarchiveWorkRequest(wr.id)
+          }] : []),
+          ...(category === 'cancelled' && isAdmin ? [{
+            label: 'Restore to Draft',
+            icon: ArchivePage.icons.restore,
+            className: 'primary',
+            onClick: () => {
+              self.showConfirm('Restore Work Request',
+                `Restore "${wr.title}" to Draft? Tasks will remain Cancelled and must be reassigned manually.`,
+                () => {
+                  DB.update('workRequests', wr.id, { status: 'Draft', archived: false, updatedAt: new Date().toISOString() });
+                  App.handleRoute();
+                }, 'warning');
+            }
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = pc => {
+      const isTask = pc.table === 'tasks';
+      const data = pc.proposedData || {};
+      const wrId = isTask ? data.workRequestId : data.id;
+      const wr = DB.getById('workRequests', wrId);
+      const title = isTask ? `Task: ${data.title || '(untitled)'}` : `Work Request: ${data.title || '(untitled)'}`;
+      return {
+        id: pc.id,
+        category: 'rejected',
+        title: title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: wr ? (DB.getById('clients', wr.clientId)?.name || '—') : '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(pc.reviewedAt || pc.updatedAt || pc.requestedAt) },
+          { icon: ArchivePage.icons.status, text: pc.rejectionReason ? `Reason: ${pc.rejectionReason}` : 'Rejected' }
+        ],
+        actions: [
+          {
+            label: 'View Request',
+            icon: ArchivePage.icons.view,
+            onClick: () => {
+              if (wr) location.hash = '#operations/detail/' + wr.id;
+            }
+          }
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'operations',
+      categoryLabels: { accomplished: 'Completed', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: accomplished.map(wr => buildWrItem(wr, 'accomplished')),
+        cancelled: cancelled.map(wr => buildWrItem(wr, 'cancelled')),
+        rejected: rejectedRecords.map(buildRejectedItem)
+      },
+      emptyText: 'Archive is empty.',
+      renderCallback: () => self.renderArchive()
+    });
   },
 
   generateFromTemplate(templateId) {
@@ -9055,7 +9932,7 @@ const Workflow = {
       title: `${template.name} (${titleSuffix})`,
       description: template.description || '',
       clientId: template.clientId,
-      priority: 'Normal',
+      priority: 'Priority',
       dueDate: dueDate.toISOString().slice(0, 10),
       entity: template.entity,
       status: 'Draft',

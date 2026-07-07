@@ -24,6 +24,7 @@
   --color-primary-alpha: rgba(37, 99, 235, 0.08);
   --color-danger: #ef4444;
   --color-success: #10b981;
+  --color-warning: #f59e0b;
   --font-sans: "Poppins", "Inter", system-ui, -apple-system, sans-serif;
   --transition-loading: 0.25s;
   --delay-loading: 0.25s;
@@ -1278,11 +1279,51 @@ tbody tr:hover {
 }
 
 /* View Mode Toggle */
-.view-mode-toggle { display: flex; gap: var(--space-1, 4px); background: var(--color-surface, #ffffff); border: 1px solid var(--color-border, #dfdbe3); padding: 2px; border-radius: 12px; }
-.view-mode-toggle button { padding: 6px 12px; border: none; background: transparent; border-radius: 12px; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: 500; letter-spacing: var(--btn-letter-spacing); line-height: 1.4; display: inline-flex; align-items: center; gap: var(--space-2, 8px); color: var(--color-text-muted); transition: all 0.2s ease; }
-.view-mode-toggle button svg { flex-shrink: 0; }
-.view-mode-toggle button:hover { background: var(--color-bg, #fafafa); color: var(--color-text); }
-.view-mode-toggle button.active { background: var(--color-primary, #2563eb); color: #ffffff; font-weight: 500; }
+.view-mode-toggle {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #dfdbe3);
+  padding: 3px;
+  border-radius: 12px;
+  width: fit-content;
+  align-items: center;
+}
+.view-mode-toggle button {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0 !important;
+  font-weight: 500;
+  letter-spacing: var(--btn-letter-spacing);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  transition: all 0.2s ease;
+  height: 32px;
+}
+.view-mode-toggle button svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+.view-mode-toggle button:hover {
+  background: var(--color-bg-hover, #fafafa);
+  color: var(--color-text);
+}
+.view-mode-toggle button.active {
+  background: var(--color-primary, #2563eb);
+  color: #ffffff;
+  font-size: 0.75rem !important;
+  font-weight: 600;
+  padding: 6px 16px;
+}
 
 /* Module Tab Navigation */
 .module-tab-nav {
@@ -1302,7 +1343,8 @@ tbody tr:hover {
   top: var(--billing-title-bar-height, 48px);
 }
 
-.operations-tab-page .module-tab-nav {
+.operations-tab-page .module-tab-nav,
+.operations-list-page .module-tab-nav {
   top: var(--operations-title-bar-height, 48px);
 }
 
@@ -1316,6 +1358,10 @@ tbody tr:hover {
 
 .clients-tab-page .module-tab-nav {
   top: var(--clients-title-bar-height, 48px);
+}
+
+.admin-tab-page .module-tab-nav {
+  top: var(--admin-title-bar-height, 48px);
 }
 
 .billing-tab-page .board-v2 {
@@ -1353,26 +1399,39 @@ tbody tr:hover {
   margin-bottom: 0;
 }
 
+.billing-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 .billing-tab-page .board-column-header-v2 {
   position: sticky;
   top: calc(var(--billing-title-bar-height, 48px) + var(--billing-tab-nav-height, 45px) + var(--billing-toolbar-height, 0px));
   z-index: 20;
 }
 
-.operations-tab-page .board-v2 {
+.billing-tab-page {
+  --board-column-header-top: calc(var(--billing-title-bar-height, 48px) + var(--billing-tab-nav-height, 45px) + var(--billing-toolbar-height, 0px));
+}
+
+.operations-tab-page .board-v2,
+.operations-list-page .board-v2 {
   overflow: visible;
   min-height: calc(100vh - var(--operations-title-bar-height, 48px) - var(--operations-tab-nav-height, 45px) - var(--operations-toolbar-height, 40px) - 80px);
 }
 
-.operations-tab-page .board-column-v2 {
+.operations-tab-page .board-column-v2,
+.operations-list-page .board-column-v2 {
   max-height: none;
 }
 
-.operations-tab-page .board-cards-scroll {
+.operations-tab-page .board-cards-scroll,
+.operations-list-page .board-cards-scroll {
   overflow-y: visible;
 }
 
-.operations-tab-page .toolbar-sticky-container {
+.operations-tab-page .toolbar-sticky-container,
+.operations-list-page .toolbar-sticky-container {
   position: sticky;
   top: calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px));
   z-index: 24;
@@ -1383,18 +1442,28 @@ tbody tr:hover {
   margin-bottom: 16px;
 }
 
-.operations-tab-page .toolbar-sticky-container .filters-bar {
+/* Jira toolbar variant should match other modules' board spacing when not grouped. */
+.operations-tab-page .toolbar-sticky-container:has(.jira-toolbar):not(.grouped-board-active),
+.operations-list-page .toolbar-sticky-container:has(.jira-toolbar):not(.grouped-board-active) {
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.operations-tab-page .toolbar-sticky-container .filters-bar,
+.operations-list-page .toolbar-sticky-container .filters-bar {
   position: static;
   margin-bottom: 8px;
   background: transparent;
   padding: 0;
 }
 
-.operations-tab-page .toolbar-sticky-container .view-mode-toggle {
+.operations-tab-page .toolbar-sticky-container .view-mode-toggle,
+.operations-list-page .toolbar-sticky-container .view-mode-toggle {
   margin-bottom: 0;
 }
 
-.operations-tab-page .board-column-header-v2 {
+.operations-tab-page .board-column-header-v2,
+.operations-list-page .board-column-header-v2 {
   position: sticky;
   top: calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + var(--operations-toolbar-height, 0px));
   z-index: 20;
@@ -1435,10 +1504,19 @@ tbody tr:hover {
   margin-bottom: 0;
 }
 
+.disbursement-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 .disbursement-tab-page .board-column-header-v2 {
   position: sticky;
   top: calc(var(--disbursement-title-bar-height, 48px) + var(--disbursement-tab-nav-height, 45px) + var(--disbursement-toolbar-height, 0px));
   z-index: 20;
+}
+
+.disbursement-tab-page {
+  --board-column-header-top: calc(var(--disbursement-title-bar-height, 48px) + var(--disbursement-tab-nav-height, 45px) + var(--disbursement-toolbar-height, 0px));
 }
 
 .transmittal-tab-page .board-v2 {
@@ -1476,10 +1554,69 @@ tbody tr:hover {
   margin-bottom: 0;
 }
 
+.transmittal-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 .transmittal-tab-page .board-column-header-v2 {
   position: sticky;
   top: calc(var(--transmittal-title-bar-height, 48px) + var(--transmittal-tab-nav-height, 45px) + var(--transmittal-toolbar-height, 0px));
   z-index: 20;
+}
+
+.transmittal-tab-page {
+  --board-column-header-top: calc(var(--transmittal-title-bar-height, 48px) + var(--transmittal-tab-nav-height, 45px) + var(--transmittal-toolbar-height, 0px));
+}
+
+.documents-tab-page .board-v2 {
+  overflow: visible;
+  min-height: calc(100vh - var(--documents-title-bar-height, 48px) - var(--documents-toolbar-height, 40px) - 80px);
+}
+
+.documents-tab-page .board-column-v2 {
+  max-height: none;
+}
+
+.documents-tab-page .board-cards-scroll {
+  overflow-y: visible;
+}
+
+.documents-tab-page .toolbar-sticky-container {
+  position: sticky;
+  top: calc(var(--documents-title-bar-height, 48px));
+  z-index: 24;
+  background: var(--color-bg, #f4f6fb);
+  padding-top: 8px;
+  padding-bottom: 12px;
+  margin-top: -8px;
+  margin-bottom: 16px;
+}
+
+.documents-tab-page .toolbar-sticky-container .filters-bar {
+  position: static;
+  margin-bottom: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.documents-tab-page .toolbar-sticky-container .view-mode-toggle {
+  margin-bottom: 0;
+}
+
+.documents-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
+.documents-tab-page .board-column-header-v2 {
+  position: sticky;
+  top: calc(var(--documents-title-bar-height, 48px) + var(--documents-toolbar-height, 0px));
+  z-index: 20;
+}
+
+.documents-tab-page {
+  --board-column-header-top: calc(var(--documents-title-bar-height, 48px) + var(--documents-toolbar-height, 0px));
 }
 
 .clients-tab-page .toolbar-sticky-container {
@@ -1499,6 +1636,25 @@ tbody tr:hover {
   background: transparent;
   padding: 0;
 }
+
+.admin-tab-page .toolbar-sticky-container {
+  position: sticky;
+  top: calc(var(--admin-title-bar-height, 48px) + var(--admin-tab-nav-height, 45px));
+  z-index: 24;
+  background: var(--color-bg, #f4f6fb);
+  padding-top: 8px;
+  padding-bottom: 12px;
+  margin-top: -8px;
+  margin-bottom: 16px;
+}
+
+.admin-tab-page .toolbar-sticky-container .filters-bar {
+  position: static;
+  margin-bottom: 0;
+  background: transparent;
+  padding: 0;
+}
+
 .module-tab-link {
   display: inline-flex;
   align-items: center;
@@ -1536,6 +1692,35 @@ tbody tr:hover {
   color: var(--color-primary);
 }
 
+/* Modern content section spacing — separates page content from the navbar/toolbar
+   without altering the toolbar-to-navbar gap on list/board pages. */
+.page-content-section {
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.module-tab-nav + .page-content-section {
+  padding: 24px 0 var(--spacing-lg) !important;
+}
+
+.toolbar-sticky-container + .page-content-section,
+.module-tab-nav + .toolbar-sticky-container + .page-content-section {
+  padding-top: var(--spacing-sm);
+}
+
+.page-content-section > .page-section-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.page-content-section > .page-section-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-md);
+}
+
 /* Card Grid */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--spacing-lg); }
 .wr-card { display: flex; flex-direction: column; background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-lg); box-shadow: var(--shadow-card); }
@@ -1543,6 +1728,169 @@ tbody tr:hover {
 .progress-wrap { display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); }
 .progress-label { font-size: 0.8125rem; color: var(--color-text-muted); white-space: nowrap; font-weight: 500; }
 .card-actions { margin-top: auto; padding-top: var(--spacing-md); }
+
+/* Client & Audit data cards — modern backlog-style card lists */
+.client-cards-list,
+.audit-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.client-card,
+.audit-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--spacing-md) var(--spacing-lg);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.client-card:hover,
+.audit-card:hover {
+  border-color: var(--color-border-strong, var(--color-border));
+  box-shadow: var(--shadow-card, 0 4px 12px rgba(0,0,0,0.06));
+}
+
+.client-card-header,
+.audit-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.client-card-title-row,
+.audit-card-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.client-card-key,
+.audit-card-key {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.client-card-title,
+.audit-card-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.client-card:hover .client-card-actions {
+  opacity: 1;
+}
+
+.client-card-badges,
+.audit-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.client-card-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.client-card-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.client-card-meta-label,
+.client-card-section-label,
+.audit-card-details-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.client-card-meta-value,
+.client-card-section-value,
+.audit-card-details-value {
+  font-size: 0.875rem;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.client-card-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.client-card-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audit-card-time {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.audit-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Jira backlog role tags */
+.jira-backlog-tag-role {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+}
+
+.jira-backlog-tag-role-admin { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.jira-backlog-tag-role-manager { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.jira-backlog-tag-role-accounting { background: #e0f2fe; color: #075985; border-color: #bae6fd; }
+.jira-backlog-tag-role-operations { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.jira-backlog-tag-role-documentation { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+.jira-backlog-tag-role-hr { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+
+[data-theme="dark"] .jira-backlog-tag-role-admin { background: rgba(153,27,27,0.2); color: #fca5a5; border-color: rgba(252,165,165,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-manager { background: rgba(146,64,14,0.2); color: #fcd34d; border-color: rgba(253,224,71,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-accounting { background: rgba(7,89,133,0.25); color: #7dd3fc; border-color: rgba(125,211,252,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-operations { background: rgba(22,101,52,0.25); color: #86efac; border-color: rgba(134,239,172,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-documentation { background: rgba(91,33,182,0.25); color: #c4b5fd; border-color: rgba(196,181,253,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-hr { background: rgba(71,85,105,0.25); color: #cbd5e1; border-color: rgba(203,213,225,0.3); }
 
 /* Workflow Progress Bar */
 .workflow-progress { display: flex; gap: 6px; margin-bottom: var(--spacing-md); overflow-x: auto; }
@@ -1804,6 +2152,27 @@ tbody tr:hover {
 .reset-section h3 { margin-bottom: var(--spacing-sm); }
 .reset-section p { color: var(--color-text-muted); font-size: 0.875rem; margin-bottom: var(--spacing-md); }
 .reset-confirm { display: flex; align-items: center; gap: var(--spacing-sm); margin-top: var(--spacing-sm); flex-wrap: wrap; }
+
+.reset-section--subtle {
+  background: transparent;
+  border-top: 1px dashed var(--color-border);
+  border-radius: 0;
+  padding: var(--spacing-md) 0 0;
+  margin-bottom: 0;
+  margin-top: var(--spacing-xl);
+}
+
+.reset-section--subtle h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-xs);
+}
+
+.reset-section--subtle p {
+  font-size: 0.75rem;
+  margin-bottom: var(--spacing-sm);
+}
 .entity-checkboxes { display: flex; gap: var(--spacing-lg); flex-wrap: wrap; margin-bottom: var(--spacing-md); }
 .audit-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); }
 .audit-filters .form-select { max-width: 200px; }
@@ -1814,6 +2183,327 @@ tbody tr:hover {
 .doc-type-badge-generated { background: #dbeafe; color: var(--color-primary); }
 .handover-completed { color: var(--color-success); font-weight: 600; }
 .handover-pending { color: var(--color-text-muted); }
+
+/* ─── Admin Pending Approvals (reference-image layout) ─────────────────── */
+.admin-tabs-v2 {
+  display: flex;
+  gap: var(--spacing-xl);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--spacing-lg);
+}
+.admin-tab-v2 {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--spacing-sm) 0 calc(var(--spacing-sm) + 2px);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.admin-tab-v2:hover { color: var(--color-text); }
+.admin-tab-v2.active { color: var(--color-primary); }
+.admin-tab-v2.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 2px 2px 0 0;
+}
+.admin-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.approval-category-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+  overflow: hidden;
+}
+.approval-category-card:last-child { margin-bottom: 0; }
+
+.approval-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--spacing-md);
+}
+.approval-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.approval-filter-pill:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.approval-filter-pill.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.approval-filter-pill.active .approval-filter-pill-count {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+.approval-filter-pill.disabled,
+.approval-filter-pill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.approval-filter-pill.disabled:hover,
+.approval-filter-pill:disabled:hover {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+.approval-filter-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.approval-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+.approval-category-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.approval-category-title .count {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  margin-left: 6px;
+}
+.approve-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-success);
+  background: transparent;
+  color: var(--color-success);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.approve-all-btn:hover {
+  background: var(--color-success);
+  color: #fff;
+}
+.approve-all-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.approval-items-list {
+  display: flex;
+  flex-direction: column;
+}
+.approval-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.15s ease;
+  position: relative;
+}
+.approval-item:last-child { border-bottom: none; }
+.approval-item:hover,
+.approval-item:focus-within {
+  background: var(--color-bg-light);
+}
+.approval-item-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+.approval-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.approval-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.approval-item-key {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.approval-item-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+.approval-item-desc {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+.approval-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.approval-item-meta .submitter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.approval-item-meta .submitter-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+}
+.approval-item-meta .submitter-role {
+  font-weight: 500;
+  color: var(--color-text);
+}
+.approval-item-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.approval-item-date svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+}
+.approval-item-amount {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.approval-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+.approval-item:hover .approval-item-actions,
+.approval-item:focus-within .approval-item-actions {
+  opacity: 1;
+  visibility: visible;
+}
+.approval-item-actions .btn {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  min-height: 26px;
+}
+.approval-item-actions .btn-reject {
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+.approval-item-actions .btn-reject:hover {
+  background: var(--color-danger);
+  color: #fff;
+}
+.approval-item-actions .btn-approve {
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  color: #fff;
+}
+.approval-item-actions .btn-approve:hover {
+  background: var(--color-primary-dark, var(--color-primary));
+}
+
+/* Archive page bulk-selection checkboxes */
+.archive-row-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.archive-row-checkbox,
+.archive-category-select-all {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.archive-category-select-all {
+  margin-left: 8px;
+}
+
+.archive-page-bulk-bar {
+  z-index: 100;
+}
+
 .dms-detail-section { margin-top: var(--spacing-xl); }
 .dms-detail-section h3 { margin-bottom: var(--spacing-md); }
 .version-table tbody tr:last-child { font-weight: 600; background: var(--color-bg); }
@@ -2350,7 +3040,7 @@ tbody tr:hover {
 }
 
 .filters-bar .form-select,
-.filters-bar input {
+.filters-bar input:not([type="checkbox"]):not(.jira-filter-search):not(.jira-filter-date-input) {
   min-width: 120px;
   height: 34px;
   min-height: 34px !important;
@@ -3159,11 +3849,13 @@ tbody tr:hover {
 }
 
 .board-card-v2.compact .card-v2-priority-high,
-.board-card-v2.compact .card-v2-priority-urgent,
-.board-card-v2.compact .card-v2-priority-priority { color: var(--color-danger); }
+.board-card-v2.compact .card-v2-priority-urgent { color: var(--color-danger); }
+.board-card-v2.compact .card-v2-priority-priority { color: #f97316; }
 .board-card-v2.compact .card-v2-priority-medium { color: var(--color-warning); }
 .board-card-v2.compact .card-v2-priority-low { color: var(--color-success); }
 .board-card-v2.compact .card-v2-priority-normal { color: var(--color-text-muted); }
+
+[data-theme="dark"] .board-card-v2.compact .card-v2-priority-priority { color: #fb923c; }
 
 /* 5. Footer Row: avatars left, badges + counts right */
 .board-card-v2.compact .card-v2-footer {
@@ -3747,11 +4439,17 @@ tbody tr:hover {
   z-index: 30;
 }
 
-.breadcrumb-h1 {
+.breadcrumb-h1,
+.page-title-h1 {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 1.75rem;
+}
+
+.page-title-h1 {
+  color: var(--color-text);
+  font-weight: 700;
 }
 
 .breadcrumb-base {
@@ -9051,8 +9749,8 @@ tbody tr:hover {
   position: fixed;
   top: 0;
   right: 0;
-  width: 50vw;
-  max-width: 90vw;
+  width: min(50vw, 760px);
+  min-width: 320px;
   height: 100vh;
   background: var(--color-surface);
   box-shadow: -8px 0 30px rgba(0, 0, 0, 0.12);
@@ -9375,6 +10073,7 @@ tbody tr:hover {
   .side-pane {
     width: 100vw;
     max-width: 100vw;
+    min-width: 0;
   }
 }
 
@@ -12104,6 +12803,1092 @@ html.loading-active #loading-screen:not(.hidden) {
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--color-border); }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
 
+/* ── Jira-style compact Operations toolbar ─────────────────────────────── */
+
+.jira-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+}
+
+.jira-toolbar .jira-group-trigger,
+.jira-toolbar .jira-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border, #dfdbe3);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #1f2937);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.jira-toolbar .jira-group-trigger:hover,
+.jira-toolbar .jira-filter-trigger:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-toolbar .jira-group-trigger.active {
+  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 92%);
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-toolbar .jira-group-trigger.active:hover {
+  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 88%);
+}
+
+.jira-toolbar .jira-group-trigger svg,
+.jira-toolbar .jira-filter-trigger svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.jira-toolbar .jira-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.jira-toolbar .jira-clear-filters {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.jira-toolbar .jira-clear-filters:hover {
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-toolbar .view-mode-toggle {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.jira-toolbar .jira-group-wrap .jira-group-dropdown {
+  left: auto;
+  right: 0;
+}
+
+/* Jira dropdown shared shell */
+.jira-dropdown {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 520px;
+  max-width: calc(100vw - 32px);
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.jira-dropdown.hidden {
+  display: none;
+}
+
+/* Group dropdown (simple list) */
+.jira-group-dropdown {
+  min-width: 180px;
+  border-radius: 12px;
+}
+
+.jira-group-dropdown .jira-dropdown-body {
+  padding: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.jira-group-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--color-text, #1f2937);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.jira-group-option:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+}
+
+.jira-group-option.active {
+  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 92%);
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-group-option .checkmark {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary, #2563eb);
+}
+
+/* Filter dropdown two-pane layout */
+.jira-filter-dropdown {
+  display: flex;
+  flex-direction: column;
+  width: 450px;
+  height: 320px;
+  min-height: 320px;
+  max-height: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.18), 0 8px 16px -6px rgba(0, 0, 0, 0.08);
+}
+
+.jira-filter-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+.jira-filter-categories {
+  width: 160px;
+  flex-shrink: 0;
+  background: var(--color-bg, #f8fafc);
+  border-right: 1px solid var(--color-border, #e2e8f0);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 6px 0 6px;
+}
+
+.jira-filter-categories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.jira-filter-category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text, #1f2937);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.jira-filter-category:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+}
+
+.jira-filter-category.active {
+  background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 90%);
+  border-left-color: var(--color-primary, #2563eb);
+  border-radius: 4px 6px 6px 4px;
+  color: var(--color-primary, #2563eb);
+  font-weight: 600;
+}
+
+.jira-filter-category .cat-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-border, #e2e8f0);
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.jira-filter-category.active .cat-count {
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+}
+
+.jira-filter-categories-footer {
+  height: 42px;
+  min-height: 42px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  margin-top: auto;
+}
+
+.jira-filter-categories-footer .jira-filter-clear-all {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.jira-filter-categories-footer .jira-filter-clear-all:hover:not(.disabled) {
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-filter-categories-footer .jira-filter-clear-all.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.jira-filter-values {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.jira-filter-values-header {
+  position: relative;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.jira-filter-values-header .jira-filter-search-icon {
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted, #94a3b8);
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jira-filter-values-header .jira-filter-search {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 6px;
+  background: var(--color-bg, #f8fafc);
+  color: var(--color-text, #1f2937);
+  font-size: 0.8125rem;
+  font-family: inherit;
+}
+
+.jira-filter-values-header .jira-filter-search:focus-visible {
+  outline: none;
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary, #2563eb), transparent 88%);
+}
+
+[data-theme="dark"] .jira-filter-values-header .jira-filter-search-icon {
+  color: var(--color-text-muted);
+}
+
+.jira-filter-values-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.jira-filter-select-date-wrap {
+  padding: 6px 10px 4px 10px;
+  border: none;
+  margin-bottom: 4px;
+}
+
+.jira-filter-select-date-wrap .mdp-wrapper {
+  width: 100%;
+}
+
+.jira-filter-datepicker-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted, #64748b);
+}
+
+.jira-filter-datepicker-wrap .mdp-wrapper {
+  width: 100%;
+}
+
+.jira-filter-datepicker-wrap .mdp-display {
+  font-size: 0.8125rem;
+  height: 32px;
+  padding: 0 10px 0 30px;
+}
+
+.jira-filter-value-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text, #1f2937);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.jira-filter-value-item:hover {
+  background: var(--color-bg-hover, #f0f1f3);
+}
+
+.jira-filter-value-item input[type="checkbox"],
+.jira-filter-checkbox {
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  max-width: 15px !important;
+  min-height: 15px !important;
+  max-height: 15px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  accent-color: var(--color-primary, #2563eb);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.jira-filter-values-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.8125rem;
+}
+
+.jira-filter-values-footer {
+  height: 42px;
+  min-height: 42px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.8125rem;
+  margin-top: auto;
+}
+
+.jira-filter-values-footer .jira-filter-clear-cat {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.jira-filter-values-footer .jira-filter-clear-cat:hover:not(.disabled) {
+  color: var(--color-primary, #2563eb);
+}
+
+.jira-filter-values-footer .jira-filter-clear-cat.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.jira-filter-global-footer {
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 14px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-bg, #f8fafc);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted, #64748b);
+}
+
+.jira-filter-shortcut-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted, #64748b);
+}
+
+.jira-filter-shortcut-hint kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text, #334155);
+  background-color: var(--color-bg-muted, #e2e8f0);
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure toolbar dropdown anchors are positioned correctly */
+.jira-toolbar .jira-group-wrap,
+.jira-toolbar .jira-filter-wrap {
+  position: relative;
+}
+
+/* Operations toolbar overrides */
+.operations-tab-page .toolbar-sticky-container:has(.jira-toolbar),
+.operations-list-page .toolbar-sticky-container:has(.jira-toolbar) {
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+/* For grouped boards, preserve the toolbar container's bottom padding while
+   removing the transparent bottom margin. The solid padding background bridges
+   the gap, and the first group section header sits flush against it. */
+.operations-tab-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar),
+.operations-list-page .toolbar-sticky-container.grouped-board-active:has(.jira-toolbar) {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
+/* ── Grouped board phase sections (Jira-style sticky headers) ──────────── */
+
+.operations-tab-page,
+.operations-list-page {
+  --board-column-header-top: calc(var(--operations-title-bar-height, 48px) + var(--operations-tab-nav-height, 45px) + var(--operations-toolbar-height, 0px));
+}
+
+.board-phase-section {
+  margin-bottom: var(--space-3, 12px);
+}
+
+.board-phase-section:last-child {
+  margin-bottom: 0;
+}
+
+.board-phase-header {
+  position: sticky;
+  top: calc(var(--board-column-header-top, 0px) + var(--board-column-header-height, 56px));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-bg-light, #f1f5f9);
+  border-bottom: 1px solid var(--color-border, #cbd5e1);
+  border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: var(--color-text, #0f172a);
+}
+
+.board-phase-header::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--column-phase-color, transparent);
+  border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+}
+
+.board-phase-header .board-phase-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-phase-header .board-phase-count {
+  font-weight: 500;
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.75rem;
+}
+
+/* Make sure grouped columns do not independently scroll so sticky phase headers stack */
+.operations-tab-page .board-column-v2.grouped .board-cards-scroll {
+  overflow-y: visible;
+}
+
+/* ── Grouped board rows (Jira-style swimlanes) ─────────────────────────── */
+
+.board-grouped-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+  padding-bottom: var(--space-4, 16px);
+}
+
+.board-group-section {
+  --board-group-title-width: 220px;
+  --board-group-title-height: 52px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 12px);
+  background: var(--color-surface, #ffffff);
+}
+
+.board-group-section.collapsed .board-group-phase-row,
+.board-group-section.collapsed .board-group-body {
+  display: none;
+}
+
+.board-group-section.collapsed .board-group-collapse svg {
+  transform: rotate(-90deg);
+}
+
+.board-group-section {
+  position: relative;
+}
+
+/* Sticky wrapper: holds the group title row and phase heading row as one sticky unit.
+   The top edge is deliberately square so it meets the sticky toolbar bottom without
+   leaving corner gaps; the section's own border-radius still rounds the outer corners. */
+.board-group-sticky-wrap {
+  position: sticky;
+  top: var(--board-column-header-top, 0);
+  z-index: 23;
+  background: var(--color-surface, #ffffff);
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  overflow: hidden;
+}
+
+/* Group title row: full-width, sits inside the sticky wrapper */
+.board-group-title-row {
+  display: flex;
+  align-items: center;
+  height: var(--board-group-title-height, 52px);
+  padding: 0 12px;
+}
+
+.board-group-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+}
+
+.board-group-title:hover {
+  opacity: 0.85;
+}
+
+.board-group-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #64748b);
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.board-group-collapse:hover {
+  color: var(--color-primary, #2563eb);
+}
+
+.board-group-collapse svg {
+  transition: transform 0.15s ease;
+}
+
+.board-group-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: #fff;
+  background-position: center;
+}
+
+.board-group-avatars {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.board-group-avatars .avatar-xs {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  border: 2px solid var(--color-surface, #fff);
+  background-size: cover;
+  background-position: center;
+  margin-left: -8px;
+}
+
+.board-group-avatars .avatar-xs:first-child {
+  margin-left: 0;
+}
+
+.board-group-avatar-overflow {
+  background: var(--color-bg-muted, #e2e8f0);
+  color: var(--color-text-muted, #64748b);
+}
+
+.board-group-name-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.board-group-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-group-count {
+  display: inline;
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #64748b);
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+/* Phase heading row: sits inside the sticky wrapper beneath the group title */
+.board-group-phase-row {
+  display: grid;
+  grid-template-columns: repeat(var(--phase-count), minmax(180px, 1fr));
+  background: var(--color-surface, #ffffff);
+}
+
+.board-group-phase-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-left: 1px solid var(--color-border, #e2e8f0);
+}
+
+.board-group-phase-header:first-child {
+  border-left: none;
+}
+
+.phase-header-top {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--phase-color, transparent);
+}
+
+.phase-header-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phase-header-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text, #0f172a);
+  letter-spacing: 0.02em;
+}
+
+.phase-header-count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted, #64748b);
+}
+
+.board-group-body {
+  display: grid;
+  grid-template-columns: repeat(var(--phase-count), minmax(180px, 1fr));
+  background: var(--color-bg, #f8fafc);
+}
+
+.board-group-column {
+  min-height: 120px;
+  padding: var(--space-3, 12px);
+  border-left: 1px solid var(--color-border, #e2e8f0);
+}
+
+.board-group-column:first-child {
+  border-left: none;
+}
+
+.board-group-column .board-card-v2 {
+  margin-bottom: var(--space-3, 12px);
+}
+
+.board-group-column .board-card-v2:last-child {
+  margin-bottom: 0;
+}
+
+.board-group-column.drag-over {
+  background: color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 92%);
+  border-color: var(--column-phase-color, var(--color-primary));
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 70%);
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] .jira-toolbar .jira-group-trigger,
+[data-theme="dark"] .jira-toolbar .jira-filter-trigger {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-toolbar .jira-group-trigger:hover,
+[data-theme="dark"] .jira-toolbar .jira-filter-trigger:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .jira-toolbar .jira-filter-badge {
+  background: var(--color-primary);
+  color: #191919;
+}
+
+[data-theme="dark"] .jira-dropdown {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .jira-filter-categories,
+[data-theme="dark"] .jira-filter-categories-footer,
+[data-theme="dark"] .jira-filter-values-header,
+[data-theme="dark"] .jira-filter-values-footer,
+[data-theme="dark"] .jira-filter-global-footer {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .jira-filter-shortcut-hint kbd {
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .jira-filter-category,
+[data-theme="dark"] .jira-group-option,
+[data-theme="dark"] .jira-filter-value-item {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-filter-category:hover,
+[data-theme="dark"] .jira-group-option:hover,
+[data-theme="dark"] .jira-filter-value-item:hover {
+  background: var(--color-bg-hover);
+}
+
+[data-theme="dark"] .jira-filter-category.active,
+[data-theme="dark"] .jira-group-option.active {
+  background: color-mix(in oklab, var(--color-primary), transparent 85%);
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .jira-filter-values-header .jira-filter-search {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .jira-filter-values-empty {
+  color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .jira-filter-category .cat-count {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .jira-filter-category.active .cat-count {
+  background: var(--color-primary);
+  color: #191919;
+}
+
+[data-theme="dark"] .jira-toolbar .jira-group-trigger.active {
+  background: color-mix(in oklab, var(--color-primary), transparent 85%);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .board-phase-header {
+  background: var(--color-bg-light);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .board-group-section {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .board-group-sticky-wrap,
+[data-theme="dark"] .board-group-phase-row {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .board-group-title:hover {
+  opacity: 0.85;
+}
+
+[data-theme="dark"] .board-group-phase-header,
+[data-theme="dark"] .board-group-column {
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .board-group-column.drag-over {
+  background: color-mix(in oklab, var(--column-phase-color, var(--color-primary)), transparent 88%);
+  border-color: var(--column-phase-color, var(--color-primary));
+}
+
+[data-theme="dark"] .board-group-name {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .phase-header-label {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .board-group-body {
+  background: var(--color-bg);
+}
+
+/* ── Jira-style Backlog Component ──────────── */
+.jira-backlog-container {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface);
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+}
+
+/* Wide table-like backlogs can scroll horizontally so no detail is clipped. */
+.jira-backlog-container--columns {
+  overflow-x: auto;
+}
+
+.jira-backlog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--color-bg-light, #fafafa);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.jira-backlog-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.jira-backlog-chevron {
+  display: none !important;
+}
+
+.jira-backlog-title-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.jira-backlog-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+}
+
+.jira-backlog-subtitle {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.jira-backlog-count-badge {
+  background: var(--color-bg-muted, #f1f5f9);
+  color: var(--color-text-muted);
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.jira-backlog-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jira-backlog-body {
+  transition: max-height 0.2s ease-in-out;
+  max-height: 2000px;
+  overflow: hidden;
+}
+
+.jira-backlog-body.collapsed {
+  max-height: 0 !important;
+}
+
+.jira-backlog-list {
+  background: var(--color-surface);
+}
+
+.jira-backlog-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s ease;
+  font-size: 0.84rem;
+  color: var(--color-text);
+  min-height: 38px;
+}
+
+.jira-backlog-row:last-child {
+  border-bottom: none;
+}
+
+.jira-backlog-row:hover {
+  background: var(--color-bg-light, #fafafa);
+}
+
+.jira-backlog-row.selected {
+  background: color-mix(in oklab, var(--color-primary), transparent 94%);
+}
+
+.jira-backlog-row-checkbox-wrap {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+.jira-backlog-row-checkbox {
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.1s ease;
+  width: 13px;
+  height: 13px;
+  accent-color: var(--color-primary);
+}
+
+.jira-backlog-row:hover .jira-backlog-row-checkbox,
+.jira-backlog-row-checkbox:checked {
+  opacity: 1;
+}
+
+.jira-backlog-row-icon {
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
+  color: var(--color-primary);
+}
+
+.jira-backlog-row-key {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-right: 12px;
+  width: 75px;
+  flex-shrink: 0;
+}
+
+.jira-backlog-row-title {
+  flex-grow: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jira-backlog-row-tags {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 24px;
+  margin-right: 12px;
+}
+
+.jira-backlog-tag {
+  background: var(--color-bg-muted, #f1f5f9);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* --- 2026 Premium Dashboard Redesign --- */
 .dashboard-welcome-banner {
   background: linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(16, 185, 129, 0.05) 100%);
@@ -12483,6 +14268,635 @@ html.loading-active #loading-screen:not(.hidden) {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.jira-backlog-tag.tag-primary {
+  background: color-mix(in oklab, var(--color-primary), transparent 90%);
+  border-color: color-mix(in oklab, var(--color-primary), transparent 75%);
+  color: var(--color-primary);
+}
+
+.jira-backlog-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  min-width: max-content;
+}
+
+.jira-backlog-row:hover .jira-backlog-row-actions {
+  opacity: 1;
+}
+
+/* Pin the actions column to the right edge of wide table-like backlogs
+   so it remains visible while the rest of the row scrolls horizontally. */
+.jira-backlog-row--columns .jira-backlog-row-actions {
+  position: sticky;
+  right: 16px;
+  background: var(--color-surface);
+  z-index: 2;
+  padding-left: 8px;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
+}
+
+.jira-backlog-row:hover .jira-backlog-row-actions,
+.jira-backlog-row.selected .jira-backlog-row-actions {
+  background: var(--color-bg-light, #fafafa);
+}
+
+.jira-backlog-columns-header .jira-backlog-col-header:last-child {
+  position: sticky;
+  right: 16px;
+  background: var(--color-bg-light, #fafafa);
+  z-index: 3;
+  padding-left: 8px;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Empty checkbox spacer used when selectable=false to preserve column alignment. */
+.jira-backlog-row-checkbox-wrap--spacer {
+  width: 100%;
+}
+
+/* Column-aligned backlog rows (table-like grid) */
+.jira-backlog-row--columns {
+  display: grid;
+  align-items: start;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding: 10px 16px;
+}
+
+/* In column mode, lead items become grid cells and must not carry their flex-era margins. */
+.jira-backlog-row--columns .jira-backlog-row-checkbox-wrap {
+  margin-right: 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-icon {
+  margin-right: 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-key {
+  margin-right: 0;
+  width: 100%;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-title {
+  min-width: 0;
+  width: 100%;
+  overflow: visible;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/* Fixed title width keeps long names on a single line while the rest of the
+   grid scrolls horizontally. */
+.jira-backlog-row--fixed-title .jira-backlog-row-title {
+  white-space: nowrap;
+}
+
+.jira-backlog-columns-header {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--color-bg-light, #fafafa);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.jira-backlog-col-header {
+  overflow: visible;
+  white-space: nowrap;
+  min-width: 0;
+  text-align: left;
+}
+
+/* Column headers share the same left origin as the badge content inside each
+   column track, so the header text lines up with the text inside a left-aligned
+   badge (which has 8px of horizontal padding). */
+.jira-backlog-container--columns .jira-backlog-columns-header .jira-backlog-col-header:not(.jira-backlog-col-header--spacer):not(.jira-backlog-col-header--actions) {
+  padding-left: 8px;
+}
+
+.jira-backlog-row-tags--columns {
+  display: grid;
+  align-items: start;
+  gap: 12px;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* In column mode the badge should shrink to its content and only its left edge
+   needs to line up with the column. The column track width is fixed, but the
+   badge background expands naturally to fit its text and may cross the right
+   boundary of the column if needed. */
+.jira-backlog-row-tags--columns .jira-backlog-tag {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  justify-self: start;
+  justify-content: flex-start;
+  overflow: hidden;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.jira-backlog-row-tags--columns .jira-backlog-tag > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.jira-backlog-tag-placeholder {
+  min-height: 1px;
+}
+
+/* Custom backlog tag styles for specific column types */
+.jira-backlog-tag-role,
+.jira-backlog-tag-action,
+.jira-backlog-tag-entity {
+  justify-content: center !important;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* In column mode the left edge of every badge should line up, so remove
+   forced centering and let the badge shrink to its content from the left. */
+.jira-backlog-row-tags--columns .jira-backlog-tag-role,
+.jira-backlog-row-tags--columns .jira-backlog-tag-action,
+.jira-backlog-row-tags--columns .jira-backlog-tag-entity {
+  justify-content: flex-start !important;
+  text-align: left;
+}
+
+.jira-backlog-tag-client,
+.jira-backlog-tag-category {
+  justify-content: flex-start !important;
+  font-weight: 500;
+}
+
+.jira-backlog-tag-schedule {
+  justify-content: flex-start !important;
+  color: var(--color-text-muted);
+}
+
+.hidden-tag-placeholder {
+  background: transparent !important;
+  border: none !important;
+  color: transparent !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Retainer check column: a simple centered check with no badge background. */
+.jira-backlog-tag-retainer-check {
+  background: transparent !important;
+  border: none !important;
+  color: var(--color-success, #16a34a);
+  padding: 0;
+  justify-self: center;
+}
+
+.jira-backlog-row-secondary {
+  grid-column: 1 / -1;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jira-backlog-row--columns .jira-backlog-row-secondary {
+  margin-top: 0;
+}
+
+/* Inline toolbar placed between backlog header and body */
+.jira-backlog-toolbar {
+  padding: 8px 16px 0;
+}
+
+.jira-backlog-toolbar:empty {
+  display: none;
+}
+
+/* User avatar for backlog rows (audit log, etc.) */
+.backlog-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.backlog-avatar--image {
+  background-repeat: no-repeat;
+  color: transparent;
+}
+
+/* Dark mode overrides for Jira backlog */
+[data-theme="dark"] .jira-backlog-header {
+  background: var(--color-bg-light);
+}
+
+[data-theme="dark"] .jira-backlog-count-badge {
+  background: var(--color-bg-muted);
+}
+
+[data-theme="dark"] .jira-backlog-row:hover {
+  background: var(--color-bg-light);
+}
+
+[data-theme="dark"] .jira-backlog-tag {
+  background: var(--color-bg-muted);
+}
+
+/* ── Jira Backlog Tag Types & Color Coding ──────────── */
+.jira-backlog-tag-client {
+  background: var(--color-bg-muted, #f1f5f9);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  font-weight: 500;
+}
+
+.jira-backlog-tag-category {
+  background: color-mix(in oklab, var(--color-primary), transparent 93%);
+  color: var(--color-primary);
+  border-color: color-mix(in oklab, var(--color-primary), transparent 80%);
+  font-weight: 600;
+}
+
+.jira-backlog-tag-amount {
+  font-weight: 700;
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.jira-backlog-tag-points {
+  background: var(--color-bg-muted, #f1f5f9);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 99px;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0;
+}
+
+/* Schedule Color Schemes */
+.jira-backlog-tag-schedule {
+  font-weight: 600;
+  border-radius: 4px;
+}
+.jira-backlog-tag-schedule-monthly {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+.jira-backlog-tag-schedule-weekly {
+  background: #d1fae5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+.jira-backlog-tag-schedule-quarterly {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+.jira-backlog-tag-schedule-annually {
+  background: #fce7f3;
+  color: #be185d;
+  border-color: #fbcfe8;
+}
+
+/* Fund Source Color Schemes */
+.jira-backlog-tag-fund {
+  font-weight: 600;
+  border-radius: 4px;
+}
+.jira-backlog-tag-fund-firmfund {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+.jira-backlog-tag-fund-clientfund {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+/* Dark Mode Overrides for Tag Types */
+[data-theme="dark"] .jira-backlog-tag-client {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+[data-theme="dark"] .jira-backlog-tag-amount {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+[data-theme="dark"] .jira-backlog-tag-points {
+  background: var(--color-bg-muted);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+[data-theme="dark"] .jira-backlog-tag-schedule-monthly {
+  background: rgba(3, 105, 161, 0.15);
+  color: #38bdf8;
+  border-color: rgba(3, 105, 161, 0.3);
+}
+[data-theme="dark"] .jira-backlog-tag-schedule-weekly {
+  background: rgba(4, 120, 87, 0.15);
+  color: #34d399;
+  border-color: rgba(4, 120, 87, 0.3);
+}
+[data-theme="dark"] .jira-backlog-tag-schedule-quarterly {
+  background: rgba(180, 83, 9, 0.15);
+  color: #fbbf24;
+  border-color: rgba(180, 83, 9, 0.3);
+}
+[data-theme="dark"] .jira-backlog-tag-schedule-annually {
+  background: rgba(190, 24, 93, 0.15);
+  color: #f472b6;
+  border-color: rgba(190, 24, 93, 0.3);
+}
+[data-theme="dark"] .jira-backlog-tag-fund-firmfund {
+  background: rgba(3, 105, 161, 0.15);
+  color: #38bdf8;
+  border-color: rgba(3, 105, 161, 0.3);
+}
+[data-theme="dark"] .jira-backlog-tag-fund-clientfund {
+  background: rgba(180, 83, 9, 0.15);
+  color: #fbbf24;
+  border-color: rgba(180, 83, 9, 0.3);
+}
+[data-theme="dark"] .jira-backlog-tag-category {
+  background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+/* Audit / activity action tags */
+.jira-backlog-tag-action {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+  border-radius: 4px;
+}
+
+.jira-backlog-tag-action-create {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.jira-backlog-tag-action-update {
+  background: #e0f2fe;
+  color: #075985;
+  border-color: #bae6fd;
+}
+
+.jira-backlog-tag-action-delete,
+.jira-backlog-tag-action-archive {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.jira-backlog-tag-action-approve,
+.jira-backlog-tag-action-complete {
+  background: #d1fae5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.jira-backlog-tag-action-reject {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.jira-backlog-tag-action-login,
+.jira-backlog-tag-action-info {
+  background: #e0e7ff;
+  color: #3730a3;
+  border-color: #c7d2fe;
+}
+
+.jira-backlog-tag-action-logout {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+.jira-backlog-tag-action-release {
+  background: #ccfbf1;
+  color: #115e59;
+  border-color: #99f6e4;
+}
+
+.jira-backlog-tag-action-warning {
+  background: #ffedd5;
+  color: #9a3412;
+  border-color: #fed7aa;
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-create {
+  background: rgba(22, 101, 52, 0.2);
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-update {
+  background: rgba(7, 89, 133, 0.25);
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-delete,
+[data-theme="dark"] .jira-backlog-tag-action-archive {
+  background: rgba(153, 27, 27, 0.2);
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-approve,
+[data-theme="dark"] .jira-backlog-tag-action-complete {
+  background: rgba(4, 120, 87, 0.2);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-reject {
+  background: rgba(180, 83, 9, 0.2);
+  color: #fbbf24;
+  border-color: rgba(253, 224, 71, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-login,
+[data-theme="dark"] .jira-backlog-tag-action-info {
+  background: rgba(55, 48, 163, 0.2);
+  color: #a5b4fc;
+  border-color: rgba(165, 180, 252, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-logout {
+  background: rgba(71, 85, 105, 0.25);
+  color: #cbd5e1;
+  border-color: rgba(203, 213, 225, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-release {
+  background: rgba(17, 94, 89, 0.25);
+  color: #5eead4;
+  border-color: rgba(94, 234, 212, 0.3);
+}
+
+[data-theme="dark"] .jira-backlog-tag-action-warning {
+  background: rgba(154, 52, 18, 0.2);
+  color: #fdba74;
+  border-color: rgba(253, 186, 116, 0.3);
+}
+
+/* ── Backlog Tags Fixed-Width Column Alignment ──────────── */
+.jira-backlog-tag-client {
+  min-width: 160px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  justify-content: flex-start;
+}
+
+.jira-backlog-tag-schedule {
+  min-width: 100px;
+  justify-content: center;
+}
+
+.jira-backlog-tag-category {
+  min-width: 120px;
+  justify-content: center;
+}
+
+.jira-backlog-tag-fund {
+  min-width: 110px;
+  justify-content: center;
+}
+
+.jira-backlog-tag-amount {
+  min-width: 120px;
+  justify-content: flex-end;
+}
+
+/* ── Floating Bulk Action Bar ──────────── */
+.jira-backlog-bulk-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #22252a;
+  color: #ffffff;
+  padding: 10px 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 1000;
+  font-size: 0.875rem;
+  font-weight: 500;
+  animation: slideUpFade 0.2s cubic-bezier(0.15, 1, 0.3, 1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@keyframes slideUpFade {
+  from {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.jira-backlog-bulk-count {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.jira-backlog-bulk-divider {
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 300;
+}
+
+.jira-backlog-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jira-backlog-bulk-actions .btn {
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+}
+
+.jira-backlog-bulk-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.jira-backlog-bulk-close:hover {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .jira-backlog-bulk-bar {
+  background: #1d2125;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .timezone-dropdown {
