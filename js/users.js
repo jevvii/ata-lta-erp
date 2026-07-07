@@ -2490,6 +2490,7 @@ const Users = {
   },
 
   renderMyRequestsTableView(container, requests) {
+    const self = this;
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
     const thr = el('tr');
@@ -2516,6 +2517,12 @@ const Users = {
       tr.appendChild(tdSt);
 
       const tdAct = el('td');
+      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View', style: 'margin-right: 8px;' });
+      viewBtn.addEventListener('click', () => {
+        self.showRequestDetailsModal(r);
+      });
+      tdAct.appendChild(viewBtn);
+
       if (r.status === 'pending') {
         const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel Request' });
         cancelBtn.addEventListener('click', () => {
@@ -2527,9 +2534,9 @@ const Users = {
         tdAct.appendChild(cancelBtn);
       } else if (r.status === 'fulfilled') {
         const fulfiller = DB.getById('users', r.fulfilledBy);
-        tdAct.textContent = `Fulfilled by ${fulfiller ? fulfiller.name : 'System'} on ${formatDate(r.fulfilledAt)}`;
+        tdAct.appendChild(el('span', { text: `Fulfilled by ${fulfiller ? fulfiller.name : 'System'} on ${formatDate(r.fulfilledAt)}`, style: 'color: var(--color-text-muted); font-size: 0.8125rem; margin-left: 4px;' }));
       } else if (r.status === 'rejected') {
-        tdAct.textContent = r.rejectionReason ? `Reason: ${r.rejectionReason}` : 'No reason provided';
+        tdAct.appendChild(el('span', { text: r.rejectionReason ? `Reason: ${r.rejectionReason}` : 'No reason provided', style: 'color: var(--color-danger); font-size: 0.8125rem; margin-left: 4px;' }));
       }
       tr.appendChild(tdAct);
 
@@ -2582,12 +2589,20 @@ const Users = {
         date: r.requestedAt ? formatDate(r.requestedAt) : '',
         priority: r.status.charAt(0).toUpperCase() + r.status.slice(1),
         priorityClass: statusPriorityMap[r.status] || 'card-v2-priority-normal',
-        onClick: () => {}
+        onClick: () => {
+          self.showRequestDetailsModal(r);
+        }
       });
     };
 
     const cardMenuItems = (r) => {
-      const menu = [];
+      const menu = [
+        {
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { self.showRequestDetailsModal(r); }
+        }
+      ];
       if (r.status === 'pending') {
         menu.push({
           label: 'Cancel Request',
@@ -2595,13 +2610,6 @@ const Users = {
           icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
           onClick: () => Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => { DB.delete('operationsRequests', r.id); App.handleRoute(); }, 'danger')
         });
-      }
-      if (r.status === 'fulfilled') {
-        const fulfiller = DB.getById('users', r.fulfilledBy);
-        menu.push({ label: `Fulfilled by ${fulfiller ? fulfiller.name : 'System'}`, icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>', onClick: () => {} });
-      }
-      if (r.status === 'rejected') {
-        menu.push({ label: r.rejectionReason || 'No reason provided', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>', onClick: () => {} });
       }
       return menu;
     };
@@ -2647,6 +2655,12 @@ const Users = {
       }
       item.appendChild(left);
       const rightActions = el('div', { style: 'display:flex;gap:4px;align-items:center;' });
+      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
+      viewBtn.addEventListener('click', () => {
+        self.showRequestDetailsModal(r);
+      });
+      rightActions.appendChild(viewBtn);
+
       if (r.status === 'pending') {
         const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel' });
         cancelBtn.addEventListener('click', () => {
@@ -2659,5 +2673,132 @@ const Users = {
       list.appendChild(item);
     });
     container.appendChild(list);
+  },
+
+  showRequestDetailsModal(r) {
+    const self = this;
+    const wr = DB.getById('workRequests', r.workRequestId);
+    const client = DB.getById('clients', r.clientId);
+    const submitter = DB.getById('users', r.requestedBy);
+
+    const wrapper = el('div', { class: 'form-stacked notion-form', style: 'padding: var(--spacing-xs); display: flex; flex-direction: column; gap: var(--spacing-md);' });
+
+    // Status / Submitter info box
+    const infoBox = el('div', { 
+      style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-sm); display: flex; flex-direction: column; gap: var(--spacing-xs);' 
+    }, [
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Status', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        self._requestStatusBadge(r.status)
+      ]),
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Submitted By', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        el('span', { text: submitter ? submitter.name : '—', style: 'font-weight:500;' })
+      ]),
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Submitted At', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        el('span', { text: formatDate(r.requestedAt), style: 'font-weight:500;' })
+      ])
+    ]);
+    wrapper.appendChild(infoBox);
+
+    // Notion-style Property Grid
+    const grid = el('div', { class: 'notion-property-grid', style: 'margin-bottom: var(--spacing-xs);' });
+
+    const addProp = (label, valueNode) => {
+      const row = el('div', { class: 'notion-property-row' });
+      row.appendChild(el('div', { class: 'notion-property-label', text: label }));
+      row.appendChild(el('div', { class: 'notion-property-value' }, [valueNode]));
+      grid.appendChild(row);
+    };
+
+    addProp('Request Type', document.createTextNode(this._requestTypeLabel(r.type)));
+    addProp('Client', document.createTextNode(client ? client.name : '—'));
+    
+    // Work Request Link / Text
+    const wrSpan = el('span', { text: wr ? wr.title : '—' });
+    if (wr) {
+      wrSpan.style.cursor = 'pointer';
+      wrSpan.style.color = 'var(--color-primary)';
+      wrSpan.style.textDecoration = 'underline';
+      wrSpan.addEventListener('click', () => {
+        const overlay = document.querySelector('.modal-overlay');
+        if (overlay) overlay.remove();
+        location.hash = `#operations/detail/${wr.id}`;
+      });
+    }
+    addProp('Work Request', wrSpan);
+
+    // Render type-specific fields
+    if (r.type === 'billing') {
+      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
+      addProp('Linked Task', document.createTextNode(linkedTask ? linkedTask.title : '— Whole Project —'));
+      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
+      if (r.receiptFilename) {
+        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
+      }
+    } else if (r.type === 'disbursement') {
+      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
+      addProp('Disbursement Type', document.createTextNode(r.disbursementType ? r.disbursementType.charAt(0).toUpperCase() + r.disbursementType.slice(1) : '—'));
+      addProp('Category', document.createTextNode(r.category || '—'));
+      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
+      addProp('Payment Method', document.createTextNode(r.paymentMethod || '—'));
+      if (linkedTask) {
+        addProp('Linked Task', document.createTextNode(linkedTask.title));
+      }
+      if (r.receiptFilename) {
+        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
+      }
+    } else if (r.type === 'transmittal') {
+      addProp('Recipient & Delivery', document.createTextNode(r.recipientDetails || '—'));
+    }
+
+    wrapper.appendChild(grid);
+
+    // Documents list for Transmittal
+    if (r.type === 'transmittal' && r.documents && r.documents.length > 0) {
+      wrapper.appendChild(el('h4', { text: 'Documents to Transmit', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
+      const docList = el('ul', { style: 'padding-left: var(--spacing-md); margin-bottom: var(--spacing-sm); display:flex; flex-direction:column; gap:4px;' });
+      r.documents.forEach(doc => {
+        docList.appendChild(el('li', { text: doc, style: 'font-size:0.875rem;' }));
+      });
+      wrapper.appendChild(docList);
+    }
+
+    // Notes
+    if (r.notes) {
+      wrapper.appendChild(el('h4', { text: 'Notes', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
+      wrapper.appendChild(el('div', { 
+        text: r.notes, 
+        style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size: 0.875rem; white-space: pre-wrap; font-style: italic;' 
+      }));
+    }
+
+    // Fulfillment Details or Rejection Details
+    if (r.status === 'fulfilled') {
+      const fulfiller = DB.getById('users', r.fulfilledBy);
+      wrapper.appendChild(el('h4', { text: 'Fulfillment Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--success);' }));
+      const fulfillBox = el('div', {
+        style: 'background: color-mix(in oklab, var(--success), transparent 95%); border: 1px solid color-mix(in oklab, var(--success), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
+      }, [
+        el('div', { text: `Fulfilled by: ${fulfiller ? fulfiller.name : 'System'}` }),
+        el('div', { text: `Fulfilled at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' })
+      ]);
+      wrapper.appendChild(fulfillBox);
+    } else if (r.status === 'rejected') {
+      const rejecter = r.fulfilledBy ? DB.getById('users', r.fulfilledBy) : null;
+      wrapper.appendChild(el('h4', { text: 'Rejection Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--danger);' }));
+      const rejectBox = el('div', {
+        style: 'background: color-mix(in oklab, var(--danger), transparent 95%); border: 1px solid color-mix(in oklab, var(--danger), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
+      }, [
+        el('div', { text: `Reason: ${r.rejectionReason || 'No reason provided'}` }),
+        rejecter ? el('div', { text: `Rejected by: ${rejecter.name}`, style: 'margin-top:4px;' }) : null,
+        r.fulfilledAt ? el('div', { text: `Rejected at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' }) : null
+      ].filter(Boolean));
+      wrapper.appendChild(rejectBox);
+    }
+
+    const title = `Request Details: ${this._requestTypeLabel(r.type)}`;
+    Workflow.showModal(title, wrapper);
   }
 };
