@@ -185,12 +185,12 @@ const Disbursement = {
       if (pc.table !== 'disbursements' || pc.status !== 'rejected') return false;
       const data = pc.proposedData || {};
       if (!entMatch(data.entity)) return false;
-      if (Auth.user.role !== 'Admin' && pc.submittedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && pc.submittedBy !== Auth.user.id) return false;
       return true;
     }).length + DB.getWhere('operationsRequests', r => {
       if (r.type !== 'disbursement' || r.status !== 'rejected') return false;
       if (!entMatch(r.entity)) return false;
-      if (Auth.user.role !== 'Admin' && r.requestedBy !== Auth.user.id) return false;
+      if (!Auth.isManagerial() && r.requestedBy !== Auth.user.id) return false;
       return true;
     }).length;
 
@@ -608,70 +608,87 @@ const Disbursement = {
   },
 
   renderTableView(container, items) {
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Employee', 'Category', 'Amount', 'Fund', 'Status', 'Payment Method', 'Date', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
+    const buildActions = (d) => {
+      const wrapper = el('div', { style: 'display: inline-flex; gap: 4px; align-items: center;' });
 
-    const tbody = el('tbody');
-    items.forEach(d => {
-      const emp = DB.getById('users', this.getEmployeeId(d));
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: emp?.name || '—' }));
-      const tdCat = el('td');
-      tdCat.appendChild(el('span', { text: d.category, style: 'font-weight:600;' }));
-      if (d.fromTemplate) {
-        tdCat.appendChild(document.createTextNode(' '));
-        tdCat.appendChild(this.recurringBadge(d));
-      }
-      if (d.linkedWorkRequestId) {
-        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-        if (wr) {
-          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #64748b; margin-top: 4px;' });
-          wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 500;' }));
-          if (d.linkedTaskId) {
-            const task = DB.getById('tasks', d.linkedTaskId);
-            if (task) {
-              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: #8c9ba5; font-style: italic;' }));
-            }
-          } else {
-            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: #8c9ba5; font-style: italic;' }));
-          }
-          tdCat.appendChild(wrWrap);
-        }
-      }
-      tr.appendChild(tdCat);
-      tr.appendChild(el('td', { text: formatPHP(d.amount) }));
-      const source = this.getFundSource(d);
-      const fundBadge = el('span', { class: 'badge ' + (source === 'Firm Fund' ? 'badge-info' : 'badge-warning'), text: source });
-      const tdFund = el('td');
-      tdFund.appendChild(fundBadge);
-      tr.appendChild(tdFund);
-      tr.appendChild(el('td', { text: d.status }));
-      const payMethod = (d.status === 'Released' && d.paymentDetails?.method) ? d.paymentDetails.method : '—';
-      tr.appendChild(el('td', { text: payMethod }));
-      tr.appendChild(el('td', { text: formatDate(d.submittedAt) }));
-      const tdAct = el('td');
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-      tdAct.appendChild(viewBtn);
       if (this.canEditDisbursement(d)) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
+        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(d.id); });
-        tdAct.appendChild(editBtn);
+        wrapper.appendChild(editBtn);
       }
+
       if (d.status === 'Funded' && !d.archived) {
         const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
         archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveDisbursement(d.id); });
-        tdAct.appendChild(archiveBtn);
+        wrapper.appendChild(archiveBtn);
       }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+
+      return wrapper;
+    };
+
+    const columns = [
+      { key: 'employee', label: 'Employee', render: (d) => DB.getById('users', this.getEmployeeId(d))?.name || '—' },
+      {
+        key: 'category',
+        label: 'Category',
+        width: '30%',
+        render: (d) => {
+          const cell = el('div', { class: 'dt-title-cell' });
+          const line = el('div', { style: 'display: flex; align-items: center; gap: 6px; flex-wrap: wrap;' });
+          line.appendChild(el('span', { class: 'dt-title-link', text: d.category }));
+          if (d.fromTemplate) line.appendChild(this.recurringBadge(d));
+          cell.appendChild(line);
+          if (d.linkedWorkRequestId) {
+            const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+            if (wr) {
+              const sub = el('div', { style: 'font-size: 0.725rem; color: var(--color-text-muted);' });
+              let suffix = ' (Entire WR)';
+              if (d.linkedTaskId) {
+                const task = DB.getById('tasks', d.linkedTaskId);
+                if (task) suffix = ` (Task: ${task.title})`;
+              }
+              sub.appendChild(el('span', { text: '🔗 ' + wr.title + suffix, style: 'font-weight: 500;' }));
+              cell.appendChild(sub);
+            }
+          }
+          return cell;
+        }
+      },
+      { key: 'amount', label: 'Amount', render: (d) => formatPHP(d.amount || 0), align: 'right', width: '100px' },
+      {
+        key: 'fund',
+        label: 'Fund',
+        width: '110px',
+        render: (d) => {
+          const source = this.getFundSource(d);
+          return el('span', { class: 'badge ' + (source === 'Firm Fund' ? 'badge-info' : 'badge-warning'), text: source });
+        }
+      },
+      { key: 'status', label: 'Status', render: (d) => this.statusBadge(d.status), width: '120px' },
+      { key: 'paymentMethod', label: 'Payment Method', render: (d) => (d.status === 'Released' && d.paymentDetails?.method) ? d.paymentDetails.method : '—', width: '130px' },
+      { key: 'submittedAt', label: 'Date', render: (d) => formatDate(d.submittedAt), width: '110px' },
+      { key: 'actions', label: 'Actions', render: (d) => buildActions(d), class: 'dt-actions-col', width: '180px' }
+    ];
+
+    const tableView = DataTable.render({
+      items,
+      columns,
+      selectable: true,
+      bulkActions: (ids) => {
+        const rows = ids.map(id => DB.getById('disbursements', id)).filter(Boolean);
+        const canArchive = rows.filter(d => d.status === 'Funded' && !d.archived).length;
+        if (canArchive === 0) return [];
+        return [{
+          text: `Archive (${canArchive})`,
+          className: 'btn btn-primary btn-sm',
+          onClick: (sel) => this.bulkArchiveDisbursements(sel)
+        }];
+      },
+      rowId: (d) => d.id,
+      onRowClick: (d) => { location.hash = '#disbursement/detail/' + d.id; }
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(tableView);
   },
 
   /**
@@ -686,10 +703,11 @@ const Disbursement = {
    * - Others: Released | Funded | Rejected
    */
   getBoardColumns() {
+    const departments = Auth.user?.departments || [];
     const role = Auth.user?.role;
     const isAdmin = role === 'Admin';
-    const isAccounting = role === 'Accounting';
-    const isOperations = role === 'Operations';
+    const isAccounting = departments.includes('Accounting');
+    const isOperations = departments.includes('Operations');
 
     if (isAdmin) {
       return [
@@ -955,10 +973,10 @@ const Disbursement = {
         }
 
         const label = item.category + ' — ' + formatPHP(item.amount);
-        const isAdmin = Auth.user?.role === 'Admin';
+        const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('disbursement:release');
         const applyMove = () => {
-          // Non-Admin marking as Released must submit for admin approval.
-          const nextStatus = (targetStatus === 'Released' && !isAdmin) ? 'Release Pending Approval' : targetStatus;
+          // Non-managerial marking as Released must submit for admin approval.
+          const nextStatus = (targetStatus === 'Released' && !canReleaseDirectly) ? 'Release Pending Approval' : targetStatus;
           const changes = { boardOrder: newOrder, status: nextStatus, updatedAt: new Date().toISOString() };
           if (nextStatus === 'Release Pending Approval') {
             changes.releaseRequestedBy = Auth.user.id;
@@ -972,7 +990,7 @@ const Disbursement = {
         if (['Approved', 'Released', 'Funded'].includes(targetStatus)) {
           const msgs = {
             'Approved': `Approve disbursement "${label}"?`,
-            'Released': isAdmin ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
+            'Released': canReleaseDirectly ? `Mark disbursement "${label}" as Released?` : `Submit disbursement "${label}" for release approval?`,
             'Funded': `Mark disbursement "${label}" as Funded? This confirms funds have been credited.`
           };
           Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
@@ -1017,7 +1035,11 @@ const Disbursement = {
     const list = el('div', { class: 'list-view' });
     items.forEach(d => {
       const emp = DB.getById('users', this.getEmployeeId(d));
-      const item = el('div', { class: 'list-item' });
+      const item = el('div', { class: 'list-item', style: 'cursor: pointer;' });
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('button, a, input, select')) return;
+        location.hash = '#disbursement/detail/' + d.id;
+      });
       const left = el('div');
       const titleRow = el('div', { class: 'list-item-title' });
       titleRow.appendChild(document.createTextNode(d.category + ' — ' + formatPHP(d.amount)));
@@ -1041,12 +1063,9 @@ const Disbursement = {
       }
       left.appendChild(el('div', { class: 'list-item-meta', text: (emp?.name || '—') + ' • ' + this.getFundSource(d) + ' • ' + formatDate(d.submittedAt) + wrMeta }));
       item.appendChild(left);
-      const actionWrap = el('div', { style: 'display:flex;gap:4px;align-items:center;' });
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-      actionWrap.appendChild(viewBtn);
+      const actionWrap = el('div', { style: 'display:flex;gap:4px;align-items:center;flex-shrink:0;' });
       if (this.canEditDisbursement(d)) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
+        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(d.id); });
         actionWrap.appendChild(editBtn);
       }
@@ -1691,7 +1710,7 @@ const Disbursement = {
           const handler = DB.getById('users', d.paymentHandledBy);
           container.appendChild(renderEmptyState(`Waiting for release authorization from ${handler?.name || 'assigned handler'}`));
         }
-    } else if (d.status === 'Released' && (canApprove || Auth.user?.role === 'Accounting')) {
+    } else if (d.status === 'Released' && (canApprove || Auth.can('disbursement:release') || Auth.user?.departments?.includes('Accounting'))) {
       // Final funding step after release.
       const actions = el('div', { class: 'form-actions', style: 'margin-top: var(--spacing-xl); border-top: 1px solid #e2e8f0; padding-top: var(--spacing-lg);' });
       const fundBtn = el('button', { class: 'btn btn-success', text: 'Mark as Funded' });
@@ -1873,7 +1892,7 @@ const Disbursement = {
     const requester = DB.getById('users', d.requestedBy);
     let approverId = d.approvedBy || d.accountingApprovedBy;
     if (!approverId && (d.status === 'Approved' || d.status === 'Released')) {
-      const adminUser = DB.getWhere('users', u => u.role === 'Admin')[0];
+      const adminUser = DB.getWhere('users', u => u.role === 'Admin' || (u.departments || []).includes('Management'))[0];
       if (adminUser) approverId = adminUser.id;
     }
     const approver = approverId ? DB.getById('users', approverId) : null;
@@ -2704,6 +2723,28 @@ const Disbursement = {
     App.handleRoute();
   },
 
+  bulkArchiveDisbursements(ids) {
+    const eligible = (ids || [])
+      .map(id => DB.getById('disbursements', id))
+      .filter(d => d && d.status === 'Funded' && !d.archived);
+
+    if (eligible.length === 0) {
+      Workflow.showMessage('No eligible records', 'Only Funded disbursements can be archived.', 'info');
+      return;
+    }
+
+    Workflow.showConfirm('Bulk Archive',
+      `Are you sure you want to archive ${eligible.length} funded disbursement(s)?`,
+      () => {
+        const now = new Date().toISOString();
+        eligible.forEach(d => DB.update('disbursements', d.id, { archived: true, updatedAt: now }));
+        Workflow.showMessage('Archived', `${eligible.length} disbursement(s) archived.`, 'success');
+        App.handleRoute();
+      },
+      'warning'
+    );
+  },
+
   unarchiveDisbursement(id) {
     const d = DB.getById('disbursements', id);
     if (!d || d.status !== 'Funded' || !d.archived) return;
@@ -2715,8 +2756,8 @@ const Disbursement = {
   permanentDeleteDisbursement(id) {
     const d = DB.getById('disbursements', id);
     if (!d) return;
-    if (Auth.user?.role !== 'Admin' && !Auth.can('disbursement:delete')) {
-      Workflow.showMessage('Permission Denied', 'Only admins can permanently delete disbursements.', 'danger');
+    if (Auth.user?.role !== 'Admin' && !Auth.can('disbursement:delete') && !Auth.isManagerial()) {
+      Workflow.showMessage('Permission Denied', 'Only authorized users can permanently delete disbursements.', 'danger');
       return;
     }
     Workflow.showConfirm('Permanently Delete Disbursement',
@@ -2740,7 +2781,7 @@ const Disbursement = {
   renderArchive() {
     const entity = Auth.activeEntity;
     const self = this;
-    const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
 
     const entFilter = ent => {
       const uEnt = (ent || '').toUpperCase();
@@ -2755,14 +2796,14 @@ const Disbursement = {
       if (pc.table !== 'disbursements' || pc.status !== 'rejected') return false;
       const data = pc.proposedData || {};
       if (!entFilter(data.entity)) return false;
-      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      if (!isManagerial && pc.submittedBy !== Auth.user.id) return false;
       return true;
     });
 
     const rejectedDisbursementRequests = DB.getWhere('operationsRequests', r => {
       if (r.type !== 'disbursement' || r.status !== 'rejected') return false;
       if (!entFilter(r.entity)) return false;
-      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
       return true;
     });
 
@@ -2789,7 +2830,7 @@ const Disbursement = {
             className: 'primary',
             onClick: () => self.unarchiveDisbursement(d.id)
           }] : []),
-          ...(isAdmin || Auth.can('disbursement:delete') ? [{
+          ...(isManagerial || Auth.can('disbursement:delete') ? [{
             label: 'Delete Permanently',
             icon: ArchivePage.icons.delete,
             className: 'danger',

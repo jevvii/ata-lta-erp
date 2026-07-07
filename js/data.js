@@ -40,9 +40,10 @@ function defaultRequirementChecklist(taskId) {
 }
 
 const seedData = {
-  schemaVersion: 4,
+  schemaVersion: 15,
   operationsRequests: [],
 
+  departments: ['Accounting', 'Operations', 'Documentation', 'HR', 'Management', 'Legal', 'Tax', 'Audit', 'Business Development'],
 
   users: [
     {
@@ -51,6 +52,7 @@ const seedData = {
       email: 'admin@ata-lta.ph',
       password: 'password123',
       role: 'Admin',
+      departments: ['Administration'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
@@ -62,6 +64,7 @@ const seedData = {
       email: 'manager@ata-lta.ph',
       password: 'password123',
       role: 'Manager',
+      departments: ['Management'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/2.jpg',
@@ -73,6 +76,7 @@ const seedData = {
       email: 'manager-ata@ata-lta.ph',
       password: 'password123',
       role: 'Manager',
+      departments: ['Management'],
       entities: ['ata'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/3.jpg',
@@ -84,6 +88,7 @@ const seedData = {
       email: 'accounting-ata@ata-lta.ph',
       password: 'password123',
       role: 'Accounting',
+      departments: ['Accounting'],
       entities: ['ata'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/4.jpg',
@@ -95,6 +100,7 @@ const seedData = {
       email: 'accounting-lta@ata-lta.ph',
       password: 'password123',
       role: 'Accounting',
+      departments: ['Accounting'],
       entities: ['lta'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/5.jpg',
@@ -106,6 +112,7 @@ const seedData = {
       email: 'ops-ata@ata-lta.ph',
       password: 'password123',
       role: 'Operations',
+      departments: ['Operations'],
       entities: ['ata'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/6.jpg',
@@ -117,6 +124,7 @@ const seedData = {
       email: 'ops-lta@ata-lta.ph',
       password: 'password123',
       role: 'Operations',
+      departments: ['Operations'],
       entities: ['lta'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/7.jpg',
@@ -128,6 +136,7 @@ const seedData = {
       email: 'docs@ata-lta.ph',
       password: 'password123',
       role: 'Documentation',
+      departments: ['Documentation'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/8.jpg',
@@ -139,9 +148,59 @@ const seedData = {
       email: 'hr@ata-lta.ph',
       password: 'password123',
       role: 'HR',
+      departments: ['HR'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/9.jpg',
+      createdAt: now
+    },
+    // Mock users exercising multi-department / dynamic RBAC
+    {
+      id: makeId('u', 10),
+      name: 'Rhea Balboa',
+      email: 'rhea.b@ata-lta.ph',
+      password: 'password123',
+      role: 'Operations',
+      departments: ['Operations', 'Documentation'],
+      entities: ['ATA', 'LTA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/women/10.jpg',
+      createdAt: now
+    },
+    {
+      id: makeId('u', 11),
+      name: 'Carlos Reyes',
+      email: 'carlos.r@ata-lta.ph',
+      password: 'password123',
+      role: 'HR',
+      departments: ['HR', 'Accounting'],
+      entities: ['ATA', 'LTA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/men/11.jpg',
+      createdAt: now
+    },
+    {
+      id: makeId('u', 12),
+      name: 'Diana Cruz',
+      email: 'diana.c@ata-lta.ph',
+      password: 'password123',
+      role: 'Accounting',
+      departments: ['Accounting', 'Tax'],
+      entities: ['ATA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/women/12.jpg',
+      createdAt: now
+    },
+    {
+      id: makeId('u', 13),
+      name: 'Elena Torres',
+      email: 'elena.t@ata-lta.ph',
+      password: 'password123',
+      role: 'Manager',
+      departments: ['Management', 'Accounting'],
+      entities: ['ATA', 'LTA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/women/13.jpg',
       createdAt: now
     }
   ],
@@ -1637,7 +1696,7 @@ const seedData = {
 // ============================================================
 
 const DB = {
-  SCHEMA_VERSION: 14,
+  SCHEMA_VERSION: 16,
   _pendingWrIdsCache: null,
 
   init() {
@@ -1654,6 +1713,8 @@ const DB = {
         if (oldVersion < 12) this.migrateV11ToV12();
         if (oldVersion < 13) this.migrateV12ToV13();
         if (oldVersion < 14) this.migrateV13ToV14();
+        if (oldVersion < 15) this.migrateV14ToV15();
+        if (oldVersion < 16) this.migrateV15ToV16();
       } else if (oldVersion === 0) {
         this.resetToSeed();
       }
@@ -1849,6 +1910,39 @@ const DB = {
     localStorage.setItem('erp_schema_version', '14');
   },
 
+  migrateV14ToV15() {
+    // Seed departments table if missing
+    if (!localStorage.getItem('erp_departments')) {
+      const defaultDepartments = (seedData.departments || [])
+        .map(name => ({ id: 'dept-' + name.toLowerCase().replace(/\s+/g, '-'), name }));
+      this.save('departments', defaultDepartments);
+    }
+
+    // Back-fill departments for legacy users based on their role.
+    const roleToDept = {
+      Admin: 'Administration',
+      Manager: 'Management',
+      Accounting: 'Accounting',
+      Operations: 'Operations',
+      Documentation: 'Documentation',
+      HR: 'HR'
+    };
+    const users = this.getAll('users').map(u => {
+      const normalized = Array.isArray(u.departments) ? u.departments : [];
+      if (normalized.length === 0 && roleToDept[u.role]) {
+        return { ...u, departments: [roleToDept[u.role]] };
+      }
+      return { ...u, departments: normalized };
+    });
+    this.save('users', users);
+
+    localStorage.setItem('erp_schema_version', '15');
+  },
+
+  migrateV15ToV16() {
+    this.resetToSeed();
+  },
+
   ensureWorkRequestBoardOrder() {
     const wrs = this.getAll('workRequests');
     const hasMissing = wrs.some(wr => typeof wr.boardOrder !== 'number');
@@ -1975,5 +2069,741 @@ const DB = {
     localStorage.setItem('erp_schema_version', String(this.SCHEMA_VERSION));
   }
 };
+
+// Dynamic seedData adjustments requested:
+// 1. Keep only the first 10 users (with original avatars)
+seedData.users = seedData.users.slice(0, 10);
+
+// Helper for generating dates relative to current date/time
+const dateOffset = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+};
+
+// 2. Add 10 new operations requests
+seedData.operationsRequests = [
+  {
+    id: 'opreq-01',
+    type: 'billing',
+    workRequestId: makeId('wr', 101),
+    clientId: makeId('c', 1),
+    requestedBy: makeId('u', 6),
+    requestedAt: dateOffset(-3) + 'T10:00:00Z',
+    status: 'pending',
+    rejectionReason: '',
+    linkedTaskId: makeId('t', 1),
+    amount: 15000,
+    notes: 'Please bill Batangas Industrial Group for Phase 1 milestone.',
+    receiptFilename: null
+  },
+  {
+    id: 'opreq-02',
+    type: 'disbursement',
+    workRequestId: makeId('wr', 1),
+    clientId: makeId('c', 1),
+    requestedBy: makeId('u', 6),
+    requestedAt: dateOffset(-2) + 'T14:30:00Z',
+    status: 'pending',
+    rejectionReason: '',
+    disbursementType: 'Petty Cash',
+    category: 'Travel',
+    amount: 2500,
+    paymentMethod: 'Cash',
+    notes: 'Transport costs for Batangas site visit.',
+    receiptFilename: null,
+    linkedTaskId: ''
+  },
+  {
+    id: 'opreq-03',
+    type: 'transmittal',
+    workRequestId: makeId('wr', 2),
+    clientId: makeId('c', 3),
+    requestedBy: makeId('u', 7),
+    requestedAt: dateOffset(-1) + 'T09:15:00Z',
+    status: 'pending',
+    rejectionReason: '',
+    documents: ['Form 1701Q Q1', 'Tax Receipt Voucher'],
+    notes: 'Transmit Q1 documents to Manila Water.',
+    recipientDetails: 'Manila Water Office, Quezon City'
+  },
+  {
+    id: 'opreq-04',
+    type: 'billing',
+    workRequestId: makeId('wr', 99),
+    clientId: makeId('c', 1),
+    requestedBy: makeId('u', 7),
+    requestedAt: dateOffset(-5) + 'T11:00:00Z',
+    status: 'approved',
+    rejectionReason: '',
+    linkedTaskId: makeId('t', 99),
+    amount: 12000,
+    notes: 'Monthly retainer fee billing.',
+    receiptFilename: null
+  },
+  {
+    id: 'opreq-05',
+    type: 'disbursement',
+    workRequestId: makeId('wr', 2),
+    clientId: makeId('c', 3),
+    requestedBy: makeId('u', 6),
+    requestedAt: dateOffset(-4) + 'T15:45:00Z',
+    status: 'rejected',
+    rejectionReason: 'Invalid category selection.',
+    disbursementType: 'Company Fund',
+    category: 'Representation',
+    amount: 5000,
+    paymentMethod: 'Bank Transfer',
+    notes: 'Client lunch representation expense.',
+    receiptFilename: null,
+    linkedTaskId: ''
+  },
+  {
+    id: 'opreq-06',
+    type: 'transmittal',
+    workRequestId: makeId('wr', 102),
+    clientId: makeId('c', 2),
+    requestedBy: makeId('u', 6),
+    requestedAt: dateOffset(-6) + 'T08:30:00Z',
+    status: 'approved',
+    rejectionReason: '',
+    documents: ['SEC Registration Document'],
+    notes: 'Fulfill approved transmittal request.',
+    recipientDetails: 'Batangas Industrial Group HQ'
+  },
+  {
+    id: 'opreq-07',
+    type: 'billing',
+    workRequestId: makeId('wr', 102),
+    clientId: makeId('c', 2),
+    requestedBy: makeId('u', 7),
+    requestedAt: dateOffset(-1) + 'T16:20:00Z',
+    status: 'pending',
+    rejectionReason: '',
+    linkedTaskId: makeId('t', 102),
+    amount: 8500,
+    notes: 'Document collection service billing.',
+    receiptFilename: null
+  },
+  {
+    id: 'opreq-08',
+    type: 'disbursement',
+    workRequestId: makeId('wr', 101),
+    clientId: makeId('c', 1),
+    requestedBy: makeId('u', 6),
+    requestedAt: dateOffset(-2) + 'T10:10:00Z',
+    status: 'pending',
+    rejectionReason: '',
+    disbursementType: 'Client Fund',
+    category: 'Government Fee',
+    amount: 3000,
+    paymentMethod: 'Cash',
+    notes: 'BIR Registration Renewal Fee.',
+    receiptFilename: null,
+    linkedTaskId: ''
+  },
+  {
+    id: 'opreq-09',
+    type: 'transmittal',
+    workRequestId: makeId('wr', 1),
+    clientId: makeId('c', 1),
+    requestedBy: makeId('u', 7),
+    requestedAt: dateOffset(-3) + 'T13:40:00Z',
+    status: 'pending',
+    rejectionReason: '',
+    documents: ['Annual Audited Financial Statements'],
+    notes: 'Send AFS to BIR office.',
+    recipientDetails: 'RDO 39 Office'
+  },
+  {
+    id: 'opreq-10',
+    type: 'disbursement',
+    workRequestId: makeId('wr', 99),
+    clientId: makeId('c', 1),
+    requestedBy: makeId('u', 6),
+    requestedAt: dateOffset(-1) + 'T11:50:00Z',
+    status: 'pending',
+    rejectionReason: '',
+    disbursementType: 'Petty Cash',
+    category: 'Office Supplies',
+    amount: 1500,
+    paymentMethod: 'Cash',
+    notes: 'Purchase of archive files and folders.',
+    receiptFilename: null,
+    linkedTaskId: ''
+  }
+];
+
+// 3. Add 10 new billing (invoices)
+seedData.invoices = [
+  {
+    id: makeId('inv', 1),
+    clientId: makeId('c', 1),
+    entity: 'ATA',
+    workRequestId: makeId('wr', 1),
+    invoiceNumber: 'ATA-SI-2025-001',
+    issueDate: dateOffset(-10),
+    dueDate: dateOffset(20),
+    status: 'Sent',
+    lineItems: [{ description: 'Tax Compliance Retainer', amount: 20000.00, type: 'Professional Fee' }],
+    subtotal: 20000.00,
+    vat: 0,
+    total: 20000.00,
+    paidAmount: 0.00,
+    payments: [],
+    createdBy: makeId('u', 4),
+    createdAt: dateOffset(-10),
+    updatedAt: dateOffset(-10)
+  },
+  {
+    id: makeId('inv', 12),
+    clientId: makeId('c', 2),
+    entity: 'ATA',
+    workRequestId: makeId('wr', 1),
+    invoiceNumber: 'ATA-SI-2026-012',
+    issueDate: dateOffset(-12),
+    dueDate: dateOffset(18),
+    status: 'Paid',
+    lineItems: [{ description: 'AFS Audit Fee Part 1', amount: 50000.00, type: 'Professional Fee' }],
+    subtotal: 50000.00,
+    vat: 0,
+    total: 50000.00,
+    paidAmount: 50000.00,
+    payments: [{ amount: 50000.00, method: 'Bank Transfer', reference: 'PAY-1122', date: dateOffset(-5), recordedBy: makeId('u', 4) }],
+    createdBy: makeId('u', 4),
+    createdAt: dateOffset(-12),
+    updatedAt: dateOffset(-5)
+  },
+  {
+    id: makeId('inv', 13),
+    clientId: makeId('c', 3),
+    entity: 'LTA',
+    workRequestId: makeId('wr', 2),
+    invoiceNumber: 'LTA-SI-2026-013',
+    issueDate: dateOffset(-8),
+    dueDate: dateOffset(22),
+    status: 'Partially Paid',
+    lineItems: [{ description: 'Bookkeeping Fee - Q1', amount: 30000.00, type: 'Professional Fee' }],
+    subtotal: 30000.00,
+    vat: 0,
+    total: 30000.00,
+    paidAmount: 15000.00,
+    payments: [{ amount: 15000.00, method: 'Cash', reference: 'CSH-9988', date: dateOffset(-2), recordedBy: makeId('u', 5) }],
+    createdBy: makeId('u', 5),
+    createdAt: dateOffset(-8),
+    updatedAt: dateOffset(-2)
+  },
+  {
+    id: makeId('inv', 14),
+    clientId: makeId('c', 1),
+    entity: 'LTA',
+    workRequestId: makeId('wr', 99),
+    invoiceNumber: 'LTA-SI-2026-014',
+    issueDate: dateOffset(-1),
+    dueDate: dateOffset(29),
+    status: 'Draft',
+    lineItems: [{ description: 'Corporate Secretarial Services', amount: 12000.00, type: 'Professional Fee' }],
+    subtotal: 12000.00,
+    vat: 0,
+    total: 12000.00,
+    paidAmount: 0.00,
+    payments: [],
+    createdBy: makeId('u', 5),
+    createdAt: dateOffset(-1),
+    updatedAt: dateOffset(-1)
+  },
+  {
+    id: makeId('inv', 15),
+    clientId: makeId('c', 4),
+    entity: 'ATA',
+    workRequestId: makeId('wr', 101),
+    invoiceNumber: 'ATA-SI-2026-015',
+    issueDate: dateOffset(-15),
+    dueDate: dateOffset(15),
+    status: 'Sent',
+    lineItems: [{ description: 'Business Registration Service', amount: 25000.00, type: 'Professional Fee' }],
+    subtotal: 25000.00,
+    vat: 0,
+    total: 25000.00,
+    paidAmount: 0.00,
+    payments: [],
+    createdBy: makeId('u', 4),
+    createdAt: dateOffset(-15),
+    updatedAt: dateOffset(-15)
+  },
+  {
+    id: makeId('inv', 16),
+    clientId: makeId('c', 5),
+    entity: 'LTA',
+    workRequestId: makeId('wr', 102),
+    invoiceNumber: 'LTA-SI-2026-016',
+    issueDate: dateOffset(-20),
+    dueDate: dateOffset(10),
+    status: 'Paid',
+    lineItems: [{ description: 'General Consultation Retainer', amount: 15000.00, type: 'Professional Fee' }],
+    subtotal: 15000.00,
+    vat: 0,
+    total: 15000.00,
+    paidAmount: 15000.00,
+    payments: [{ amount: 15000.00, method: 'Check', reference: 'CHK-0044', date: dateOffset(-10), recordedBy: makeId('u', 5) }],
+    createdBy: makeId('u', 5),
+    createdAt: dateOffset(-20),
+    updatedAt: dateOffset(-10)
+  },
+  {
+    id: makeId('inv', 17),
+    clientId: makeId('c', 6),
+    entity: 'ATA',
+    workRequestId: makeId('wr', 99),
+    invoiceNumber: 'ATA-SI-2026-017',
+    issueDate: dateOffset(-2),
+    dueDate: dateOffset(28),
+    status: 'Sent',
+    lineItems: [{ description: 'BIR Audit Representation Fee', amount: 80000.00, type: 'Professional Fee' }],
+    subtotal: 80000.00,
+    vat: 0,
+    total: 80000.00,
+    paidAmount: 0.00,
+    payments: [],
+    createdBy: makeId('u', 4),
+    createdAt: dateOffset(-2),
+    updatedAt: dateOffset(-2)
+  },
+  {
+    id: makeId('inv', 18),
+    clientId: makeId('c', 7),
+    entity: 'LTA',
+    workRequestId: makeId('wr', 1),
+    invoiceNumber: 'LTA-SI-2026-018',
+    issueDate: dateOffset(-4),
+    dueDate: dateOffset(26),
+    status: 'Draft',
+    lineItems: [{ description: 'Local Business Permit Assistance', amount: 10000.00, type: 'Professional Fee' }],
+    subtotal: 10000.00,
+    vat: 0,
+    total: 10000.00,
+    paidAmount: 0.00,
+    payments: [],
+    createdBy: makeId('u', 5),
+    createdAt: dateOffset(-4),
+    updatedAt: dateOffset(-4)
+  },
+  {
+    id: makeId('inv', 19),
+    clientId: makeId('c', 8),
+    entity: 'ATA',
+    workRequestId: makeId('wr', 2),
+    invoiceNumber: 'ATA-SI-2026-019',
+    issueDate: dateOffset(-3),
+    dueDate: dateOffset(27),
+    status: 'Sent',
+    lineItems: [{ description: 'SEC General Information Sheet filing', amount: 5000.00, type: 'Professional Fee' }],
+    subtotal: 5000.00,
+    vat: 0,
+    total: 5000.00,
+    paidAmount: 0.00,
+    payments: [],
+    createdBy: makeId('u', 4),
+    createdAt: dateOffset(-3),
+    updatedAt: dateOffset(-3)
+  },
+  {
+    id: makeId('inv', 20),
+    clientId: makeId('c', 9),
+    entity: 'LTA',
+    workRequestId: makeId('wr', 101),
+    invoiceNumber: 'LTA-SI-2026-020',
+    issueDate: dateOffset(-14),
+    dueDate: dateOffset(16),
+    status: 'Paid',
+    lineItems: [{ description: 'SEC Incorporation Service', amount: 35000.00, type: 'Professional Fee' }],
+    subtotal: 35000.00,
+    vat: 0,
+    total: 35000.00,
+    paidAmount: 35000.00,
+    payments: [{ amount: 35000.00, method: 'Bank Transfer', reference: 'PAY-8822', date: dateOffset(-7), recordedBy: makeId('u', 5) }],
+    createdBy: makeId('u', 5),
+    createdAt: dateOffset(-14),
+    updatedAt: dateOffset(-7)
+  }
+];
+
+// 4. Add 10 new disbursements
+seedData.disbursements = [
+  {
+    id: makeId('d', 201),
+    category: 'Government Fee',
+    description: 'BIR Annual Registration Fee payment',
+    amount: 500.00,
+    fundSource: 'Client Fund',
+    linkedInvoiceId: makeId('inv', 1),
+    linkedWorkRequestId: makeId('wr', 1),
+    entity: 'ATA',
+    employeeId: makeId('u', 4),
+    requestedBy: makeId('u', 4),
+    status: 'Released',
+    submittedAt: dateOffset(-10),
+    dueDate: dateOffset(-10),
+    accountingApprovedBy: makeId('u', 1),
+    releasedAt: dateOffset(-10),
+    receiptFilename: 'bir-reg-fee-receipt.pdf',
+    paymentHandledBy: makeId('u', 1),
+    paymentDetails: { method: 'Cash', reference: 'REF-201', bank: '', date: dateOffset(-10), processedBy: makeId('u', 1) },
+    updatedAt: dateOffset(-10)
+  },
+  {
+    id: makeId('d', 202),
+    category: 'Travel',
+    description: 'Site inspection transport allowance',
+    amount: 1500.00,
+    fundSource: 'Petty Cash',
+    linkedInvoiceId: null,
+    linkedWorkRequestId: makeId('wr', 1),
+    entity: 'ATA',
+    employeeId: makeId('u', 6),
+    requestedBy: makeId('u', 6),
+    status: 'Approved',
+    submittedAt: dateOffset(-5),
+    dueDate: dateOffset(5),
+    accountingApprovedBy: makeId('u', 4),
+    releasedAt: '',
+    receiptFilename: null,
+    paymentHandledBy: '',
+    paymentDetails: { method: '', reference: '', bank: '', date: '', processedBy: '' },
+    updatedAt: dateOffset(-5)
+  },
+  {
+    id: makeId('d', 203),
+    category: 'Representation',
+    description: 'Business lunch client meeting',
+    amount: 3200.00,
+    fundSource: 'Company Fund',
+    linkedInvoiceId: null,
+    linkedWorkRequestId: makeId('wr', 2),
+    entity: 'LTA',
+    employeeId: makeId('u', 5),
+    requestedBy: makeId('u', 2),
+    status: 'Pending Approval',
+    submittedAt: dateOffset(-1),
+    dueDate: dateOffset(4),
+    accountingApprovedBy: '',
+    releasedAt: '',
+    receiptFilename: null,
+    paymentHandledBy: '',
+    paymentDetails: { method: '', reference: '', bank: '', date: '', processedBy: '' },
+    updatedAt: dateOffset(-1)
+  },
+  {
+    id: makeId('d', 204),
+    category: 'Office Supplies',
+    description: 'Archive folders and folders labels',
+    amount: 1200.00,
+    fundSource: 'Petty Cash',
+    linkedInvoiceId: null,
+    linkedWorkRequestId: makeId('wr', 99),
+    entity: 'LTA',
+    employeeId: makeId('u', 8),
+    requestedBy: makeId('u', 8),
+    status: 'Released',
+    submittedAt: dateOffset(-8),
+    dueDate: dateOffset(-8),
+    accountingApprovedBy: makeId('u', 1),
+    releasedAt: dateOffset(-8),
+    receiptFilename: 'supplies-receipt-01.pdf',
+    paymentHandledBy: makeId('u', 1),
+    paymentDetails: { method: 'Cash', reference: 'REF-204', bank: '', date: dateOffset(-8), processedBy: makeId('u', 1) },
+    updatedAt: dateOffset(-8)
+  },
+  {
+    id: makeId('d', 205),
+    category: 'Government Fee',
+    description: 'SEC Registration Filing Fee',
+    amount: 10000.00,
+    fundSource: 'Client Fund',
+    linkedInvoiceId: makeId('inv', 12),
+    linkedWorkRequestId: makeId('wr', 101),
+    entity: 'ATA',
+    employeeId: makeId('u', 4),
+    requestedBy: makeId('u', 4),
+    status: 'Released',
+    submittedAt: dateOffset(-12),
+    dueDate: dateOffset(-12),
+    accountingApprovedBy: makeId('u', 1),
+    releasedAt: dateOffset(-12),
+    receiptFilename: 'sec-reg-fee-receipt.pdf',
+    paymentHandledBy: makeId('u', 1),
+    paymentDetails: { method: 'Check', reference: 'CHK-205', bank: 'Metrobank', date: dateOffset(-12), processedBy: makeId('u', 1) },
+    updatedAt: dateOffset(-12)
+  },
+  {
+    id: makeId('d', 206),
+    category: 'Travel',
+    description: 'Client document pickup courier costs',
+    amount: 600.00,
+    fundSource: 'Petty Cash',
+    linkedInvoiceId: null,
+    linkedWorkRequestId: makeId('wr', 102),
+    entity: 'ATA',
+    employeeId: makeId('u', 6),
+    requestedBy: makeId('u', 6),
+    status: 'Approved',
+    submittedAt: dateOffset(-2),
+    dueDate: dateOffset(3),
+    accountingApprovedBy: makeId('u', 4),
+    releasedAt: '',
+    receiptFilename: null,
+    paymentHandledBy: '',
+    paymentDetails: { method: '', reference: '', bank: '', date: '', processedBy: '' },
+    updatedAt: dateOffset(-2)
+  },
+  {
+    id: makeId('d', 207),
+    category: 'Representation',
+    description: 'Documentation staff overtime dinner',
+    amount: 1800.00,
+    fundSource: 'Company Fund',
+    linkedInvoiceId: null,
+    linkedWorkRequestId: makeId('wr', 99),
+    entity: 'ATA',
+    employeeId: makeId('u', 8),
+    requestedBy: makeId('u', 8),
+    status: 'Released',
+    submittedAt: dateOffset(-6),
+    dueDate: dateOffset(-6),
+    accountingApprovedBy: makeId('u', 1),
+    releasedAt: dateOffset(-6),
+    receiptFilename: 'dinner-receipt-207.pdf',
+    paymentHandledBy: makeId('u', 1),
+    paymentDetails: { method: 'Cash', reference: 'REF-207', bank: '', date: dateOffset(-6), processedBy: makeId('u', 1) },
+    updatedAt: dateOffset(-6)
+  },
+  {
+    id: makeId('d', 208),
+    category: 'Government Fee',
+    description: 'BIR DST Payment',
+    amount: 450.00,
+    fundSource: 'Client Fund',
+    linkedInvoiceId: makeId('inv', 13),
+    linkedWorkRequestId: makeId('wr', 2),
+    entity: 'LTA',
+    employeeId: makeId('u', 5),
+    requestedBy: makeId('u', 5),
+    status: 'Released',
+    submittedAt: dateOffset(-4),
+    dueDate: dateOffset(-4),
+    accountingApprovedBy: makeId('u', 1),
+    releasedAt: dateOffset(-4),
+    receiptFilename: 'bir-dst-receipt.pdf',
+    paymentHandledBy: makeId('u', 1),
+    paymentDetails: { method: 'Cash', reference: 'REF-208', bank: '', date: dateOffset(-4), processedBy: makeId('u', 1) },
+    updatedAt: dateOffset(-4)
+  },
+  {
+    id: makeId('d', 209),
+    category: 'Office Supplies',
+    description: 'Overtime printing paper supply',
+    amount: 950.00,
+    fundSource: 'Petty Cash',
+    linkedInvoiceId: null,
+    linkedWorkRequestId: makeId('wr', 1),
+    entity: 'LTA',
+    employeeId: makeId('u', 5),
+    requestedBy: makeId('u', 5),
+    status: 'Pending Approval',
+    submittedAt: dateOffset(-1),
+    dueDate: dateOffset(5),
+    accountingApprovedBy: '',
+    releasedAt: '',
+    receiptFilename: null,
+    paymentHandledBy: '',
+    paymentDetails: { method: '', reference: '', bank: '', date: '', processedBy: '' },
+    updatedAt: dateOffset(-1)
+  },
+  {
+    id: makeId('d', 210),
+    category: 'Travel',
+    description: 'Travel to BIR RDO for AFS filing',
+    amount: 1100.00,
+    fundSource: 'Petty Cash',
+    linkedInvoiceId: null,
+    linkedWorkRequestId: makeId('wr', 101),
+    entity: 'LTA',
+    employeeId: makeId('u', 7),
+    requestedBy: makeId('u', 7),
+    status: 'Released',
+    submittedAt: dateOffset(-3),
+    dueDate: dateOffset(-3),
+    accountingApprovedBy: makeId('u', 1),
+    releasedAt: dateOffset(-3),
+    receiptFilename: 'taxi-receipt-210.pdf',
+    paymentHandledBy: makeId('u', 1),
+    paymentDetails: { method: 'Cash', reference: 'REF-210', bank: '', date: dateOffset(-3), processedBy: makeId('u', 1) },
+    updatedAt: dateOffset(-3)
+  }
+];
+
+// 5. Add 10 new transmittals
+seedData.transmittals = [
+  {
+    id: makeId('tx', 201),
+    workRequestId: makeId('wr', 102),
+    clientId: makeId('c', 2),
+    trackingNumber: 'ATA-TX-2026-001',
+    status: 'Acknowledged',
+    items: [{ description: 'Original SEC Registration Certificate', documentType: 'Corporate' }],
+    notes: 'Original document returned to Batangas Industrial Group.',
+    entity: 'ATA',
+    sentAt: dateOffset(-10) + 'T09:00:00Z',
+    acknowledgedAt: dateOffset(-10) + 'T14:30:00Z',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: makeId('u', 2),
+    createdAt: dateOffset(-10) + 'T08:00:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 202),
+    workRequestId: makeId('wr', 1),
+    clientId: makeId('c', 1),
+    trackingNumber: 'ATA-TX-2026-002',
+    status: 'Sent',
+    items: [{ description: 'Annual Income Tax Return AFS 2025', documentType: 'Tax Document' }],
+    notes: 'Submitting for client review before filing.',
+    entity: 'ATA',
+    sentAt: dateOffset(-2) + 'T11:00:00Z',
+    acknowledgedAt: '',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: '',
+    createdAt: dateOffset(-3) + 'T10:00:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 203),
+    workRequestId: makeId('wr', 2),
+    clientId: makeId('c', 3),
+    trackingNumber: 'LTA-TX-2026-003',
+    status: 'Draft',
+    items: [{ description: 'Monthly Bookkeeping Ledger Reports', documentType: 'Financial Statement' }],
+    notes: 'Prepare draft transmittal for client ledger books.',
+    entity: 'LTA',
+    sentAt: '',
+    acknowledgedAt: '',
+    sentBy: '',
+    acknowledgedBy: '',
+    createdAt: dateOffset(-1) + 'T16:00:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 204),
+    workRequestId: makeId('wr', 99),
+    clientId: makeId('c', 1),
+    trackingNumber: 'LTA-TX-2026-004',
+    status: 'Acknowledged',
+    items: [{ description: 'Quarterly VAT Reports Form 2550Q', documentType: 'Tax Document' }],
+    notes: 'Sent to accounting division.',
+    entity: 'LTA',
+    sentAt: dateOffset(-12) + 'T10:00:00Z',
+    acknowledgedAt: dateOffset(-11) + 'T09:15:00Z',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: makeId('u', 2),
+    createdAt: dateOffset(-12) + 'T08:30:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 205),
+    workRequestId: makeId('wr', 101),
+    clientId: makeId('c', 4),
+    trackingNumber: 'ATA-TX-2026-005',
+    status: 'Sent',
+    items: [{ description: 'Approved Business Permit License copy', documentType: 'Corporate' }],
+    notes: 'Copy sent to site manager.',
+    entity: 'ATA',
+    sentAt: dateOffset(-4) + 'T13:00:00Z',
+    acknowledgedAt: '',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: '',
+    createdAt: dateOffset(-4) + 'T09:00:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 206),
+    workRequestId: makeId('wr', 102),
+    clientId: makeId('c', 5),
+    trackingNumber: 'LTA-TX-2026-006',
+    status: 'Draft',
+    items: [{ description: 'Audited Financial Statements 2025', documentType: 'Financial Statement' }],
+    notes: 'AFS draft for client signing.',
+    entity: 'LTA',
+    sentAt: '',
+    acknowledgedAt: '',
+    sentBy: '',
+    acknowledgedBy: '',
+    createdAt: dateOffset(-2) + 'T14:45:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 207),
+    workRequestId: makeId('wr', 99),
+    clientId: makeId('c', 6),
+    trackingNumber: 'ATA-TX-2026-007',
+    status: 'Sent',
+    items: [{ description: 'BIR Audit Notice response document', documentType: 'Legal Document' }],
+    notes: 'Official response filed.',
+    entity: 'ATA',
+    sentAt: dateOffset(-1) + 'T15:30:00Z',
+    acknowledgedAt: '',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: '',
+    createdAt: dateOffset(-1) + 'T13:00:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 208),
+    workRequestId: makeId('wr', 1),
+    clientId: makeId('c', 7),
+    trackingNumber: 'LTA-TX-2026-008',
+    status: 'Acknowledged',
+    items: [{ description: 'Local Permit Filing Forms and Receipts', documentType: 'Receipt' }],
+    notes: 'Original receipts delivered.',
+    entity: 'LTA',
+    sentAt: dateOffset(-7) + 'T09:30:00Z',
+    acknowledgedAt: dateOffset(-7) + 'T11:00:00Z',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: makeId('u', 2),
+    createdAt: dateOffset(-7) + 'T08:00:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 209),
+    workRequestId: makeId('wr', 2),
+    clientId: makeId('c', 8),
+    trackingNumber: 'ATA-TX-2026-009',
+    status: 'Sent',
+    items: [{ description: 'Annual Information Return Form 1604CF', documentType: 'Tax Document' }],
+    notes: 'AFS annex files.',
+    entity: 'ATA',
+    sentAt: dateOffset(-2) + 'T10:00:00Z',
+    acknowledgedAt: '',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: '',
+    createdAt: dateOffset(-2) + 'T09:00:00Z',
+    createdBy: makeId('u', 8)
+  },
+  {
+    id: makeId('tx', 210),
+    workRequestId: makeId('wr', 101),
+    clientId: makeId('c', 9),
+    trackingNumber: 'LTA-TX-2026-010',
+    status: 'Acknowledged',
+    items: [{ description: 'Approved Incorporation Articles and By-laws', documentType: 'Corporate' }],
+    notes: 'SEC Official copy.',
+    entity: 'LTA',
+    sentAt: dateOffset(-6) + 'T11:00:00Z',
+    acknowledgedAt: dateOffset(-6) + 'T16:00:00Z',
+    sentBy: makeId('u', 8),
+    acknowledgedBy: makeId('u', 2),
+    createdAt: dateOffset(-6) + 'T10:00:00Z',
+    createdBy: makeId('u', 8)
+  }
+];
 
 DB.init();

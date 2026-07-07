@@ -151,6 +151,7 @@ const Clients = {
     }).length;
 
     const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
 
     const archivedCount = DB.getWhere('clients', c => {
       const cEnt = (c.entity || '').toUpperCase();
@@ -168,14 +169,14 @@ const Clients = {
       if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
       const data = pc.proposedData || {};
       if (!entFilter(data.entity)) return false;
-      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      if (!isManagerial && pc.submittedBy !== Auth.user.id) return false;
       return true;
     });
 
     const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
       if (r.type !== 'client' || r.status !== 'rejected') return false;
       if (!entFilter(r.entity)) return false;
-      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
       return true;
     });
 
@@ -1050,7 +1051,7 @@ const Clients = {
     }
 
     const isNew = !this.editingId || this.editingId === 'new';
-    const isApproved = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+    const isApproved = Auth.user.role === 'Admin' || Auth.isManagerial();
     const msgConfig = {
       title: isNew ? 'Client Created' : 'Client Updated',
       message: isApproved 
@@ -1277,7 +1278,7 @@ const Clients = {
   renderArchive(query = '') {
     const entity = Auth.activeEntity;
     const self = this;
-    const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
 
     const entFilter = ent => {
       const uEnt = (ent || '').toUpperCase();
@@ -1299,14 +1300,14 @@ const Clients = {
       if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
       const data = pc.proposedData || {};
       if (!entFilter(data.entity)) return false;
-      if (!isAdmin && pc.submittedBy !== Auth.user.id) return false;
+      if (!isManagerial && pc.submittedBy !== Auth.user.id) return false;
       return true;
     });
 
     const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
       if (r.type !== 'client' || r.status !== 'rejected') return false;
       if (!entFilter(r.entity)) return false;
-      if (!isAdmin && r.requestedBy !== Auth.user.id) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
       return true;
     });
 

@@ -2748,7 +2748,8 @@ const JiraBacklogList = {
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
 
       columns.forEach(col => {
-        const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
+        const alignClass = col.align ? ' jira-backlog-col-header--' + col.align : '';
+        const h = el('div', { class: 'jira-backlog-col-header' + alignClass, text: col.label || '' });
         if (col.align) h.style.textAlign = col.align;
         colHeader.appendChild(h);
       });
@@ -2829,12 +2830,13 @@ const JiraBacklogList = {
       });
 
       if (bulkBar) {
-        if (selectedIds.length > 0) {
+        const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
+        const finalActions = actionsList || [];
+        if (selectedIds.length > 0 && finalActions.length > 0) {
           countInfo.textContent = `${selectedIds.length} selected`;
           
           actionsContainer.innerHTML = '';
-          const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
-          actionsList.forEach(act => {
+          finalActions.forEach(act => {
             const btn = el('button', {
               class: act.className || 'btn btn-secondary btn-sm',
               text: act.text
@@ -2943,7 +2945,9 @@ const JiraBacklogList = {
         tagsNode.style.gridColumn = `5 / span ${columns.length}`;
       }
       const tagList = item.tags || [];
-      tagList.forEach(tag => {
+      tagList.forEach((tag, tagIdx) => {
+        const col = hasColumns ? columns[tagIdx] : null;
+        const alignCls = col?.align ? ' jira-backlog-col-cell--' + col.align : '';
         const typeCls = tag.type ? ` jira-backlog-tag-${tag.type}` : '';
         let valCls = '';
         if (tag.type === 'schedule' && tag.value) {
@@ -2952,7 +2956,7 @@ const JiraBacklogList = {
           valCls = ` jira-backlog-tag-fund-${tag.value.toLowerCase().replace(/\s+/g, '')}`;
         }
 
-        const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') });
+        const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') + alignCls });
 
         let iconHtml = '';
         if (tag.type === 'client') {
@@ -2994,7 +2998,7 @@ const JiraBacklogList = {
       // Actions column pinned to the rightmost edge of the row.
       if (hasColumns && hasRowActions) {
         const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
-        actionsNode.style.gridColumn = `-1 / -1`;
+        actionsNode.style.gridColumn = `-2 / -1`;
         const rowActionsList = rowActions(item);
         if (Array.isArray(rowActionsList) && rowActionsList.length > 0) {
           rowActionsList.forEach(act => {
