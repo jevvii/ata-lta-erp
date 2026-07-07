@@ -10956,6 +10956,8 @@ tbody tr * {
 }
 
 .notion-template-picker {
+  position: relative;
+  display: inline-block;
   margin: 12px 0;
 }
 
