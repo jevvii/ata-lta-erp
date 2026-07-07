@@ -358,7 +358,28 @@ const Clients = {
 
     const tinProp = el('div', { class: 'notion-prop' });
     tinProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> TIN' }));
-    tinProp.appendChild(el('input', { type: 'text', name: 'tin', class: 'notion-prop-input', placeholder: 'XXX-XXX-XXX-XXXX', required: true, value: client ? (client.tin || '') : '' }));
+    const tinInput = el('input', { type: 'text', name: 'tin', class: 'notion-prop-input', placeholder: 'XXX-XXX-XXX-XXXXX', required: true, value: client ? (client.tin || '') : '' });
+    tinInput.addEventListener('input', (e) => {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value.length > 14) {
+        value = value.substring(0, 14);
+      }
+      let formatted = '';
+      if (value.length > 0) {
+        formatted += value.substring(0, 3);
+      }
+      if (value.length > 3) {
+        formatted += '-' + value.substring(3, 6);
+      }
+      if (value.length > 6) {
+        formatted += '-' + value.substring(6, 9);
+      }
+      if (value.length > 9) {
+        formatted += '-' + value.substring(9, 14);
+      }
+      e.target.value = formatted;
+    });
+    tinProp.appendChild(tinInput);
     propsGrid.appendChild(tinProp);
 
     const tradeProp = el('div', { class: 'notion-prop' });
@@ -549,9 +570,9 @@ const Clients = {
 
     const data = Object.fromEntries(new FormData(form).entries());
 
-    if (!data.tin || !/^\d{3}-\d{3}-\d{3}-\d{4}$/.test(data.tin)) {
+    if (!data.tin || !/^\d{3}-\d{3}-\d{3}-\d{5}$/.test(data.tin)) {
       const tinField = form.querySelector('[name="tin"]');
-      showFieldError(tinField, 'TIN must be in format XXX-XXX-XXX-XXXX.');
+      showFieldError(tinField, 'TIN must be in format XXX-XXX-XXX-XXXXX.');
       return;
     }
 

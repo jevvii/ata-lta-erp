@@ -156,7 +156,7 @@ const seedData = {
     {
       id: makeId('c', 1),
       name: 'Manila Fresh Foods Inc.',
-      tin: '123-456-789-0001',
+      tin: '123-456-789-00001',
       contactPerson: 'Juan dela Cruz',
       phone: '0917-123-4567',
       email: 'juan.dcruz@manilafresh.ph',
@@ -172,7 +172,7 @@ const seedData = {
     {
       id: makeId('c', 2),
       name: 'Cebu Trading Co.',
-      tin: '234-567-890-0002',
+      tin: '234-567-890-00002',
       contactPerson: 'Maria Santos',
       phone: '0918-234-5678',
       email: 'maria.santos@cebutrade.ph',
@@ -188,7 +188,7 @@ const seedData = {
     {
       id: makeId('c', 3),
       name: 'Davao Agri Ventures',
-      tin: '345-678-901-0003',
+      tin: '345-678-901-00003',
       contactPerson: 'Ricardo Reyes',
       phone: '0919-345-6789',
       email: 'ricardo.reyes@davaoagri.ph',
@@ -204,7 +204,7 @@ const seedData = {
     {
       id: makeId('c', 4),
       name: 'Iloilo Manufacturing Corp.',
-      tin: '456-789-012-0004',
+      tin: '456-789-012-00004',
       contactPerson: 'Ana Lim',
       phone: '0920-456-7890',
       email: 'ana.lim@iloilomfg.ph',
@@ -220,7 +220,7 @@ const seedData = {
     {
       id: makeId('c', 5),
       name: 'Batangas Industrial Group',
-      tin: '567-890-123-0005',
+      tin: '567-890-123-00005',
       contactPerson: 'Pedro Garcia',
       phone: '0921-567-8901',
       email: 'pedro.garcia@batindustrial.ph',
@@ -236,7 +236,7 @@ const seedData = {
     {
       id: makeId('c', 6),
       name: 'Laguna Logistics Ltd.',
-      tin: '678-901-234-0006',
+      tin: '678-901-234-00006',
       contactPerson: 'Elena Torres',
       phone: '0922-678-9012',
       email: 'elena.torres@lagunalogistics.ph',
@@ -252,7 +252,7 @@ const seedData = {
     {
       id: makeId('c', 7),
       name: 'Pampanga Retailers Inc.',
-      tin: '789-012-345-0007',
+      tin: '789-012-345-00007',
       contactPerson: 'Carlos Mendoza',
       phone: '0923-789-0123',
       email: 'carlos.mendoza@pampangaretail.ph',
@@ -268,7 +268,7 @@ const seedData = {
     {
       id: makeId('c', 8),
       name: 'Tagaytay Hospitality Group',
-      tin: '890-123-456-0008',
+      tin: '890-123-456-00008',
       contactPerson: 'Sofia Ramos',
       phone: '0924-890-1234',
       email: 'sofia.ramos@tagaytayhospitality.ph',
@@ -284,7 +284,7 @@ const seedData = {
     {
       id: makeId('c', 9),
       name: 'Pioneer Logistics Inc.',
-      tin: '901-123-456-0009',
+      tin: '901-123-456-00009',
       contactPerson: 'David Tan',
       phone: '0925-123-4567',
       email: 'david.tan@pioneerlog.ph',
@@ -300,7 +300,7 @@ const seedData = {
     {
       id: makeId('c', 10),
       name: 'Taguig Tech Solutions',
-      tin: '012-234-567-0010',
+      tin: '012-234-567-00010',
       contactPerson: 'Grace Lee',
       phone: '0926-234-5678',
       email: 'grace.lee@taguigtech.ph',
@@ -316,7 +316,7 @@ const seedData = {
     {
       id: makeId('c', 11),
       name: 'Apex Global Solutions (Archived)',
-      tin: '901-234-567-0011',
+      tin: '901-234-567-00011',
       contactPerson: 'Robert Tan',
       phone: '0925-901-2345',
       email: 'robert.tan@apexglobal.ph',
@@ -333,7 +333,7 @@ const seedData = {
     {
       id: makeId('c', 12),
       name: 'Summit Summit Summit (Archived)',
-      tin: '012-345-678-0012',
+      tin: '012-345-678-00012',
       contactPerson: 'Lisa Go',
       phone: '0926-012-3456',
       email: 'lisa.go@summit.ph',
