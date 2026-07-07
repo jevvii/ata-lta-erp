@@ -10959,6 +10959,7 @@ tbody tr * {
   margin: 12px 0;
 }
 
+.side-pane .form-header-bar,
 .side-pane .notion-form .form-header-bar,
 .side-pane .notion-form > .page-title-bar-v2,
 .side-pane .notion-form > .form-actions-top {
