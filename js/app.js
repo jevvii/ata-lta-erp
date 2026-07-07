@@ -161,7 +161,7 @@ const App = {
 
     // Admin nav badge: reflect pending approvals / pending submissions to draw attention.
     const adminNav = document.querySelector('nav a[href="#admin"]');
-    if (adminNav && Auth.user?.role !== 'Manager') {
+    if (adminNav) {
       const canManageUsers = Auth.can('users:view');
       let adminCount = 0;
       if (canManageUsers) {
@@ -174,7 +174,12 @@ const App = {
         // For staff: count their own pending submissions.
         const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
         const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
-        adminCount = pendingChanges.length + myReqs.length;
+        let approvalsCount = 0;
+        if (Auth.user.role === 'Manager' && typeof Users !== 'undefined' && typeof Users.getPendingCategories === 'function') {
+          const categories = Users.getPendingCategories();
+          approvalsCount = Object.values(categories).reduce((sum, arr) => sum + (arr || []).length, 0);
+        }
+        adminCount = pendingChanges.length + myReqs.length + approvalsCount;
       }
 
       let adminBadge = adminNav.querySelector('.nav-badge');
@@ -208,24 +213,21 @@ const App = {
     }
     this.renderEntitySwitcher();
 
-    // Configure Admin / My Submissions nav link dynamically based on role/permissions
     const adminNav = document.querySelector('nav a[href="#admin"]');
     const canManageUsers = Auth.can('users:view');
     if (adminNav) {
       const labelEl = adminNav.querySelector('.nav-link-text');
-      if (Auth.user.role === 'Manager') {
-        adminNav.parentElement.style.display = 'none';
-      } else if (canManageUsers) {
+      if (Auth.user.role === 'Admin') {
         adminNav.parentElement.style.display = '';
         if (labelEl) labelEl.textContent = 'Admin';
       } else {
-        // Staff-level user: show as "My Submissions"
+        // Manager and other staff roles: show as "My Submissions"
         adminNav.parentElement.style.display = '';
         if (labelEl) labelEl.textContent = 'My Submissions';
       }
     }
 
-    // Hide Reports nav link for non-Managerial users
+    // Hide Reports nav link for non-Admin users
     const reportsNav = document.querySelector('nav a[href="#reports"]');
     if (reportsNav) {
       const canViewReports = Auth.can('reports:view');
@@ -397,6 +399,12 @@ const App = {
   handleRoute() {
     if (window.SidePaneInstance) window.SidePaneInstance.close();
     const rawHash = location.hash || '#dashboard';
+
+    // Clear editingPendingId when leaving form routes
+    const hasFormInHash = rawHash.includes('/form/') || rawHash.includes('/templateForm/');
+    if (!hasFormInHash && typeof PendingChanges !== 'undefined') {
+      PendingChanges.editingPendingId = null;
+    }
     const parts = rawHash.split('?');
     const pathParts = parts[0].split('/');
     const baseHash = pathParts[0];
@@ -473,6 +481,12 @@ const App = {
         Transmittal.view = 'list';
         Transmittal.detailId = null;
       }
+    } else if (baseHash === '#clients') {
+      if (pathParts[1] === 'form') {
+        Clients.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+      } else {
+        Clients.editingId = null;
+      }
     }
 
     const moduleMap = {
@@ -486,7 +500,7 @@ const App = {
       '#admin': Users
     };
 
-    // RBAC: Restricted modules
+    // Restrict reports and disbursement based on RBAC
     if (baseHash === '#reports' && !Auth.can('reports:view')) {
        location.hash = '#dashboard';
        return;
@@ -496,10 +510,6 @@ const App = {
        return;
     }
     if (baseHash === '#transmittal' && !Auth.can('transmittal:view') && !Auth.can('transmittal:request')) {
-       location.hash = '#dashboard';
-       return;
-    }
-    if (baseHash === '#admin' && Auth.user.role === 'Manager') {
        location.hash = '#dashboard';
        return;
     }
@@ -660,14 +670,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const password = document.getElementById('password').value;
       const errorEl = document.getElementById('login-error');
 
-      if (Auth.login(email, password)) {
+      const loginResult = Auth.login(email, password);
+      if (loginResult === true) {
         if (errorEl) errorEl.classList.add('hidden');
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('app-shell').classList.remove('hidden');
         App.init();
       } else {
         if (errorEl) {
-          errorEl.textContent = 'Invalid email or password.';
+          errorEl.textContent = loginResult === 'disabled'
+            ? 'Your account has been disabled. Please contact the administrator.'
+            : 'Invalid email or password.';
           errorEl.classList.remove('hidden');
         }
       }

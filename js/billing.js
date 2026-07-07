@@ -70,7 +70,8 @@ const Billing = {
         baseHash: '#billing',
         currentText: isNew ? 'New Invoice' : (inv?.invoiceNumber || 'Edit Invoice'),
         actions: [
-          { text: '← Back to Invoices', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
+          { text: isNew ? 'Save Invoice' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'invoice-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
         ]
       }));
     } else if (this.view === 'templateForm') {
@@ -262,6 +263,8 @@ const Billing = {
       date: new Set()
     };
 
+    let searchQuery = '';
+
     const savedFilters = App.restoreFilters('billing');
     if (savedFilters) {
       if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
@@ -356,6 +359,10 @@ const Billing = {
 
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'billing',
+      searchConfig: {
+        placeholder: 'Search billing...',
+        onSearch: (q) => { searchQuery = q; refresh(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -450,7 +457,21 @@ const Billing = {
         });
       }
 
-      const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+      // Text search filter
+      if (searchQuery) {
+        invoices = invoices.filter(inv => {
+          const client = DB.getById('clients', inv.clientId);
+          const hay = [
+            inv.invoiceNumber || '',
+            client?.name || '',
+            inv.status || '',
+            String(inv.total || ''),
+          ].join(' ').toLowerCase();
+          return hay.includes(searchQuery);
+        });
+      }
+
+      const hasActiveFilters = searchQuery || Object.values(activeFilters).some(s => s && s.size > 0);
 
       if (invoices.length === 0 && hasActiveFilters && hasInvoices) {
         contentContainer.appendChild(renderFilterEmptyState(
@@ -1155,6 +1176,7 @@ const Billing = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     // Validate line items: at least one complete row, no partially-filled rows.
     const itemRows = form.querySelectorAll('.notion-line-item-row');
@@ -1293,7 +1315,8 @@ const Billing = {
         : 'Invoice ' + record.invoiceNumber + ' ' + (isNew ? 'creation' : 'update') + ' request has been submitted for Admin approval.',
       type: 'success'
     };
-    closeFormPanelAndRoute('#billing', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#billing';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   showForm(invoiceId = null) {
@@ -2780,10 +2803,14 @@ const Billing = {
       },
       bulkActions: (selectedIds) => [
         {
-          text: '⚡ Bulk Generate Invoices',
+          text: selectedIds.length === 1 ? '⚡ Generate Invoice' : '⚡ Bulk Generate Invoices',
           className: 'btn btn-primary btn-sm',
           onClick: (ids) => {
-            Workflow.showConfirm('Bulk Generate Invoices', `Are you sure you want to generate invoices for all ${ids.length} selected templates?`, () => {
+            const title = ids.length === 1 ? 'Generate Invoice' : 'Bulk Generate Invoices';
+            const message = ids.length === 1
+              ? 'Are you sure you want to generate an invoice for this selected template?'
+              : `Are you sure you want to generate invoices for all ${ids.length} selected templates?`;
+            Workflow.showConfirm(title, message, () => {
               let count = 0;
               ids.forEach(id => {
                 const t = templates.find(temp => temp.id === id);
@@ -2813,7 +2840,7 @@ const Billing = {
                   count++;
                 }
               });
-              Workflow.showMessage('Success', `Generated ${count} invoices successfully.`, 'success');
+              Workflow.showMessage('Success', `Generated ${count} invoice${count === 1 ? '' : 's'} successfully.`, 'success');
               this.view = 'list';
               App.handleRoute();
             });
@@ -2823,7 +2850,11 @@ const Billing = {
           text: 'Delete',
           className: 'btn btn-danger btn-sm',
           onClick: (ids) => {
-            Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${ids.length} selected templates?`, () => {
+            const title = ids.length === 1 ? 'Delete Template' : 'Delete Templates';
+            const message = ids.length === 1
+              ? 'Are you sure you want to delete this selected template?'
+              : `Are you sure you want to delete these ${ids.length} selected templates?`;
+            Workflow.showConfirm(title, message, () => {
               ids.forEach(id => {
                 DB.delete('billingTemplates', id);
               });

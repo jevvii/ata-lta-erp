@@ -197,8 +197,13 @@ const DMS = {
       { key: 'status', label: 'Lifecycle', getName: doc => self.lifecycleLabel(doc.documentLifecycle || 'collected') }
     ];
 
+    this.searchQuery = '';
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'documents',
+      searchConfig: {
+        placeholder: 'Search document...',
+        onSearch: (q) => { this.searchQuery = q; updateFilters(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -272,6 +277,21 @@ const DMS = {
         else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
         else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
         return activeFilters.date.has(bucket);
+      });
+    }
+
+    // Text search filter
+    if (this.searchQuery) {
+      docs = docs.filter(d => {
+        const wr = d.workRequestId ? DB.getById('workRequests', d.workRequestId) : null;
+        const client = wr ? DB.getById('clients', wr.clientId) : null;
+        const hay = [
+          d.fileName || '',
+          d.documentType || '',
+          client?.name || '',
+          wr?.title || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(this.searchQuery);
       });
     }
 

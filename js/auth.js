@@ -66,6 +66,7 @@ const Auth = {
     const users = DB.getAll('users');
     const user = users.find(u => u.email === email && u.password === password);
     if (!user) return false;
+    if (user.isActive === false) return 'disabled';
     this.user = user;
     // Normalize entity values to uppercase for consistency
     this.user.entities = this.user.entities.map(e => e.toUpperCase());
@@ -94,12 +95,13 @@ const Auth = {
       return false;
     }
     this.user = DB.getById('users', s.userId);
-    if (this.user) {
+    if (this.user && this.user.isActive !== false) {
       this.user.entities = this.user.entities.map(e => e.toUpperCase());
       this.activeEntity = s.activeEntity;
       this.updateSessionClasses(true);
       return true;
     } else {
+      this.user = null;
       this.updateSessionClasses(false);
       return false;
     }
@@ -112,7 +114,7 @@ const Auth = {
     if (role === 'Admin') return true;
     if (!this.user.entities.includes(entity)) return false;
     const perms = {
-      Manager: ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','reports:view','users:view','audit:view_all','transmittal:view','transmittal:mark','bypass_review:tasks','approve_change:tasks'],
+      Manager: ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:mark','bypass_review:tasks','approve_change:tasks'],
       Accounting: ['clients:view','workflow:view','workflow:task_add','billing:view','billing:edit','disbursement:view','disbursement:create','disbursement:edit','dms:view','transmittal:view'],
       Operations: ['clients:view','workflow:view','workflow:task_add','workflow:task_upload','billing:view','billing:request','disbursement:view','disbursement:request','dms:view','transmittal:view','transmittal:request'],
       Documentation: ['clients:view','workflow:view','workflow:task_add','billing:view','disbursement:view','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:create','transmittal:edit','transmittal:mark'],

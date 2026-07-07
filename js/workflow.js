@@ -1997,15 +1997,20 @@ const Workflow = {
       const record = isTemplate
         ? (this.templateEditingId ? DB.getById('retainerTemplates', this.templateEditingId) : null)
         : (this.editingId ? DB.getById('workRequests', this.editingId) : null);
+
+      const actions = [];
+      if (!isTemplate) {
+        actions.push({ text: isNew ? 'Submit Request' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'wr-form' });
+      }
+      actions.push({ text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } });
+
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Operations',
         baseHash: '#operations',
         currentText: isTemplate
           ? (isNew ? 'New Retainer Template' : (record?.name || 'Edit Template'))
           : (isNew ? 'New Work Request' : (record?.title || 'Edit Work Request')),
-        actions: [
-          { text: '← Back to Operations', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } }
-        ]
+        actions: actions
       }));
     } else if (this.view === 'addTask' && this.addTaskWrId) {
       container.classList.add('operations-tab-page');
@@ -2194,6 +2199,7 @@ const Workflow = {
       dueDate: new Set(),
       client: new Set()
     };
+    let searchQuery = '';
 
     // Restore saved filters (v2 format)
     const savedFilters = App.restoreFilters('operations');
@@ -2326,6 +2332,21 @@ const Workflow = {
 
       if (activeFilters.client.size > 0) {
         result = result.filter(r => activeFilters.client.has(r.clientId));
+      }
+
+      if (searchQuery) {
+        result = result.filter(r => {
+          const client = DB.getById('clients', r.clientId);
+          const assignees = Array.from(this.getWorkRequestAssigneeNames(r, resolvedTaskMap));
+          const hay = [
+            r.title || '',
+            client?.name || '',
+            r.status || '',
+            r.description || '',
+            ...assignees
+          ].join(' ').toLowerCase();
+          return hay.includes(searchQuery);
+        });
       }
 
       return result;
@@ -2631,10 +2652,61 @@ const Workflow = {
     filterWrap.appendChild(filterTrigger);
     filterWrap.appendChild(filterDropdown);
 
+    // Search input (beside filter)
+    const searchWrap = el('div', { class: 'jira-search-wrap' });
+    const searchInput = el('input', {
+      type: 'text',
+      class: 'jira-search-input',
+      placeholder: 'Search operations...',
+      autocomplete: 'off'
+    });
+    const searchIcon = el('span', {
+      class: 'jira-search-icon',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    });
+    const clearBtn = el('button', {
+      type: 'button',
+      class: 'jira-search-clear hidden',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+      title: 'Clear search'
+    });
+
+    searchInput.addEventListener('input', debounce(() => {
+      searchQuery = searchInput.value.trim().toLowerCase();
+      clearBtn.classList.toggle('hidden', !searchQuery);
+      refresh();
+      updateToolbar();
+    }, 200));
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      searchQuery = '';
+      refresh();
+      updateToolbar();
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        clearBtn.classList.add('hidden');
+        searchQuery = '';
+        refresh();
+        updateToolbar();
+      }
+    });
+
+    searchWrap.appendChild(searchIcon);
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(clearBtn);
+
     // Clear filters button
     const clearFiltersBtn = el('button', { type: 'button', class: 'jira-clear-filters hidden', text: 'Clear filters' });
     clearFiltersBtn.addEventListener('click', () => {
       Object.keys(activeFilters).forEach(cat => activeFilters[cat].clear());
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      searchQuery = '';
       App.clearSavedFilters('operations');
       updateFilterUI();
       refresh();
@@ -2645,11 +2717,12 @@ const Workflow = {
       const count = getActiveFilterCount();
       filterBadge.textContent = String(count);
       filterBadge.classList.toggle('hidden', count === 0);
-      clearFiltersBtn.classList.toggle('hidden', count === 0);
+      clearFiltersBtn.classList.toggle('hidden', count === 0 && !searchQuery);
     };
     updateToolbar();
 
     jiraToolbar.appendChild(vmToggle);
+    jiraToolbar.appendChild(searchWrap);
     jiraToolbar.appendChild(filterWrap);
     jiraToolbar.appendChild(clearFiltersBtn);
     if (viewMode === 'board') {
@@ -2722,7 +2795,7 @@ const Workflow = {
       wrs = wrs.filter(r => Auth.canViewWrWithTasks(r, listTaskMap));
       wrs = applyFilters(wrs, listTaskMap);
 
-      const hasActiveFilters = getActiveFilterCount() > 0;
+      const hasActiveFilters = getActiveFilterCount() > 0 || !!searchQuery;
       if (viewMode === 'table') this.refreshTable(contentContainer, wrs, hasActiveFilters);
       else if (viewMode === 'board') this.refreshBoard(contentContainer, wrs, groupBy, stickyContainer);
       else this.refreshListCompact(contentContainer, wrs, hasActiveFilters);
@@ -2832,6 +2905,7 @@ const Workflow = {
       tr.appendChild(statusTd);
       
       tr.appendChild(el('td', { text: wr.dueDate ? formatDate(wr.dueDate) : '—' }));
+      tr.appendChild(el('td', { text: assignedUser ? assignedUser.name : '—' }));
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', (e) => {
         if (!e.target.closest('button, a, input, select')) {
@@ -4743,7 +4817,8 @@ const Workflow = {
           item.classList.add('active');
 
           if (templateBtnRef) {
-            templateBtnRef.textContent = template ? template.name : 'Use Retainer Template';
+            const svgIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+            templateBtnRef.innerHTML = `${svgIcon} ${template ? escapeHtml(template.name) : 'Use Retainer Template'}`;
           }
 
           templateDropdown.classList.add('hidden');
@@ -4848,7 +4923,7 @@ const Workflow = {
 
     // Pre-populate existing tasks if editing
     if (wr) {
-      const existingTasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
+      const existingTasks = wr.tasks || DB.getWhere('tasks', t => t.workRequestId === wr.id);
       existingTasks.forEach(t => this.addTaskRow(tasksList, t));
     } else {
       this.addTaskRow(tasksList);
@@ -5155,6 +5230,7 @@ const Workflow = {
   },
 
   submitForm(form) {
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
     // Temporarily enable disabled fields so FormData picks them up
     const disabledFields = form.querySelectorAll('[disabled]');
     disabledFields.forEach(f => f.disabled = false);
@@ -5337,7 +5413,8 @@ const Workflow = {
         : `Work Request ${isNew ? 'creation' : 'update'} request has been submitted for Admin approval.`,
       type: 'success'
     };
-    closeFormPanelAndRoute('#operations', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#operations';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   /**
@@ -9073,6 +9150,98 @@ const Workflow = {
       form.appendChild(coAssigneeGroup);
     }
 
+    // Initialize from existing task checklist or empty array
+    let checklistItems = Array.isArray(task.checklist) ? [...task.checklist] : [];
+
+    // Append the Checklist Builder layout (identical to Add Task modal)
+    const checklistGroup = el('div', { class: 'form-group' });
+    checklistGroup.appendChild(el('label', { text: 'Checklist Items' }));
+    const checklistContainer = el('div', { class: 'checklist-items-container' });
+
+    const checklistBuilder = el('div', { style: 'display:flex; gap:8px; align-items:center;' });
+    const checklistInput = el('input', { type: 'text', placeholder: 'Add a checklist item...', style: 'flex:1;' });
+    const checklistCategorySel = el('select', { style: 'width:110px; flex-shrink:0;' });
+    checklistCategorySel.appendChild(el('option', { value: 'subtask', text: 'Sub-task' }));
+    checklistCategorySel.appendChild(el('option', { value: 'document', text: 'Document' }));
+    const addChecklistBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Add' });
+    checklistBuilder.appendChild(checklistInput);
+    checklistBuilder.appendChild(checklistCategorySel);
+    checklistBuilder.appendChild(addChecklistBtn);
+    checklistContainer.appendChild(checklistBuilder);
+    checklistGroup.appendChild(checklistContainer);
+    form.appendChild(checklistGroup);
+
+    const renderChecklist = () => {
+      const existingList = checklistContainer.querySelector('.checklist-items-list');
+      if (existingList) existingList.remove();
+      if (checklistItems.length === 0) return;
+
+      const list = el('div', { class: 'checklist-items-list', style: 'display:flex; flex-direction:column; gap:6px; margin-top:8px;' });
+      checklistItems.forEach((item, idx) => {
+        const row = el('div', { style: 'display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;' });
+        row.appendChild(el('span', { text: item.text, style: 'flex:1; font-size:0.85rem;' }));
+        const categoryBadge = el('span', {
+          text: item.category === 'document' ? 'Document' : 'Sub-task',
+          style: 'font-size:0.7rem; padding:2px 6px; border-radius:10px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600;'
+        });
+        row.appendChild(categoryBadge);
+
+        const prereqSelect = el('select', { style: 'font-size:0.8rem; max-width:140px;' });
+        prereqSelect.appendChild(el('option', { value: '', text: '— None —' }));
+        prereqSelect.appendChild(el('option', { value: '*', text: 'All Task (*)' }));
+        checklistItems.slice(0, idx).forEach((prev, pIdx) => {
+          if (!prev.id) prev.id = generateId('chk');
+          prereqSelect.appendChild(el('option', { value: prev.id, text: `${pIdx + 1}. ${prev.text}` }));
+        });
+        if (checklistItems.length <= 1) {
+          prereqSelect.disabled = true;
+        }
+        prereqSelect.value = item.dependsOn || '';
+        prereqSelect.addEventListener('change', () => {
+          item.dependsOn = prereqSelect.value || null;
+        });
+        row.appendChild(prereqSelect);
+
+        const assigneeDropdown = this.createGroundWorkerDropdown({
+          selectedGroundWorkerName: item.assigneeName,
+          placeholder: 'Assign...',
+          maxWidth: '140px',
+          className: 'modal-checklist-assignee',
+          onChange: ({ assigneeId, assigneeName }) => {
+            item.assigneeId = assigneeId || null;
+            item.assigneeName = assigneeName || null;
+          }
+        });
+        row.appendChild(assigneeDropdown);
+
+        const delBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: '×' });
+        delBtn.addEventListener('click', () => {
+          checklistItems.splice(idx, 1);
+          renderChecklist();
+        });
+        row.appendChild(delBtn);
+        list.appendChild(row);
+      });
+      checklistContainer.insertBefore(list, checklistBuilder);
+    };
+
+    const addChecklistItem = () => {
+      const val = checklistInput.value.trim();
+      if (!val) return;
+      checklistItems.push({ id: generateId('chk'), text: val, category: checklistCategorySel.value || 'subtask', assigneeId: null, assigneeName: null, dependsOn: null, timeLogs: [] });
+      checklistInput.value = '';
+      renderChecklist();
+    };
+    addChecklistBtn.addEventListener('click', addChecklistItem);
+    checklistInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addChecklistItem();
+      }
+    });
+
+    renderChecklist();
+
     // Due Date
     form.appendChild(el('div', { class: 'form-group' }, [
       el('label', { text: 'Due Date' }),
@@ -9199,10 +9368,15 @@ const Workflow = {
     });
     updateModalSelectionText();
 
-    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save Changes' });
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
+    const submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: isResubmitting ? 'Save & Resubmit' : 'Save Changes' });
     form.appendChild(submitBtn);
 
-    const overlay = this.showModal('Edit Task', form, null);
+    const overlay = this.showModal('Edit Task', form, () => {
+      if (typeof PendingChanges !== 'undefined') {
+        PendingChanges.editingPendingId = null;
+      }
+    });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!validateRequiredFields(form)) return;
@@ -9221,6 +9395,7 @@ const Workflow = {
         priority: data.priority || 'Priority',
         dueDate: data.dueDate || '',
         predecessors: predecessors,
+        checklist: checklistItems,
         updatedAt: new Date().toISOString()
       });
 
@@ -9559,6 +9734,46 @@ const Workflow = {
       items: backlogItems,
       emptyText: 'No retainer templates found',
       rowIdPrefix: 'RT',
+      bulkActions: (selectedIds) => [
+        {
+          text: selectedIds.length === 1 ? 'Generate' : 'Bulk Generate',
+          className: 'btn btn-primary btn-sm',
+          onClick: (ids) => {
+            const title = ids.length === 1 ? 'Generate Work Request' : 'Bulk Generate Work Requests';
+            const message = ids.length === 1
+              ? 'Are you sure you want to generate a Work Request for this selected retainer template?'
+              : `Are you sure you want to generate Work Requests for these ${ids.length} selected retainer templates?`;
+            this.showConfirm(
+              title,
+              message,
+              () => {
+                this.bulkGenerateFromTemplates(ids);
+              }
+            );
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            const title = ids.length === 1 ? 'Delete Template' : 'Delete Templates';
+            const message = ids.length === 1
+              ? 'Are you sure you want to delete this template?'
+              : `Are you sure you want to delete these ${ids.length} templates?`;
+            this.showConfirm(
+              title,
+              message,
+              () => {
+                ids.forEach(id => {
+                  DB.delete('retainerTemplates', id);
+                });
+                App.handleRoute();
+              },
+              'danger'
+            );
+          }
+        }
+      ],
       headerActions: [
         {
           text: '+ Create Template',
@@ -9963,5 +10178,68 @@ const Workflow = {
     });
 
     location.hash = '#operations/detail/' + workRequest.id;
+  },
+
+  bulkGenerateFromTemplates(templateIds) {
+    if (!Array.isArray(templateIds) || templateIds.length === 0) return;
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const titleSuffix = now.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
+    let generatedCount = 0;
+
+    templateIds.forEach(templateId => {
+      const template = DB.getById('retainerTemplates', templateId);
+      if (!template) return;
+
+      const dueDate = new Date(now.getTime() + (template.schedule === 'quarterly' ? 90 : 30) * 86400000);
+      const maxOrder = Math.max(0, ...DB.getAll('workRequests').map(r => r.boardOrder || 0));
+
+      const workRequest = {
+        id: generateSequentialId('wr', 'workRequests'),
+        title: `${template.name} (${titleSuffix})`,
+        description: template.description || '',
+        clientId: template.clientId,
+        priority: 'Priority',
+        dueDate: dueDate.toISOString().slice(0, 10),
+        entity: template.entity,
+        status: 'Draft',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        boardOrder: maxOrder + 1000
+      };
+      DB.insert('workRequests', workRequest);
+
+      const idMap = new Map();
+      (template.tasks || []).forEach(t => idMap.set(t.id, generateId('t')));
+
+      (template.tasks || []).forEach((t, idx) => {
+        const mappedPreds = (t.predecessors || []).map(pid => idMap.get(pid)).filter(Boolean);
+        DB.insert('tasks', {
+          id: idMap.get(t.id),
+          workRequestId: workRequest.id,
+          title: t.title,
+          assigneeId: t.assigneeId || null,
+          assigneeName: t.assigneeName || null,
+          predecessors: mappedPreds,
+          status: 'Draft',
+          dueDate: workRequest.dueDate,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          sortOrder: idx
+        });
+      });
+
+      generatedCount++;
+    });
+
+    this.showMessage(
+      'Bulk Generation Complete',
+      `Successfully generated ${generatedCount} Work Requests in Draft status from the selected templates.`,
+      'success'
+    );
+
+    this.view = 'list';
+    App.handleRoute();
   }
 };

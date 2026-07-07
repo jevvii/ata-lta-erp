@@ -1676,7 +1676,8 @@ function createJiraFilterToolbar(config) {
     onViewModeChange,
     groupByOptions,
     currentGroupBy,
-    onGroupByChange
+    onGroupByChange,
+    searchConfig
   } = config;
 
   const container = el('div', { class: 'jira-toolbar-sticky-container filters-bar' });
@@ -1974,6 +1975,52 @@ function createJiraFilterToolbar(config) {
     updateFilterUI();
     if (onFilterChange) onFilterChange();
   });
+
+  // Search input (beside filter)
+  if (searchConfig) {
+    const searchWrap = el('div', { class: 'jira-search-wrap' });
+    const searchInput = el('input', {
+      type: 'text',
+      class: 'jira-search-input',
+      placeholder: searchConfig.placeholder || 'Search...',
+      autocomplete: 'off'
+    });
+    const searchIcon = el('span', {
+      class: 'jira-search-icon',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    });
+    const clearBtn = el('button', {
+      type: 'button',
+      class: 'jira-search-clear hidden',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+      title: 'Clear search'
+    });
+
+    searchInput.addEventListener('input', debounce(() => {
+      const q = searchInput.value.trim().toLowerCase();
+      clearBtn.classList.toggle('hidden', !q);
+      if (searchConfig.onSearch) searchConfig.onSearch(q);
+    }, 200));
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      if (searchConfig.onSearch) searchConfig.onSearch('');
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        clearBtn.classList.add('hidden');
+        if (searchConfig.onSearch) searchConfig.onSearch('');
+      }
+    });
+
+    searchWrap.appendChild(searchIcon);
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(clearBtn);
+    toolbar.appendChild(searchWrap);
+  }
 
   toolbar.appendChild(filterWrap);
   toolbar.appendChild(clearFiltersBtn);

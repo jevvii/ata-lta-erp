@@ -36,7 +36,7 @@ const Clients = {
     
     const search = el('input', {
       type: 'text',
-      placeholder: 'Search by taxpayer, trade name, or TIN...',
+      placeholder: 'Search client...',
       class: 'form-control search-input',
       style: 'width: 100%; padding-left: 36px; max-width: 320px;'
     });
@@ -214,6 +214,9 @@ const Clients = {
         c.tin
           ? { text: 'TIN ' + c.tin, type: 'category' }
           : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        c.rdoCode
+          ? { text: 'RDO: ' + c.rdoCode, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
         (pocUser?.name || c.contactPerson)
           ? { text: pocUser?.name || c.contactPerson, type: 'client' }
           : { text: '', type: 'client', className: 'hidden-tag-placeholder' },
@@ -259,6 +262,7 @@ const Clients = {
         { label: 'Entity', width: '55px' },
         { label: 'Retainer', width: '55px' },
         { label: 'TIN', width: '110px' },
+        { label: 'RDO Code', width: '80px' },
         { label: 'Point of Contact', width: '120px' },
         { label: 'Trade Name', width: '140px' },
         { label: 'Address', width: '160px' },
@@ -358,7 +362,28 @@ const Clients = {
 
     const tinProp = el('div', { class: 'notion-prop' });
     tinProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> TIN' }));
-    tinProp.appendChild(el('input', { type: 'text', name: 'tin', class: 'notion-prop-input', placeholder: 'XXX-XXX-XXX-XXXX', required: true, value: client ? (client.tin || '') : '' }));
+    const tinInput = el('input', { type: 'text', name: 'tin', class: 'notion-prop-input', placeholder: 'XXX-XXX-XXX-XXXXX', required: true, value: client ? (client.tin || '') : '' });
+    tinInput.addEventListener('input', (e) => {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value.length > 14) {
+        value = value.substring(0, 14);
+      }
+      let formatted = '';
+      if (value.length > 0) {
+        formatted += value.substring(0, 3);
+      }
+      if (value.length > 3) {
+        formatted += '-' + value.substring(3, 6);
+      }
+      if (value.length > 6) {
+        formatted += '-' + value.substring(6, 9);
+      }
+      if (value.length > 9) {
+        formatted += '-' + value.substring(9, 14);
+      }
+      e.target.value = formatted;
+    });
+    tinProp.appendChild(tinInput);
     propsGrid.appendChild(tinProp);
 
     const tradeProp = el('div', { class: 'notion-prop' });
@@ -376,6 +401,15 @@ const Clients = {
     });
     entityProp.appendChild(entitySel);
     propsGrid.appendChild(entityProp);
+
+    const rdoProp = el('div', { class: 'notion-prop' });
+    rdoProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> RDO Code' }));
+    const rdoInput = el('input', { type: 'text', name: 'rdoCode', class: 'notion-prop-input', placeholder: 'e.g. 034A', maxlength: '4', value: client ? (client.rdoCode || '') : '' });
+    rdoInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    });
+    rdoProp.appendChild(rdoInput);
+    propsGrid.appendChild(rdoProp);
 
     const pocProp = el('div', { class: 'notion-prop' });
     pocProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Point of Contact' }));
@@ -545,12 +579,19 @@ const Clients = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     const data = Object.fromEntries(new FormData(form).entries());
 
-    if (!data.tin || !/^\d{3}-\d{3}-\d{3}-\d{4}$/.test(data.tin)) {
+    if (!data.tin || !/^\d{3}-\d{3}-\d{3}-\d{5}$/.test(data.tin)) {
       const tinField = form.querySelector('[name="tin"]');
-      showFieldError(tinField, 'TIN must be in format XXX-XXX-XXX-XXXX.');
+      showFieldError(tinField, 'TIN must be in format XXX-XXX-XXX-XXXXX.');
+      return;
+    }
+
+    if (data.rdoCode && !/^[a-zA-Z0-9]{1,4}$/.test(data.rdoCode)) {
+      const rdoField = form.querySelector('[name="rdoCode"]');
+      showFieldError(rdoField, 'RDO Code must be up to 4 alphanumeric characters.');
       return;
     }
 
@@ -629,6 +670,7 @@ const Clients = {
     const record = {
       name: data.name.trim(),
       tin: data.tin.trim(),
+      rdoCode: data.rdoCode ? data.rdoCode.trim().toUpperCase() : '',
       address: data.address ? data.address.trim() : '',
       tradeName: data.tradeName ? data.tradeName.trim() : '',
       contactUserId,
@@ -638,6 +680,7 @@ const Clients = {
       relatedCompanies
     };
 
+    let result = { approved: true };
     if (this.editingId && this.editingId !== 'new') {
       record.id = this.editingId;
       const old = DB.getById('clients', this.editingId);
@@ -648,12 +691,12 @@ const Clients = {
         record.email = old.email || '';
       }
       record.contactPerson = contactPerson;
-      PendingChanges.submit('clients', record, false);
+      result = PendingChanges.submit('clients', record, false);
     } else {
       record.id = generateId('c');
       record.createdAt = new Date().toISOString();
       record.contactPerson = contactPerson;
-      PendingChanges.submit('clients', record, true);
+      result = PendingChanges.submit('clients', record, true);
     }
 
     const isNew = !this.editingId || this.editingId === 'new';
@@ -665,7 +708,8 @@ const Clients = {
         : `Client ${record.name} ${isNew ? 'creation' : 'update'} request has been submitted for Admin approval.`,
       type: 'success'
     };
-    closeFormPanelAndRoute('#clients', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#clients';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   archiveClientDirectly(clientId) {

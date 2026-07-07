@@ -6,54 +6,77 @@ const Users = {
   view: 'users', // 'users' | 'audit' | 'pending'
   editingId: null,
   pendingDetailId: null,
+  myPendingViewMode: 'table',
+  myRequestsViewMode: 'table',
+  filters: {
+    category: '',
+    status: '',
+    date: ''
+  },
   pendingCategory: sessionStorage.getItem('admin_pending_category') || 'all',
 
   render() {
     const container = el('div', { class: 'page admin-tab-page' });
 
-    // Keep the main "Admin" page header but drop the nested breadcrumb
+    // Keep the main page header — use role-appropriate title
+    const isAdmin = Auth.user.role === 'Admin';
     const titleBar = el('div', { class: 'page-title-bar-v2' });
-    const h1 = el('h1', { class: 'page-title-h1', text: 'Admin' });
+    const h1 = el('h1', { class: 'page-title-h1', text: isAdmin ? 'Admin' : 'My Submissions' });
     titleBar.appendChild(h1);
     container.appendChild(titleBar);
 
     const canManageUsers = Auth.can('users:view');
 
-    // Internal Admin tabs use the same module-tab-link style as other pages
-    container.appendChild(this.renderTabNav());
+    // Initialize view state dynamically to prevent view state bleed-through
+    if (this.lastUserId !== Auth.user.id) {
+      this.lastUserId = Auth.user.id;
+      if (canManageUsers) {
+        this.view = 'users';
+      } else {
+        const defaultToRequests = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
+        this.view = defaultToRequests ? 'myRequests' : 'myPending';
+      }
+      this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
+    }
 
     if (canManageUsers) {
       const validAdminViews = ['users', 'audit', 'pending'];
       if (!validAdminViews.includes(this.view)) this.view = 'users';
     } else {
-      const isOperations = Auth.user.role === 'Operations';
-      const validStaffViews = ['myRequests', 'myPending'];
-      if (!validStaffViews.includes(this.view)) {
-        this.view = isOperations ? 'myRequests' : 'myPending';
+      const showRequestsTab = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
+      const isManager = Auth.user.role === 'Manager';
+      const validViews = ['myPending'];
+      if (showRequestsTab) validViews.push('myRequests');
+      if (isManager) validViews.push('pending');
+
+      if (!validViews.includes(this.view)) {
+        this.view = showRequestsTab ? 'myRequests' : 'myPending';
       }
     }
+
+    // Internal Admin tabs use the same module-tab-link style as other pages
+    container.appendChild(this.renderTabNav());
+
+
 
     if (this.view === 'users' && canManageUsers) {
       container.appendChild(this.renderUsersSection());
     } else if (this.view === 'audit' && canManageUsers) {
       container.appendChild(this.renderAuditSection());
-    } else if (this.view === 'pending' && canManageUsers) {
+    } else if (this.view === 'pending' && (canManageUsers || Auth.user.role === 'Manager')) {
       container.appendChild(this.renderPendingSection());
     } else if (this.view === 'myPending' && !canManageUsers) {
       container.appendChild(this.renderMyPendingSection());
     } else if (this.view === 'myRequests' && !canManageUsers) {
       container.appendChild(this.renderMyRequestsSection());
     } else if (!canManageUsers) {
-      if (!['myRequests', 'myPending'].includes(this.view)) {
-        this.view = Auth.user.role === 'Operations' ? 'myRequests' : 'myPending';
-      }
       if (this.view === 'myRequests') {
         container.appendChild(this.renderMyRequestsSection());
+      } else if (this.view === 'pending' && Auth.user.role === 'Manager') {
+        container.appendChild(this.renderPendingSection());
       } else {
         container.appendChild(this.renderMyPendingSection());
       }
-    } else {
-      container.appendChild(this.renderUsersSection());
     }
 
     return container;
@@ -87,11 +110,23 @@ const Users = {
     }
 
     const myPendingCount = (PendingChanges.getPendingForUser(Auth.user.id) || []).length;
-    const myRequestsCount = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id).length;
     const tabs = [
-      { key: 'myPending', label: 'My Pending Submissions', icon: BoardCardIcons.checklist, count: myPendingCount },
-      { key: 'myRequests', label: 'My Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>', count: myRequestsCount }
+      { key: 'myPending', label: 'My Pending Submissions', icon: BoardCardIcons.checklist, count: myPendingCount }
     ];
+    const showRequestsTab = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
+    if (showRequestsTab) {
+      const myRequestsCount = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id).length;
+      tabs.push({ key: 'myRequests', label: 'My Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>', count: myRequestsCount });
+    }
+    const isManager = Auth.user.role === 'Manager';
+    if (isManager) {
+      const pendingCount = (() => {
+        if (typeof this.getPendingCategories !== 'function') return 0;
+        const categories = this.getPendingCategories();
+        return Object.values(categories).reduce((sum, arr) => sum + arr.length, 0);
+      })();
+      tabs.push({ key: 'pending', label: 'Pending Approvals', icon: BoardCardIcons.checkCircle, count: pendingCount });
+    }
     return renderModuleTabNav(tabs, this.view, changeTab);
   },
 
@@ -99,7 +134,7 @@ const Users = {
     if (!h1) h1 = document.getElementById('admin-breadcrumb-h1');
     if (!h1) return;
     this.clearNode(h1);
-
+    const isAdmin = Auth.user.role === 'Admin';
     const sectionLabel = (() => {
       if (this.pendingDetailId) return 'Review Pending Change';
       if (subpage) return subpage;
@@ -108,17 +143,19 @@ const Users = {
         case 'pending': return 'Pending Approvals';
         case 'myPending': return 'My Pending Submissions';
         case 'myRequests': return 'My Requests';
-        default: return 'Admin';
+        default: return isAdmin ? 'Admin' : 'My Submissions';
       }
     })();
 
     if (this.view !== 'users' || this.pendingDetailId || subpage) {
-      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: 'Admin' });
+      const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: isAdmin ? 'Admin' : 'My Submissions' });
       baseLink.addEventListener('click', () => {
         this.pendingDetailId = null;
         this.editingId = null;
-        this.view = 'users';
-        this.showUserList();
+        if (isAdmin) {
+          this.view = 'users';
+          this.showUserList();
+        }
         App.handleRoute();
       });
       h1.appendChild(baseLink);
@@ -168,7 +205,12 @@ const Users = {
     const users = DB.getAll('users');
 
     if (users.length === 0) {
-      container.appendChild(renderEmptyState('No users found', null, { variant: 'zero-state' }));
+      container.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>',
+        title: 'No users found',
+        body: 'Add users to start managing credentials and roles.'
+      }));
       return;
     }
 
@@ -189,7 +231,8 @@ const Users = {
       tags: [
         { text: u.role, type: 'role', className: roleClassMap[u.role] || '' },
         { text: u.email, type: 'category' },
-        { text: (u.entities || []).join(', ') || 'No entities', type: 'client' }
+        { text: (u.entities || []).join(', ') || 'No entities', type: 'client' },
+        { text: u.isActive !== false ? 'Active' : 'Disabled', type: 'status', className: u.isActive !== false ? 'jira-backlog-tag-status-active' : 'jira-backlog-tag-status-disabled' }
       ]
     }));
 
@@ -200,11 +243,63 @@ const Users = {
       emptyText: 'No users found',
       rowIdPrefix: 'USR',
       countLabel: 'user',
-      bulkActions: [],
+      bulkActions: (selectedIds) => [
+        {
+          text: 'Disable',
+          className: 'btn btn-outline-warning btn-sm',
+          onClick: (ids) => {
+            const hasSelf = ids.includes(Auth.user.id);
+            const targetIds = ids.filter(id => id !== Auth.user.id);
+            
+            if (targetIds.length === 0) {
+              alert('You cannot disable your own user account.');
+              return;
+            }
+            
+            let message = `Are you sure you want to disable ${targetIds.length} selected user${targetIds.length === 1 ? '' : 's'}?`;
+            if (hasSelf) {
+              message += ' (Your own account will not be disabled.)';
+            }
+            
+            Workflow.showConfirm('Disable Users', message, () => {
+              targetIds.forEach(id => {
+                DB.update('users', id, { isActive: false });
+              });
+              App.handleRoute();
+            }, 'warning');
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            const hasSelf = ids.includes(Auth.user.id);
+            const targetIds = ids.filter(id => id !== Auth.user.id);
+            
+            if (targetIds.length === 0) {
+              alert('You cannot delete your own user account.');
+              return;
+            }
+            
+            let message = `Are you sure you want to permanently delete ${targetIds.length} selected user${targetIds.length === 1 ? '' : 's'}? This cannot be undone.`;
+            if (hasSelf) {
+              message += ' (Your own account will not be deleted.)';
+            }
+            
+            Workflow.showConfirm('Delete Users', message, () => {
+              targetIds.forEach(id => {
+                DB.delete('users', id);
+              });
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ],
       columns: [
         { label: 'Role', width: '110px' },
         { label: 'Email', width: '220px' },
-        { label: 'Entities', width: '180px' }
+        { label: 'Entities', width: '180px' },
+        { label: 'Status', width: '100px' }
       ],
       headerActions: [
         {
@@ -475,8 +570,13 @@ const Users = {
       date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
     };
 
+    let searchQuery = '';
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'audit',
+      searchConfig: {
+        placeholder: 'Search audit log...',
+        onSearch: (q) => { searchQuery = q; triggerRefresh(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -495,14 +595,14 @@ const Users = {
     wrapper.appendChild(content);
 
     const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, activeFilters);
+      this.refreshAuditLog(tableContainer, activeFilters, searchQuery);
     };
 
     triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, activeFilters) {
+  refreshAuditLog(container, activeFilters, searchQuery) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
     const hasLogs = logs.length > 0;
@@ -539,10 +639,22 @@ const Users = {
       });
     }
 
+    // Text search filter
+    if (searchQuery) {
+      logs = logs.filter(l => {
+        const hay = [
+          l.action || '',
+          l.details || '',
+          l.userName || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(searchQuery);
+      });
+    }
+
     // Sort newest first
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    const hasActiveFilters = activeFilters && Object.values(activeFilters).some(s => s && s.size > 0);
+    const hasActiveFilters = (activeFilters && Object.values(activeFilters).some(s => s && s.size > 0)) || !!searchQuery;
 
     if (logs.length === 0) {
       if (hasActiveFilters && hasLogs) {
@@ -644,16 +756,36 @@ const Users = {
     const entity = Auth.activeEntity;
     const allPendingChanges = PendingChanges.getAllPending().filter(pc => PendingChanges.canApproveChange(pc));
 
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
     const workRequestCreation = [];
     const wrPhaseRouting = [];
     const billingToRelease = [];
     const disbursementToRelease = [];
     const transmittalSent = [];
+    const taskCreation = [];
 
     allPendingChanges.forEach(pc => {
       const isNew = !pc.parentRecordId;
       const data = pc.proposedData || {};
       const submitter = DB.getById('users', pc.submittedBy);
+
+      // Resolve the entity for the pending change
+      let itemEntity = data.entity;
+      if (pc.table === 'workRequestPhaseRouting') {
+        const wr = DB.getById('workRequests', pc.parentRecordId);
+        itemEntity = wr?.entity;
+      }
+      if (!itemEntity || itemEntity === 'ALL') {
+        itemEntity = (entity === 'ALL') ? (Auth.user.entities[0] || 'ATA') : entity;
+      }
+
+      // Filter by the active entity selection
+      if (!entFilter(itemEntity)) return;
 
       if (pc.table === 'workRequests') {
         workRequestCreation.push({
@@ -667,7 +799,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'workRequestPhaseRouting') {
@@ -683,7 +815,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: wr?.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'invoices') {
@@ -698,7 +830,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'disbursements') {
@@ -713,7 +845,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'transmittals') {
@@ -728,14 +860,31 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
+          raw: pc
+        });
+      } else if (pc.table === 'tasks') {
+        const wrId = data.workRequestId;
+        const wr = wrId ? DB.getById('workRequests', wrId) : null;
+        taskCreation.push({
+          type: 'change',
+          kind: 'taskCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Task: ${data.title || 'Untitled Task'}`,
+          description: wr ? `For WR: ${wr.title}` : 'Task creation/edit awaiting approval',
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: itemEntity,
           raw: pc
         });
       }
     });
 
     // Disbursement submissions awaiting approval
-    DB.getWhere('disbursements', d => d.entity === entity && ['Submitted', 'Under Review'].includes(d.status)).forEach(d => {
+    DB.getWhere('disbursements', d => entFilter(d.entity) && ['Submitted', 'Under Review'].includes(d.status)).forEach(d => {
       const submitter = DB.getById('users', d.requestedBy);
       disbursementToRelease.push({
         type: 'record',
@@ -754,7 +903,7 @@ const Users = {
     });
 
     // Release-pending disbursements
-    DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Release Pending Approval').forEach(d => {
+    DB.getWhere('disbursements', d => entFilter(d.entity) && d.status === 'Release Pending Approval').forEach(d => {
       const submitter = DB.getById('users', d.releaseRequestedBy || d.requestedBy);
       disbursementToRelease.push({
         type: 'record',
@@ -773,7 +922,7 @@ const Users = {
     });
 
     // Release-pending invoices (billing release)
-    DB.getWhere('invoices', inv => inv.entity === entity && inv.status === 'Release Pending Approval').forEach(inv => {
+    DB.getWhere('invoices', inv => entFilter(inv.entity) && inv.status === 'Release Pending Approval').forEach(inv => {
       const submitter = DB.getById('users', inv.releaseRequestedBy || inv.createdBy);
       billingToRelease.push({
         type: 'record',
@@ -792,7 +941,7 @@ const Users = {
     });
 
     // Release-pending transmittals
-    DB.getWhere('transmittals', t => t.entity === entity && t.status === 'Release Pending Approval').forEach(t => {
+    DB.getWhere('transmittals', t => entFilter(t.entity) && t.status === 'Release Pending Approval').forEach(t => {
       const submitter = DB.getById('users', t.releaseRequestedBy || t.createdBy);
       transmittalSent.push({
         type: 'record',
@@ -815,7 +964,8 @@ const Users = {
       wrPhaseRouting,
       billingToRelease,
       disbursementToRelease,
-      transmittalSent
+      transmittalSent,
+      taskCreation
     };
   },
 
@@ -835,7 +985,8 @@ const Users = {
       wrPhaseRouting: { label: 'WR Phase Routing', keyPrefix: 'ROUTE' },
       billingToRelease: { label: 'Billing to Release', keyPrefix: 'BIL' },
       disbursementToRelease: { label: 'Disbursement to Release', keyPrefix: 'EXP' },
-      transmittalSent: { label: 'Mark Transmittal as Sent', keyPrefix: 'TX' }
+      transmittalSent: { label: 'Mark Transmittal as Sent', keyPrefix: 'TX' },
+      taskCreation: { label: 'Task Creation', keyPrefix: 'TSK' }
     };
 
     if (totalPending === 0) {
@@ -1312,6 +1463,28 @@ const Users = {
     });
   },
 
+  getTypeBadgeInfo(item) {
+    if (item.type === 'disbursement') {
+      return { text: 'Expense', className: 'badge-warning' };
+    }
+    
+    const table = item.raw && item.raw.table;
+    switch (table) {
+      case 'tasks':
+        return { text: 'Task', className: 'badge-recurring' };
+      case 'workRequests':
+        return { text: 'Work Request', className: 'badge-preprocessing' };
+      case 'invoices':
+        return { text: 'Invoice', className: 'badge-billing' };
+      case 'transmittals':
+        return { text: 'Transmittal', className: 'badge-neutral' };
+      case 'clients':
+        return { text: 'Client', className: 'badge-info' };
+      default:
+        return { text: 'Change', className: 'badge-neutral' };
+    }
+  },
+
   renderTableView(container, items) {
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
@@ -1335,12 +1508,11 @@ const Users = {
       
       // Type
       const tdType = el('td');
-      const badgeColor = item.type === 'disbursement' ? '#f59e0b' : '#3b82f6';
-      const badgeBg = item.type === 'disbursement' ? '#fef3c7' : '#dbeafe';
-      const badgeText = item.type === 'disbursement' ? 'Expense' : 'Billing';
+      const badgeInfo = this.getTypeBadgeInfo(item);
       tdType.appendChild(el('span', {
-        text: badgeText,
-        style: `font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor};`
+        class: `badge ${badgeInfo.className}`,
+        text: badgeInfo.text,
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       tr.appendChild(tdType);
       
@@ -1388,14 +1560,13 @@ const Users = {
         }
       });
       
-      const badgeColor = item.type === 'disbursement' ? '#f59e0b' : '#3b82f6';
-      const badgeBg = item.type === 'disbursement' ? '#fef3c7' : '#dbeafe';
-      const badgeText = item.type === 'disbursement' ? 'Expense' : 'Billing';
+      const badgeInfo = this.getTypeBadgeInfo(item);
       
       const leftPart = el('div', { style: 'display: flex; align-items: center; gap: 12px;' });
       leftPart.appendChild(el('span', {
-        text: badgeText,
-        style: `font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; min-width: 60px; text-align: center;`
+        class: `badge ${badgeInfo.className}`,
+        text: badgeInfo.text,
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       
       const textInfo = el('div');
@@ -1420,102 +1591,403 @@ const Users = {
 
   renderMyPendingSection() {
     const wrapper = el('div');
+    const self = this;
 
     if (this.pendingDetailId) {
       wrapper.appendChild(this.renderPendingDetail(this.pendingDetailId));
       return wrapper;
     }
 
-    const pending = PendingChanges.getPendingForUser(Auth.user.id);
-    const rejected = PendingChanges.getRejectedForUser(Auth.user.id);
-    if (pending.length === 0 && rejected.length === 0) {
-      wrapper.appendChild(renderEmptyState('No pending submissions', null, { variant: 'zero-state' }));
-      return wrapper;
+    // Initialize view mode from localStorage
+    this.myPendingViewMode = App.getPreferredViewMode('myPending');
+    if (!this.myPendingViewMode || this.myPendingViewMode === 'list') this.myPendingViewMode = 'table';
+
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      category: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
+
+    const savedFilters = App.restoreFilters('myPending');
+    if (savedFilters) {
+      if (Array.isArray(savedFilters.category)) savedFilters.category.forEach(v => activeFilters.category.add(v));
+      else if (savedFilters.category) activeFilters.category.add(savedFilters.category);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
-    if (pending.length > 0) {
-      const table = el('table', { class: 'data-table' });
-      const thead = el('thead');
-      const thr = el('tr');
-      ['Table', 'Date', 'Type', 'Status', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-      thead.appendChild(thr);
-      table.appendChild(thead);
-
-      const tbody = el('tbody');
-      pending.forEach(pc => {
-        const tr = el('tr');
-        tr.appendChild(el('td', { text: pc.table }));
-        tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
-        tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
-        tr.appendChild(el('td', { text: pc.status }));
-
-        const tdAct = el('td');
-        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review' });
-        reviewBtn.addEventListener('click', () => {
-          this.pendingDetailId = pc.id;
-          App.handleRoute();
-        });
-        tdAct.appendChild(reviewBtn);
-
-        if (pc.status === 'pending') {
-          const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
-          withdrawBtn.addEventListener('click', () => {
-            Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => {
-              PendingChanges.delete(pc.id);
-              App.handleRoute();
-            }, 'danger');
-          });
-          tdAct.appendChild(withdrawBtn);
-        }
-
-        tr.appendChild(tdAct);
-        tbody.appendChild(tr);
+    const saveCurrentFilters = () => {
+      App.saveFilters('myPending', {
+        category: Array.from(activeFilters.category),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
       });
-      table.appendChild(tbody);
-      wrapper.appendChild(table);
-    }
+    };
 
-    if (rejected.length > 0) {
-      wrapper.appendChild(el('h3', { text: 'Rejected Submissions', style: 'margin-top:var(--spacing-lg);' }));
-      const table = el('table', { class: 'data-table' });
-      const thead = el('thead');
-      const thr = el('tr');
-      ['Table', 'Date', 'Type', 'Rejection Reason', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-      thead.appendChild(thr);
-      table.appendChild(thead);
+    const getCategoryOptions = () => [
+      { value: 'invoices', label: 'Invoices' },
+      { value: 'disbursements', label: 'Disbursements' },
+      { value: 'transmittals', label: 'Transmittals' },
+      { value: 'clients', label: 'Clients' },
+      { value: 'tasks', label: 'Tasks' }
+    ];
 
-      const tbody = el('tbody');
-      rejected.forEach(pc => {
-        const tr = el('tr');
-        tr.appendChild(el('td', { text: pc.table }));
-        tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
-        tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
-        tr.appendChild(el('td', { text: pc.rejectionReason || '—', style: 'color:var(--color-danger);font-weight:600;' }));
+    const getStatusOptions = () => [
+      { value: 'pending', label: 'Pending' },
+      { value: 'rejected', label: 'Rejected' }
+    ];
 
-        const tdAct = el('td');
-        const resubmitBtn = el('button', { class: 'btn btn-warning btn-sm', text: 'Resubmit' });
-        resubmitBtn.addEventListener('click', () => {
-          Workflow.showConfirm('Confirm Resubmission', 'Are you sure you want to resubmit this request for approval?', () => {
-            PendingChanges.resubmit(pc.id);
-            App.handleRoute();
-          }, 'warning');
-        });
-        tdAct.appendChild(resubmitBtn);
-        tr.appendChild(tdAct);
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      wrapper.appendChild(table);
-    }
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      category: { label: 'Category', getOptions: getCategoryOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
+
+    let searchQuery = '';
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'myPending',
+      searchConfig: {
+        placeholder: 'Search pending...',
+        onSearch: (q) => { searchQuery = q; updateFilters(); }
+      },
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        updateFilters();
+      },
+      viewMode: this.myPendingViewMode || 'table',
+      onViewModeChange: (newMode) => {
+        self.myPendingViewMode = newMode;
+        App.setPreferredViewMode('myPending', newMode);
+        saveCurrentFilters();
+        updateFilters();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
+    wrapper.appendChild(stickyContainer);
+
+    const listContainer = el('div');
+    wrapper.appendChild(listContainer);
+
+    const updateFilters = () => self.refreshMyPendingList(listContainer, activeFilters, self.myPendingViewMode || 'table', searchQuery);
+    updateFilters();
 
     return wrapper;
   },
+
+  refreshMyPendingList(container, activeFilters, viewMode, searchQuery) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+    const self = this;
+
+    let pending = PendingChanges.getPendingForUser(Auth.user.id);
+    let rejected = PendingChanges.getRejectedForUser(Auth.user.id);
+
+    // Combine all items into a unified list
+    let allItems = [
+      ...pending.map(pc => ({ ...pc, _displayStatus: 'pending' })),
+      ...rejected.map(pc => ({ ...pc, _displayStatus: 'rejected' }))
+    ];
+    const hasItems = allItems.length > 0;
+
+    // Apply category filter
+    if (activeFilters.category && activeFilters.category.size > 0) {
+      allItems = allItems.filter(pc => activeFilters.category.has(pc.table));
+    }
+
+    // Apply status filter
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      allItems = allItems.filter(pc => activeFilters.status.has(pc.status));
+    }
+
+    // Apply date filter (bucket-based + custom date)
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
+      allItems = allItems.filter(pc => {
+        const dStr = (pc.submittedAt || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
+    }
+
+    // Text search filter
+    if (searchQuery) {
+      allItems = allItems.filter(pc => {
+        const hay = [
+          pc.table || '',
+          pc.status || '',
+          pc.proposedData?.name || pc.proposedData?.title || '',
+          pc.submittedBy || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(searchQuery);
+      });
+    }
+
+    // Sort newest first
+    allItems.sort((a, b) => new Date(b.submittedAt || '') - new Date(a.submittedAt || ''));
+
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0) || !!searchQuery;
+
+    if (allItems.length === 0) {
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No submissions match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('myPending'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyStateV2({
+          variant: 'zero-state',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
+          title: 'No pending submissions',
+          body: 'Your pending change requests will appear here once submitted.'
+        }));
+      }
+      return;
+    }
+
+    if (viewMode === 'table') {
+      this.renderMyPendingTableView(container, allItems);
+    } else if (viewMode === 'board') {
+      this.renderMyPendingBoardView(container, allItems);
+    } else {
+      this.renderMyPendingCompactListView(container, allItems);
+    }
+  },
+
+  _pendingStatusBadge(status) {
+    const map = {
+      'pending': 'badge badge-warning',
+      'rejected': 'badge badge-danger'
+    };
+    return el('span', { class: map[status] || 'badge', text: status.charAt(0).toUpperCase() + status.slice(1) });
+  },
+
+  _pendingCategoryLabel(table) {
+    const map = {
+      invoices: 'Invoices',
+      disbursements: 'Disbursements',
+      transmittals: 'Transmittals',
+      clients: 'Clients',
+      tasks: 'Tasks',
+      workRequests: 'Work Requests'
+    };
+    return map[table] || table;
+  },
+
+  renderMyPendingTableView(container, items) {
+    const self = this;
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Category', 'Date', 'Type', 'Status', 'Rejection Reason', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    items.forEach(pc => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: self._pendingCategoryLabel(pc.table) }));
+      tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
+      tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
+
+      const tdStatus = el('td');
+      tdStatus.appendChild(self._pendingStatusBadge(pc.status));
+      tr.appendChild(tdStatus);
+
+      const tdReason = el('td', { 
+        text: pc.status === 'rejected' ? (pc.rejectionReason || '—') : '—', 
+        style: pc.status === 'rejected' ? 'color:var(--color-danger);font-weight:600;word-break:break-word;' : '' 
+      });
+      tr.appendChild(tdReason);
+
+      const tdAct = el('td');
+      const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
+      reviewBtn.addEventListener('click', () => {
+        self.pendingDetailId = pc.id;
+        App.handleRoute();
+      });
+      tdAct.appendChild(reviewBtn);
+
+      if (pc.status === 'pending') {
+        const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
+        withdrawBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => {
+            PendingChanges.delete(pc.id);
+            App.handleRoute();
+          }, 'danger');
+        });
+        tdAct.appendChild(withdrawBtn);
+      } else if (pc.status === 'rejected') {
+        const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
+        dismissBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
+            PendingChanges.delete(pc.id);
+            App.handleRoute();
+          }, 'danger');
+        });
+        tdAct.appendChild(dismissBtn);
+      }
+
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+  },
+
+  renderMyPendingBoardView(container, items) {
+    const self = this;
+    const statusColors = {
+      'pending': '#f59e0b',
+      'rejected': '#ef4444'
+    };
+
+    const columns = [
+      { key: 'pending', label: 'Pending', targetStatus: 'pending', statuses: ['pending'], color: statusColors['pending'], emptyState: { variant: 'compact', title: 'No pending submissions', body: '' } },
+      { key: 'rejected', label: 'Rejected', targetStatus: 'rejected', statuses: ['rejected'], color: statusColors['rejected'], emptyState: { variant: 'compact', title: 'No rejected submissions', body: '' } }
+    ];
+
+    let cardNumber = 1;
+    const renderCard = (pc) => {
+      const statusPriorityClass = pc.status === 'pending' ? 'card-v2-priority-medium' : 'card-v2-priority-critical';
+      const progress = pc.status === 'pending' ? 50 : 0;
+      return buildCompactBoardCard({
+        key: 'SUB-' + cardNumber++,
+        progress,
+        statusColor: statusColors[pc.status] || '#cbd5e1',
+        title: self._pendingCategoryLabel(pc.table),
+        description: pc.parentRecordId ? 'Edit existing record' : 'New record submission',
+        detail: (pc.status === 'rejected' && pc.rejectionReason) ? pc.rejectionReason : '',
+        date: pc.submittedAt ? formatDate(pc.submittedAt) : '',
+        priority: pc.status.charAt(0).toUpperCase() + pc.status.slice(1),
+        priorityClass: statusPriorityClass,
+        onClick: () => {
+          self.pendingDetailId = pc.id;
+          App.handleRoute();
+        }
+      });
+    };
+
+    const cardMenuItems = (pc) => {
+      const menu = [{
+        label: 'Review',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { self.pendingDetailId = pc.id; App.handleRoute(); }
+      }];
+      if (pc.status === 'pending') {
+        menu.push({
+          label: 'Withdraw',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+          onClick: () => Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger')
+        });
+      }
+      if (pc.status === 'rejected') {
+        menu.push({
+          label: 'Dismiss',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          onClick: () => Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger')
+        });
+      }
+      return menu;
+    };
+
+    KanbanBoard.render({
+      container,
+      items,
+      columns: columns.map(col => ({
+        key: col.key,
+        label: col.label,
+        targetStatus: col.targetStatus,
+        color: col.color,
+        emptyState: col.emptyState
+      })),
+      renderCard,
+      cardMenuItems,
+      drag: { enabled: false }
+    });
+  },
+
+  renderMyPendingCompactListView(container, items) {
+    const self = this;
+    const list = el('div', { class: 'list-view' });
+    items.forEach(pc => {
+      const item = el('div', { class: 'list-item' });
+      const left = el('div');
+      left.appendChild(el('div', { class: 'list-item-title', text: self._pendingCategoryLabel(pc.table) }));
+      const metaParts = [
+        pc.parentRecordId ? 'Edit' : 'New',
+        pc.status.charAt(0).toUpperCase() + pc.status.slice(1),
+        pc.submittedAt ? formatDate(pc.submittedAt) : ''
+      ].filter(Boolean);
+      left.appendChild(el('div', { class: 'list-item-meta', text: metaParts.join(' • ') }));
+      if (pc.status === 'rejected' && pc.rejectionReason) {
+        left.appendChild(el('div', { class: 'list-item-meta', text: 'Reason: ' + pc.rejectionReason, style: 'color:var(--color-danger);' }));
+      }
+      item.appendChild(left);
+      const rightActions = el('div', { style: 'display:flex;gap:4px;align-items:center;' });
+      const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review' });
+      reviewBtn.addEventListener('click', () => { self.pendingDetailId = pc.id; App.handleRoute(); });
+      rightActions.appendChild(reviewBtn);
+      if (pc.status === 'pending') {
+        const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
+        withdrawBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger');
+        });
+        rightActions.appendChild(withdrawBtn);
+      }
+      if (pc.status === 'rejected') {
+        const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
+        dismissBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger');
+        });
+        rightActions.appendChild(dismissBtn);
+      }
+      item.appendChild(rightActions);
+      list.appendChild(item);
+    });
+    container.appendChild(list);
+  },
+
 
   renderPendingDetail(pendingId) {
     const pc = PendingChanges.getById(pendingId);
     if (!pc) {
       this.pendingDetailId = null;
-      return renderEmptyState('Pending change not found', null, { variant: 'zero-state' });
+      return renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+        title: 'Pending change not found',
+        body: 'The requested pending change could not be loaded.'
+      });
     }
 
     const canApprove = PendingChanges.canApproveChange(pc);
@@ -1535,116 +2007,317 @@ const Users = {
     header.appendChild(backBtn);
     wrapper.appendChild(header);
 
-    // Meta Card
-    const submitter = DB.getById('users', pc.submittedBy);
-    const metaCard = el('div', {
-      class: 'card',
-      style: 'border-radius: 8px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;'
-    });
-
-    const addMeta = (label, val) => {
-      const g = el('div');
-      g.appendChild(el('div', { text: label, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px;' }));
-      g.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 500; color: var(--color-text);' }));
-      metaCard.appendChild(g);
+    // SVGs for Notion Property Grid
+    const Icons = {
+      workRequest: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1.8 1.8"/><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1.8-1.8"/></svg>`,
+      assignee: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+      coAssignees: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      priority: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`,
+      dueDate: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+      predecessors: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8v8a6 6 0 0 0 12 0"/><circle cx="18" cy="8" r="3"/><circle cx="6" cy="8" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+      client: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+      status: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+      document: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+      invoice: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15h.01M12 15h.01M16 15h.01"/></svg>`,
+      amount: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="12" cy="15" r="2"/></svg>`,
+      checklist: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`
     };
 
-    const niceTableName = pc.table.charAt(0).toUpperCase() + pc.table.slice(1).replace(/([A-Z])/g, ' $1');
-    addMeta('Record Entity/Table', niceTableName);
-    addMeta('Submitted By', submitter ? submitter.name : pc.submittedBy);
-    addMeta('Submission Date', formatDate(pc.submittedAt));
-    
-    wrapper.appendChild(metaCard);
-
-    // If it's an invoice, show the proposed invoice fields for verification
-    if (pc.table === 'invoices') {
-      const proposed = pc.proposedData;
-      const client = proposed ? DB.getById('clients', proposed.clientId) : null;
-      const wr = proposed && proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
-
-      const invoiceReviewSection = el('div', { class: 'form-section', style: 'margin-bottom: 24px;' });
-      invoiceReviewSection.appendChild(el('h3', { text: '📄 Invoice / Billing Details', style: 'font-size: 1rem; font-weight: 600; color: var(--color-primary); margin-bottom: 12px;' }));
-
-      const invoiceCard = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
-
-      // Meta Grid
-      const grid = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px;' });
-
-      const addGridField = (lbl, val) => {
-        const field = el('div');
-        field.appendChild(el('div', { text: lbl, style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px;' }));
-        field.appendChild(el('div', { text: val, style: 'font-size: 0.875rem; font-weight: 600; color: var(--color-text);' }));
-        grid.appendChild(field);
-      };
-
-      addGridField('Invoice Number', proposed ? proposed.invoiceNumber : '—');
-      addGridField('Client', client ? client.name : '—');
-      addGridField('Work Request / Project', wr ? wr.title : '—');
-      addGridField('Issue Date', proposed ? formatDate(proposed.issueDate) : '—');
-      addGridField('Due Date', proposed ? formatDate(proposed.dueDate) : '—');
-      addGridField('Total Amount', proposed ? formatPHP(proposed.total) : '—');
-
-      invoiceCard.appendChild(grid);
-
-      // Line Items Sub-table
-      if (proposed && Array.isArray(proposed.lineItems) && proposed.lineItems.length > 0) {
-        invoiceCard.appendChild(el('div', { text: 'Line Items', style: 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 8px; margin-top: 12px;' }));
-        const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px;' });
-        const liThead = el('thead');
-        const liThr = el('tr');
-        ['Type', 'Description', 'Amount'].forEach(h => liThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 8px;' })));
-        liThead.appendChild(liThr);
-        liTable.appendChild(liThead);
-
-        const liTbody = el('tbody');
-        proposed.lineItems.forEach(item => {
-          const tr = el('tr');
-          tr.appendChild(el('td', { text: item.type, style: 'padding: 8px;' }));
-          tr.appendChild(el('td', { text: item.description, style: 'padding: 8px;' }));
-          tr.appendChild(el('td', { text: formatPHP(item.amount), style: 'padding: 8px; font-weight: 600;' }));
-          liTbody.appendChild(tr);
-        });
-        liTable.appendChild(liTbody);
-        invoiceCard.appendChild(liTable);
-      }
-
-      invoiceReviewSection.appendChild(invoiceCard);
-      wrapper.appendChild(invoiceReviewSection);
+    function getInitials(name) {
+      if (!name) return 'U';
+      return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     }
 
-    // Diff / Change Details Section
-    const diffSection = el('div', { class: 'form-section', style: 'margin-bottom: 24px;' });
-    diffSection.appendChild(el('h3', { text: 'Change Comparison', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
+    function createPropertyRow(label, iconSvg, valueNode) {
+      return el('div', { class: 'notion-property-row' }, [
+        el('span', { class: 'notion-property-label' }, [
+          el('span', { html: iconSvg, style: 'display: flex; align-items: center;' }),
+          label
+        ]),
+        el('span', { class: 'notion-property-value' }, [valueNode])
+      ]);
+    }
 
-    const diffContainer = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
-    
-    // Custom diff tables rendering for beautiful layout
-    const { current, proposed, diffs, isNew } = PendingChanges.buildDiff(pc);
-    diffContainer.innerHTML = '';
-    
-    if (diffs.length === 0) {
-      diffContainer.appendChild(renderEmptyState('No changes detected', 'Current and proposed data are identical.', { variant: 'compact' }));
+    // Submitter Info
+    const submitter = DB.getById('users', pc.submittedBy);
+    const submitterName = submitter ? submitter.name : pc.submittedBy;
+    const submitterInitials = getInitials(submitterName);
+
+    const singularName = {
+      tasks: 'task',
+      workRequests: 'work request',
+      invoices: 'invoice',
+      transmittals: 'transmittal',
+      clients: 'client',
+      disbursements: 'disbursement'
+    }[pc.table] || pc.table;
+
+    // Main Notion Card
+    const reviewCard = el('div', { class: 'admin-review-card' });
+
+    // 1. Card Header Row (Avatar, Meta Text, Status Badge)
+    const cardHeader = el('div', { class: 'admin-review-card-header' }, [
+      el('div', { class: 'admin-review-submitter-info' }, [
+        el('div', { class: 'admin-review-avatar', text: submitterInitials }),
+        el('div', { class: 'admin-review-meta-text' }, [
+          el('strong', { text: submitterName }),
+          ` proposed a new ${singularName} · ${formatDate(pc.submittedAt)}`
+        ])
+      ]),
+      el('div', { class: 'admin-review-status-badge', text: 'Awaiting approval' })
+    ]);
+    reviewCard.appendChild(cardHeader);
+
+    // 2. Title Section
+    const proposed = pc.proposedData;
+    let recordTitle = '';
+    let titleIcon = '';
+
+    if (pc.table === 'tasks') {
+      recordTitle = proposed.title || '(Untitled)';
+      titleIcon = Icons.checklist;
+    } else if (pc.table === 'workRequests') {
+      recordTitle = proposed.title || '(Untitled)';
+      titleIcon = Icons.document;
+    } else if (pc.table === 'invoices') {
+      recordTitle = proposed.invoiceNumber || '(No Invoice Number)';
+      titleIcon = Icons.invoice;
+    } else if (pc.table === 'transmittals') {
+      recordTitle = proposed.transmittalNumber || '(No Transmittal Number)';
+      titleIcon = Icons.document;
+    } else if (pc.table === 'clients') {
+      recordTitle = proposed.name || '(No Client Name)';
+      titleIcon = Icons.client;
+    } else if (pc.table === 'disbursements') {
+      recordTitle = proposed.voucherNumber || '(No Voucher Number)';
+      titleIcon = Icons.amount;
     } else {
-      // Build a clean, styled table of changed fields only
+      recordTitle = proposed.title || proposed.name || proposed.invoiceNumber || proposed.voucherNumber || '(Untitled)';
+      titleIcon = Icons.document;
+    }
+
+    const titleContainer = el('div', { class: 'notion-title-section' }, [
+      el('div', { class: 'notion-title-icon', html: titleIcon }),
+      el('h3', { class: 'notion-title-text', text: recordTitle })
+    ]);
+    reviewCard.appendChild(titleContainer);
+
+    // 3. Validation / Warning Banner
+    if (pc.table === 'tasks' && (proposed.title && (proposed.title.length <= 2 || proposed.title.toLowerCase() === 's'))) {
+      const warningBox = el('div', { class: 'notion-warning-box' }, [
+        el('span', { text: '⚠️', style: 'margin-right: 4px;' }),
+        el('span', { text: 'Title looks incomplete — verify before approving.' })
+      ]);
+      reviewCard.appendChild(warningBox);
+    }
+
+    // 4. Notion Property Grid
+    const propertyGrid = el('div', { class: 'notion-property-grid' });
+
+    if (pc.table === 'tasks') {
+      // Work Request
+      const wr = proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
+      const wrVal = wr 
+        ? el('a', { class: 'notion-property-value-link', href: `#operations/detail/${wr.id}`, text: wr.title || proposed.workRequestId })
+        : el('span', { text: proposed.workRequestId || 'None' });
+      propertyGrid.appendChild(createPropertyRow('Work request', Icons.workRequest, wrVal));
+
+      // Assignee
+      const assignee = proposed.assigneeId ? DB.getById('users', proposed.assigneeId) : null;
+      const assigneeVal = assignee 
+        ? el('span', { text: assignee.name })
+        : el('span', { class: 'notion-property-value-warning', html: `⚠️ Not set` });
+      propertyGrid.appendChild(createPropertyRow('Assignee', Icons.assignee, assigneeVal));
+
+      // Co-assignees
+      const coVal = (proposed.coAssignees && proposed.coAssignees.length > 0)
+        ? el('span', { text: proposed.coAssignees.join(', ') })
+        : el('span', { style: 'font-style: italic; color: var(--color-text-muted);', text: 'None' });
+      propertyGrid.appendChild(createPropertyRow('Co-assignees', Icons.coAssignees, coVal));
+
+      // Priority
+      const priority = proposed.priority || 'Normal';
+      let priorityClass = 'badge-info';
+      if (priority === 'High' || priority === 'Urgent') priorityClass = 'badge-danger';
+      else if (priority === 'Low') priorityClass = 'badge-muted';
+      const priorityVal = el('span', { 
+        class: `badge ${priorityClass}`, 
+        text: priority,
+        style: 'font-size: 11px; padding: 2px 8px; border-radius: 4px;'
+      });
+      propertyGrid.appendChild(createPropertyRow('Priority', Icons.priority, priorityVal));
+
+      // Due date
+      const dueVal = proposed.dueDate
+        ? el('span', { text: formatDate(proposed.dueDate) })
+        : el('span', { style: 'font-style: italic; color: var(--color-text-muted);', text: 'Not set' });
+      propertyGrid.appendChild(createPropertyRow('Due date', Icons.dueDate, dueVal));
+
+      // Predecessors
+      const predVal = (proposed.predecessors && proposed.predecessors.length > 0)
+        ? el('span', { text: proposed.predecessors.join(', ') })
+        : el('span', { style: 'font-style: italic; color: var(--color-text-muted);', text: 'None' });
+      propertyGrid.appendChild(createPropertyRow('Predecessors', Icons.predecessors, predVal));
+
+    } else if (pc.table === 'workRequests') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+      
+      const statusVal = el('span', { class: 'badge badge-info', text: proposed.status || 'Draft' });
+      propertyGrid.appendChild(createPropertyRow('Status', Icons.status, statusVal));
+
+      const priority = proposed.priority || 'Normal';
+      const priorityVal = el('span', { class: 'badge badge-info', text: priority });
+      propertyGrid.appendChild(createPropertyRow('Priority', Icons.priority, priorityVal));
+
+      const assignee = proposed.assigneeId ? DB.getById('users', proposed.assigneeId) : null;
+      propertyGrid.appendChild(createPropertyRow('Assignee', Icons.assignee, el('span', { text: assignee ? assignee.name : 'Not set' })));
+
+    } else if (pc.table === 'invoices') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+
+      const wr = proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
+      propertyGrid.appendChild(createPropertyRow('Work request', Icons.workRequest, el('span', { text: wr ? wr.title : 'None' })));
+
+      propertyGrid.appendChild(createPropertyRow('Issue date', Icons.dueDate, el('span', { text: formatDate(proposed.issueDate) })));
+      propertyGrid.appendChild(createPropertyRow('Due date', Icons.dueDate, el('span', { text: formatDate(proposed.dueDate) })));
+      propertyGrid.appendChild(createPropertyRow('Total amount', Icons.amount, el('span', { text: formatPHP(proposed.total), style: 'font-weight: 700;' })));
+
+    } else if (pc.table === 'transmittals') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+
+      const wr = proposed.workRequestId ? DB.getById('workRequests', proposed.workRequestId) : null;
+      propertyGrid.appendChild(createPropertyRow('Work request', Icons.workRequest, el('span', { text: wr ? wr.title : 'None' })));
+
+      propertyGrid.appendChild(createPropertyRow('Date', Icons.dueDate, el('span', { text: formatDate(proposed.date) })));
+      propertyGrid.appendChild(createPropertyRow('Status', Icons.status, el('span', { class: 'badge badge-info', text: proposed.status || 'Draft' })));
+
+    } else if (pc.table === 'clients') {
+      propertyGrid.appendChild(createPropertyRow('TIN', Icons.document, el('span', { text: proposed.tin || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('RDO Code', Icons.dueDate, el('span', { text: proposed.rdoCode || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Contact person', Icons.assignee, el('span', { text: proposed.contactPerson || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Phone', Icons.document, el('span', { text: proposed.phone || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Email', Icons.document, el('span', { text: proposed.email || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Retainer status', Icons.status, el('span', { text: proposed.retainer ? 'Yes' : 'No' })));
+
+    } else if (pc.table === 'disbursements') {
+      const client = proposed.clientId ? DB.getById('clients', proposed.clientId) : null;
+      propertyGrid.appendChild(createPropertyRow('Client', Icons.client, el('span', { text: client ? client.name : 'Not set' })));
+      propertyGrid.appendChild(createPropertyRow('Amount', Icons.amount, el('span', { text: formatPHP(proposed.amount), style: 'font-weight: 700;' })));
+      propertyGrid.appendChild(createPropertyRow('Payment method', Icons.document, el('span', { text: proposed.paymentMethod || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('Status', Icons.status, el('span', { class: 'badge badge-info', text: proposed.status || 'Draft' })));
+
+    } else {
+      for (const [k, v] of Object.entries(proposed)) {
+        if (['id', 'createdAt', 'updatedAt', 'tasks', 'lineItems', 'checklist'].includes(k)) continue;
+        const displayVal = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        const niceKey = k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        propertyGrid.appendChild(createPropertyRow(niceKey, Icons.document, el('span', { text: displayVal })));
+      }
+    }
+
+    reviewCard.appendChild(propertyGrid);
+
+    // 5. Checklist or Sub-items section
+    let hasSubSection = false;
+    const subSectionContainer = el('div', { class: 'notion-sub-section' });
+
+    if (pc.table === 'tasks') {
+      hasSubSection = true;
+      const checklistCount = proposed.checklist ? proposed.checklist.length : 0;
+      subSectionContainer.appendChild(el('div', { class: 'notion-section-divider' }));
+      subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-title' }, [
+        el('span', { html: Icons.checklist }),
+        `Checklist items proposed (${checklistCount})`
+      ]));
+
+      if (proposed.checklist && proposed.checklist.length > 0) {
+        const list = el('div', { style: 'display: flex; flex-direction: column; gap: 8px; margin-top: 12px;' });
+        proposed.checklist.forEach(item => {
+          const checkRow = el('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
+            el('input', { type: 'checkbox', disabled: true, checked: item.completed }),
+            el('span', { text: item.text, style: 'font-size: 0.875rem; color: var(--color-text); font-style: normal;' })
+          ]);
+          list.appendChild(checkRow);
+        });
+        subSectionContainer.appendChild(list);
+      } else {
+        subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-content', text: 'Staff did not add any checklist items.' }));
+      }
+    } else if (pc.table === 'invoices' && proposed.lineItems && proposed.lineItems.length > 0) {
+      hasSubSection = true;
+      subSectionContainer.appendChild(el('div', { class: 'notion-section-divider' }));
+      subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-title' }, [
+        el('span', { html: Icons.document }),
+        `Line Items`
+      ]));
+
+      const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px;' });
+      const liThead = el('thead');
+      const liThr = el('tr');
+      ['Type', 'Description', 'Amount'].forEach(h => liThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 8px;' })));
+      liThead.appendChild(liThr);
+      liTable.appendChild(liThead);
+
+      const liTbody = el('tbody');
+      proposed.lineItems.forEach(item => {
+        const tr = el('tr');
+        tr.appendChild(el('td', { text: item.type, style: 'padding: 8px;' }));
+        tr.appendChild(el('td', { text: item.description, style: 'padding: 8px;' }));
+        tr.appendChild(el('td', { text: formatPHP(item.amount), style: 'padding: 8px; font-weight: 600;' }));
+        liTbody.appendChild(tr);
+      });
+      liTable.appendChild(liTbody);
+      liTable.style.fontStyle = 'normal';
+      subSectionContainer.appendChild(liTable);
+    } else if (pc.table === 'workRequests' && proposed.tasks && proposed.tasks.length > 0) {
+      hasSubSection = true;
+      subSectionContainer.appendChild(el('div', { class: 'notion-section-divider' }));
+      subSectionContainer.appendChild(el('div', { class: 'notion-sub-section-title' }, [
+        el('span', { html: Icons.checklist }),
+        `Proposed Tasks (${proposed.tasks.length})`
+      ]));
+
+      const list = el('div', { style: 'display: flex; flex-direction: column; gap: 8px; margin-top: 12px;' });
+      proposed.tasks.forEach(t => {
+        const taskRow = el('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
+          el('span', { html: Icons.checklist, style: 'color: var(--color-text-muted); opacity: 0.6;' }),
+          el('span', { text: t.title, style: 'font-size: 0.875rem; color: var(--color-text); font-style: normal; font-weight: 500;' })
+        ]);
+        list.appendChild(taskRow);
+      });
+      subSectionContainer.appendChild(list);
+    }
+
+    if (hasSubSection) {
+      reviewCard.appendChild(subSectionContainer);
+    }
+
+    wrapper.appendChild(reviewCard);
+
+    // 6. Changed Fields (Diff) Table for Edits
+    const { current, diffs, isNew } = PendingChanges.buildDiff(pc);
+    if (!isNew && diffs.length > 0) {
+      const diffSection = el('div', { class: 'form-section', style: 'margin-top: 24px; margin-bottom: 24px;' });
+      diffSection.appendChild(el('h3', { text: 'Changed Fields (Diff)', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
+
+      const diffContainer = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
       const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
       const diffThead = el('thead');
       const diffThr = el('tr');
-      ['Field', 'Proposed Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: var(--color-bg-muted); border-bottom: 2px solid var(--color-border); font-size: 0.8125rem;' })));
+      ['Field', 'Current Approved Value', 'Proposed Pending Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: var(--color-bg-muted); border-bottom: 2px solid var(--color-border); font-size: 0.8125rem;' })));
       diffThead.appendChild(diffThr);
       diffTable.appendChild(diffThead);
       
       const diffTbody = el('tbody');
       diffs.forEach(d => {
         const tr = el('tr');
-        
-        // Format the key to look nice
         const niceKey = d.key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
         
-        // Format values
         let oldVal = d.old;
         let newVal = d.new;
-        
-        // If it's a JSON or long array/object, make it clean
         if (oldVal.startsWith('[') || oldVal.startsWith('{')) {
           try {
             const parsed = JSON.parse(oldVal);
@@ -1658,18 +2331,18 @@ const Users = {
           } catch(e) {}
         }
         
-        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-text);' }));
-        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-success); background: rgba(52, 211, 153, 0.12);' }));
+        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-text-muted);' }));
+        tr.appendChild(el('td', { text: oldVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-size: 0.8125rem; color: var(--color-text);' }));
+        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-success); background: rgba(52, 211, 153, 0.1);' }));
         diffTbody.appendChild(tr);
       });
       diffTable.appendChild(diffTbody);
       diffContainer.appendChild(diffTable);
+      diffSection.appendChild(diffContainer);
+      wrapper.appendChild(diffSection);
     }
-    
-    diffSection.appendChild(diffContainer);
-    wrapper.appendChild(diffSection);
 
-    // Actions Footer
+    // 7. Actions Footer
     const actions = el('div', {
       style: 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'
     });
@@ -1705,6 +2378,41 @@ const Users = {
         }, 'danger');
       });
       actions.appendChild(withdrawBtn);
+    } else if (isSubmitter && pc.status === 'rejected') {
+      const editResubmitBtn = el('button', { class: 'btn btn-warning', text: 'Edit & Resubmit' });
+      editResubmitBtn.addEventListener('click', () => {
+        PendingChanges.editingPendingId = pc.id;
+        this.pendingDetailId = null;
+
+        if (pc.table === 'invoices') {
+          location.hash = `#billing/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'disbursements') {
+          location.hash = `#disbursement/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'transmittals') {
+          location.hash = `#transmittal/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'clients') {
+          location.hash = `#clients/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'workRequests') {
+          location.hash = `#operations/form/${pc.proposedData.id}`;
+        } else if (pc.table === 'tasks') {
+          App.handleRoute(); // navigate back to wherever they were
+          PendingChanges.editingPendingId = pc.id;
+          Workflow.showEditTaskModal(pc.proposedData.id, () => {
+            App.handleRoute();
+          });
+        }
+      });
+      actions.appendChild(editResubmitBtn);
+
+      const dismissBtn = el('button', { class: 'btn btn-danger', text: 'Dismiss Submission' });
+      dismissBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
+          PendingChanges.delete(pc.id);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        }, 'danger');
+      });
+      actions.appendChild(dismissBtn);
     }
 
     wrapper.appendChild(actions);
@@ -1713,13 +2421,203 @@ const Users = {
 
   renderMyRequestsSection() {
     const wrapper = el('div');
-    const requests = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
-    
-    if (requests.length === 0) {
-      wrapper.appendChild(renderEmptyState('No requests submitted yet', null, { variant: 'zero-state' }));
-      return wrapper;
+    const self = this;
+
+    // Initialize view mode from localStorage
+    this.myRequestsViewMode = App.getPreferredViewMode('myRequests');
+    if (!this.myRequestsViewMode || this.myRequestsViewMode === 'list') this.myRequestsViewMode = 'table';
+
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      category: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
+
+    const savedFilters = App.restoreFilters('myRequests');
+    if (savedFilters) {
+      if (Array.isArray(savedFilters.category)) savedFilters.category.forEach(v => activeFilters.category.add(v));
+      else if (savedFilters.category) activeFilters.category.add(savedFilters.category);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
+    const saveCurrentFilters = () => {
+      App.saveFilters('myRequests', {
+        category: Array.from(activeFilters.category),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
+      });
+    };
+
+    const getCategoryOptions = () => [
+      { value: 'billing', label: 'Billing' },
+      { value: 'disbursement', label: 'Disbursement' },
+      { value: 'transmittal', label: 'Transmittal' }
+    ];
+
+    const getStatusOptions = () => [
+      { value: 'pending', label: 'Pending' },
+      { value: 'fulfilled', label: 'Fulfilled' },
+      { value: 'rejected', label: 'Rejected' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      category: { label: 'Category', getOptions: getCategoryOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
+
+    let searchQuery = '';
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'myRequests',
+      searchConfig: {
+        placeholder: 'Search requests...',
+        onSearch: (q) => { searchQuery = q; updateFilters(); }
+      },
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        updateFilters();
+      },
+      viewMode: this.myRequestsViewMode || 'table',
+      onViewModeChange: (newMode) => {
+        self.myRequestsViewMode = newMode;
+        App.setPreferredViewMode('myRequests', newMode);
+        saveCurrentFilters();
+        updateFilters();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
+    wrapper.appendChild(stickyContainer);
+
+    const listContainer = el('div');
+    wrapper.appendChild(listContainer);
+
+    const updateFilters = () => self.refreshMyRequestsList(listContainer, activeFilters, self.myRequestsViewMode || 'table', searchQuery);
+    updateFilters();
+
+    return wrapper;
+  },
+
+  _requestStatusBadge(status) {
+    const map = {
+      'pending': 'badge badge-warning',
+      'fulfilled': 'badge badge-success',
+      'rejected': 'badge badge-danger'
+    };
+    return el('span', { class: map[status] || 'badge', text: status.charAt(0).toUpperCase() + status.slice(1) });
+  },
+
+  _requestTypeLabel(type) {
+    const map = { billing: 'Billing', disbursement: 'Disbursement', transmittal: 'Transmittal' };
+    return map[type] || type;
+  },
+
+  refreshMyRequestsList(container, activeFilters, viewMode, searchQuery) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    let requests = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
+    const hasItems = requests.length > 0;
+
+    // Apply category filter
+    if (activeFilters.category && activeFilters.category.size > 0) {
+      requests = requests.filter(r => activeFilters.category.has(r.type));
+    }
+
+    // Apply status filter
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      requests = requests.filter(r => activeFilters.status.has(r.status));
+    }
+
+    // Apply date filter (bucket-based + custom date)
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
+      requests = requests.filter(r => {
+        const dStr = (r.requestedAt || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
+    }
+
+    // Text search filter
+    if (searchQuery) {
+      requests = requests.filter(r => {
+        const hay = [
+          r.type || '',
+          r.status || '',
+          r.description || r.reason || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(searchQuery);
+      });
+    }
+
+    // Sort newest first
+    requests.sort((a, b) => new Date(b.requestedAt || '') - new Date(a.requestedAt || ''));
+
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0) || !!searchQuery;
+
+    if (requests.length === 0) {
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('myRequests'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyStateV2({
+          variant: 'zero-state',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
+          title: 'No requests submitted yet',
+          body: 'Submit a departmental request in the Operations section.',
+          actions: [
+            {
+              text: 'Go to Operations',
+              onClick: () => { location.hash = '#operations'; }
+            }
+          ]
+        }));
+      }
+      return;
+    }
+
+    if (viewMode === 'table') {
+      this.renderMyRequestsTableView(container, requests);
+    } else if (viewMode === 'board') {
+      this.renderMyRequestsBoardView(container, requests);
+    } else {
+      this.renderMyRequestsCompactListView(container, requests);
+    }
+  },
+
+  renderMyRequestsTableView(container, requests) {
+    const self = this;
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
     const thr = el('tr');
@@ -1730,30 +2628,29 @@ const Users = {
     const tbody = el('tbody');
     requests.forEach(r => {
       const tr = el('tr');
-      
-      const typeLabel = r.type === 'billing' ? 'Billing' : r.type === 'disbursement' ? 'Disbursement' : 'Transmittal';
-      tr.appendChild(el('td', { text: typeLabel }));
-      
+
+      tr.appendChild(el('td', { text: this._requestTypeLabel(r.type) }));
+
       const wr = DB.getById('workRequests', r.workRequestId);
       tr.appendChild(el('td', { text: wr ? wr.title : '—' }));
-      
+
       const client = DB.getById('clients', r.clientId);
       tr.appendChild(el('td', { text: client ? client.name : '—' }));
-      
+
       tr.appendChild(el('td', { text: formatDate(r.requestedAt) }));
-      
-      const st = r.status;
-      const badge = el('span', { 
-        class: 'badge', 
-        text: st,
-        style: `font-size: 11px; padding: 2px 6px; border-radius: var(--radius-sm); background: ${st === 'fulfilled' ? 'color-mix(in oklab, var(--success), transparent 88%)' : st === 'rejected' ? 'color-mix(in oklab, var(--danger), transparent 88%)' : 'color-mix(in oklab, var(--warn), transparent 88%)'}; color: ${st === 'fulfilled' ? 'var(--success)' : st === 'rejected' ? 'var(--danger)' : 'color-mix(in oklab, var(--warn), black 30%)'};`
-      });
+
       const tdSt = el('td');
-      tdSt.appendChild(badge);
+      tdSt.appendChild(this._requestStatusBadge(r.status));
       tr.appendChild(tdSt);
 
       const tdAct = el('td');
-      if (st === 'pending') {
+      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View', style: 'margin-right: 8px;' });
+      viewBtn.addEventListener('click', () => {
+        self.showRequestDetailsModal(r);
+      });
+      tdAct.appendChild(viewBtn);
+
+      if (r.status === 'pending') {
         const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel Request' });
         cancelBtn.addEventListener('click', () => {
           Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => {
@@ -1762,19 +2659,273 @@ const Users = {
           }, 'danger');
         });
         tdAct.appendChild(cancelBtn);
-      } else if (st === 'fulfilled') {
+      } else if (r.status === 'fulfilled') {
         const fulfiller = DB.getById('users', r.fulfilledBy);
-        tdAct.textContent = `Fulfilled by ${fulfiller ? fulfiller.name : 'System'} on ${formatDate(r.fulfilledAt)}`;
-      } else if (st === 'rejected') {
-        tdAct.textContent = r.rejectionReason ? `Reason: ${r.rejectionReason}` : 'No reason provided';
+        tdAct.appendChild(el('span', { text: `Fulfilled by ${fulfiller ? fulfiller.name : 'System'} on ${formatDate(r.fulfilledAt)}`, style: 'color: var(--color-text-muted); font-size: 0.8125rem; margin-left: 4px;' }));
+      } else if (r.status === 'rejected') {
+        tdAct.appendChild(el('span', { text: r.rejectionReason ? `Reason: ${r.rejectionReason}` : 'No reason provided', style: 'color: var(--color-danger); font-size: 0.8125rem; margin-left: 4px;' }));
       }
       tr.appendChild(tdAct);
-      
+
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    wrapper.appendChild(table);
+    container.appendChild(table);
+  },
 
-    return wrapper;
+  renderMyRequestsBoardView(container, requests) {
+    const self = this;
+    const statusColors = {
+      'pending': '#f59e0b',
+      'fulfilled': '#10b981',
+      'rejected': '#ef4444'
+    };
+
+    const columns = [
+      { key: 'pending', label: 'Pending', targetStatus: 'pending', color: statusColors['pending'], emptyState: { variant: 'compact', title: 'No pending requests', body: '' } },
+      { key: 'fulfilled', label: 'Fulfilled', targetStatus: 'fulfilled', color: statusColors['fulfilled'], emptyState: { variant: 'compact', title: 'No fulfilled requests', body: '' } },
+      { key: 'rejected', label: 'Rejected', targetStatus: 'rejected', color: statusColors['rejected'], emptyState: { variant: 'compact', title: 'No rejected requests', body: '' } }
+    ];
+
+    let cardNumber = 1;
+    const renderCard = (r) => {
+      const wr = DB.getById('workRequests', r.workRequestId);
+      const client = DB.getById('clients', r.clientId);
+      const statusPriorityMap = {
+        'pending': 'card-v2-priority-medium',
+        'fulfilled': 'card-v2-priority-low',
+        'rejected': 'card-v2-priority-critical'
+      };
+      const progressMap = { 'pending': 33, 'fulfilled': 100, 'rejected': 0 };
+
+      let detail = '';
+      if (r.status === 'fulfilled') {
+        const fulfiller = DB.getById('users', r.fulfilledBy);
+        detail = `Fulfilled by ${fulfiller ? fulfiller.name : 'System'}`;
+      } else if (r.status === 'rejected' && r.rejectionReason) {
+        detail = r.rejectionReason;
+      }
+
+      return buildCompactBoardCard({
+        key: 'REQ-' + cardNumber++,
+        progress: progressMap[r.status] || 0,
+        statusColor: statusColors[r.status] || '#cbd5e1',
+        title: self._requestTypeLabel(r.type),
+        description: client ? client.name : '—',
+        detail: (wr ? wr.title : '') + (detail ? ' • ' + detail : ''),
+        date: r.requestedAt ? formatDate(r.requestedAt) : '',
+        priority: r.status.charAt(0).toUpperCase() + r.status.slice(1),
+        priorityClass: statusPriorityMap[r.status] || 'card-v2-priority-normal',
+        onClick: () => {
+          self.showRequestDetailsModal(r);
+        }
+      });
+    };
+
+    const cardMenuItems = (r) => {
+      const menu = [
+        {
+          label: 'View Details',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+          onClick: () => { self.showRequestDetailsModal(r); }
+        }
+      ];
+      if (r.status === 'pending') {
+        menu.push({
+          label: 'Cancel Request',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+          onClick: () => Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => { DB.delete('operationsRequests', r.id); App.handleRoute(); }, 'danger')
+        });
+      }
+      return menu;
+    };
+
+    KanbanBoard.render({
+      container,
+      items: requests,
+      columns: columns.map(col => ({
+        key: col.key,
+        label: col.label,
+        targetStatus: col.targetStatus,
+        color: col.color,
+        emptyState: col.emptyState
+      })),
+      renderCard,
+      cardMenuItems,
+      drag: { enabled: false }
+    });
+  },
+
+  renderMyRequestsCompactListView(container, requests) {
+    const self = this;
+    const list = el('div', { class: 'list-view' });
+    requests.forEach(r => {
+      const item = el('div', { class: 'list-item' });
+      const left = el('div');
+      left.appendChild(el('div', { class: 'list-item-title', text: self._requestTypeLabel(r.type) }));
+      const wr = DB.getById('workRequests', r.workRequestId);
+      const client = DB.getById('clients', r.clientId);
+      const metaParts = [
+        client ? client.name : '',
+        wr ? wr.title : '',
+        r.status.charAt(0).toUpperCase() + r.status.slice(1),
+        r.requestedAt ? formatDate(r.requestedAt) : ''
+      ].filter(Boolean);
+      left.appendChild(el('div', { class: 'list-item-meta', text: metaParts.join(' • ') }));
+      if (r.status === 'fulfilled') {
+        const fulfiller = DB.getById('users', r.fulfilledBy);
+        left.appendChild(el('div', { class: 'list-item-meta', text: `Fulfilled by ${fulfiller ? fulfiller.name : 'System'} on ${formatDate(r.fulfilledAt)}`, style: 'color:var(--color-success);' }));
+      }
+      if (r.status === 'rejected' && r.rejectionReason) {
+        left.appendChild(el('div', { class: 'list-item-meta', text: 'Reason: ' + r.rejectionReason, style: 'color:var(--color-danger);' }));
+      }
+      item.appendChild(left);
+      const rightActions = el('div', { style: 'display:flex;gap:4px;align-items:center;' });
+      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
+      viewBtn.addEventListener('click', () => {
+        self.showRequestDetailsModal(r);
+      });
+      rightActions.appendChild(viewBtn);
+
+      if (r.status === 'pending') {
+        const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel' });
+        cancelBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => { DB.delete('operationsRequests', r.id); App.handleRoute(); }, 'danger');
+        });
+        rightActions.appendChild(cancelBtn);
+      }
+      rightActions.appendChild(self._requestStatusBadge(r.status));
+      item.appendChild(rightActions);
+      list.appendChild(item);
+    });
+    container.appendChild(list);
+  },
+
+  showRequestDetailsModal(r) {
+    const self = this;
+    const wr = DB.getById('workRequests', r.workRequestId);
+    const client = DB.getById('clients', r.clientId);
+    const submitter = DB.getById('users', r.requestedBy);
+
+    const wrapper = el('div', { class: 'form-stacked notion-form', style: 'padding: var(--spacing-xs); display: flex; flex-direction: column; gap: var(--spacing-md);' });
+
+    // Status / Submitter info box
+    const infoBox = el('div', { 
+      style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-sm); display: flex; flex-direction: column; gap: var(--spacing-xs);' 
+    }, [
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Status', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        self._requestStatusBadge(r.status)
+      ]),
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Submitted By', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        el('span', { text: submitter ? submitter.name : '—', style: 'font-weight:500;' })
+      ]),
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Submitted At', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        el('span', { text: formatDate(r.requestedAt), style: 'font-weight:500;' })
+      ])
+    ]);
+    wrapper.appendChild(infoBox);
+
+    // Notion-style Property Grid
+    const grid = el('div', { class: 'notion-property-grid', style: 'margin-bottom: var(--spacing-xs);' });
+
+    const addProp = (label, valueNode) => {
+      const row = el('div', { class: 'notion-property-row' });
+      row.appendChild(el('div', { class: 'notion-property-label', text: label }));
+      row.appendChild(el('div', { class: 'notion-property-value' }, [valueNode]));
+      grid.appendChild(row);
+    };
+
+    addProp('Request Type', document.createTextNode(this._requestTypeLabel(r.type)));
+    addProp('Client', document.createTextNode(client ? client.name : '—'));
+    
+    // Work Request Link / Text
+    const wrSpan = el('span', { text: wr ? wr.title : '—' });
+    if (wr) {
+      wrSpan.style.cursor = 'pointer';
+      wrSpan.style.color = 'var(--color-primary)';
+      wrSpan.style.textDecoration = 'underline';
+      wrSpan.addEventListener('click', () => {
+        const overlay = document.querySelector('.modal-overlay');
+        if (overlay) overlay.remove();
+        location.hash = `#operations/detail/${wr.id}`;
+      });
+    }
+    addProp('Work Request', wrSpan);
+
+    // Render type-specific fields
+    if (r.type === 'billing') {
+      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
+      addProp('Linked Task', document.createTextNode(linkedTask ? linkedTask.title : '— Whole Project —'));
+      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
+      if (r.receiptFilename) {
+        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
+      }
+    } else if (r.type === 'disbursement') {
+      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
+      addProp('Disbursement Type', document.createTextNode(r.disbursementType ? r.disbursementType.charAt(0).toUpperCase() + r.disbursementType.slice(1) : '—'));
+      addProp('Category', document.createTextNode(r.category || '—'));
+      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
+      addProp('Payment Method', document.createTextNode(r.paymentMethod || '—'));
+      if (linkedTask) {
+        addProp('Linked Task', document.createTextNode(linkedTask.title));
+      }
+      if (r.receiptFilename) {
+        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
+      }
+    } else if (r.type === 'transmittal') {
+      addProp('Recipient & Delivery', document.createTextNode(r.recipientDetails || '—'));
+    }
+
+    wrapper.appendChild(grid);
+
+    // Documents list for Transmittal
+    if (r.type === 'transmittal' && r.documents && r.documents.length > 0) {
+      wrapper.appendChild(el('h4', { text: 'Documents to Transmit', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
+      const docList = el('ul', { style: 'padding-left: var(--spacing-md); margin-bottom: var(--spacing-sm); display:flex; flex-direction:column; gap:4px;' });
+      r.documents.forEach(doc => {
+        docList.appendChild(el('li', { text: doc, style: 'font-size:0.875rem;' }));
+      });
+      wrapper.appendChild(docList);
+    }
+
+    // Notes
+    if (r.notes) {
+      wrapper.appendChild(el('h4', { text: 'Notes', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
+      wrapper.appendChild(el('div', { 
+        text: r.notes, 
+        style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size: 0.875rem; white-space: pre-wrap; font-style: italic;' 
+      }));
+    }
+
+    // Fulfillment Details or Rejection Details
+    if (r.status === 'fulfilled') {
+      const fulfiller = DB.getById('users', r.fulfilledBy);
+      wrapper.appendChild(el('h4', { text: 'Fulfillment Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--success);' }));
+      const fulfillBox = el('div', {
+        style: 'background: color-mix(in oklab, var(--success), transparent 95%); border: 1px solid color-mix(in oklab, var(--success), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
+      }, [
+        el('div', { text: `Fulfilled by: ${fulfiller ? fulfiller.name : 'System'}` }),
+        el('div', { text: `Fulfilled at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' })
+      ]);
+      wrapper.appendChild(fulfillBox);
+    } else if (r.status === 'rejected') {
+      const rejecter = r.fulfilledBy ? DB.getById('users', r.fulfilledBy) : null;
+      wrapper.appendChild(el('h4', { text: 'Rejection Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--danger);' }));
+      const rejectBox = el('div', {
+        style: 'background: color-mix(in oklab, var(--danger), transparent 95%); border: 1px solid color-mix(in oklab, var(--danger), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
+      }, [
+        el('div', { text: `Reason: ${r.rejectionReason || 'No reason provided'}` }),
+        rejecter ? el('div', { text: `Rejected by: ${rejecter.name}`, style: 'margin-top:4px;' }) : null,
+        r.fulfilledAt ? el('div', { text: `Rejected at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' }) : null
+      ].filter(Boolean));
+      wrapper.appendChild(rejectBox);
+    }
+
+    const title = `Request Details: ${this._requestTypeLabel(r.type)}`;
+    Workflow.showModal(title, wrapper);
   }
 };

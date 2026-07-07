@@ -24,7 +24,7 @@
   --color-primary-alpha: rgba(37, 99, 235, 0.08);
   --color-danger: #ef4444;
   --color-success: #10b981;
-  --color-warning: #f59e0b;
+  --color-warning: #fbbf24;
   --font-sans: "Poppins", "Inter", system-ui, -apple-system, sans-serif;
   --transition-loading: 0.25s;
   --delay-loading: 0.25s;
@@ -1250,7 +1250,7 @@ tbody tr:hover {
 .template-dropdown {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
+  left: 0;
   min-width: 220px;
   background: var(--color-surface);
   border: 1px solid var(--color-border, #dfdbe3);
@@ -1655,6 +1655,25 @@ tbody tr:hover {
   padding: 0;
 }
 
+.admin-tab-page .board-v2 {
+  overflow: visible;
+  min-height: calc(100vh - var(--admin-title-bar-height, 48px) - var(--admin-tab-nav-height, 45px) - var(--admin-toolbar-height, 40px) - 80px);
+}
+
+.admin-tab-page .board-column-v2 {
+  max-height: none;
+}
+
+.admin-tab-page .board-cards-scroll {
+  overflow-y: visible;
+}
+
+.admin-tab-page .board-column-header-v2 {
+  position: sticky;
+  top: calc(var(--admin-title-bar-height, 48px) + var(--admin-tab-nav-height, 45px) + var(--admin-toolbar-height, 0px));
+  z-index: 20;
+}
+
 .module-tab-link {
   display: inline-flex;
   align-items: center;
@@ -1891,6 +1910,19 @@ tbody tr:hover {
 [data-theme="dark"] .jira-backlog-tag-role-operations { background: rgba(22,101,52,0.25); color: #86efac; border-color: rgba(134,239,172,0.3); }
 [data-theme="dark"] .jira-backlog-tag-role-documentation { background: rgba(91,33,182,0.25); color: #c4b5fd; border-color: rgba(196,181,253,0.3); }
 [data-theme="dark"] .jira-backlog-tag-role-hr { background: rgba(71,85,105,0.25); color: #cbd5e1; border-color: rgba(203,213,225,0.3); }
+
+/* Jira backlog status tags */
+.jira-backlog-tag-status {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+}
+
+.jira-backlog-tag-status-active { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.jira-backlog-tag-status-disabled { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+[data-theme="dark"] .jira-backlog-tag-status-active { background: rgba(22,101,52,0.25); color: #86efac; border-color: rgba(134,239,172,0.3); }
+[data-theme="dark"] .jira-backlog-tag-status-disabled { background: rgba(153, 27, 27, 0.2); color: #fca5a5; border-color: rgba(252, 165, 165, 0.3); }
 
 /* Workflow Progress Bar */
 .workflow-progress { display: flex; gap: 6px; margin-bottom: var(--spacing-md); overflow-x: auto; }
@@ -3040,7 +3072,7 @@ tbody tr:hover {
 }
 
 .filters-bar .form-select,
-.filters-bar input:not([type="checkbox"]):not(.jira-filter-search):not(.jira-filter-date-input) {
+.filters-bar input:not([type="checkbox"]):not(.jira-filter-search):not(.jira-filter-date-input):not(.jira-search-input) {
   min-width: 120px;
   height: 34px;
   min-height: 34px !important;
@@ -10937,9 +10969,12 @@ tbody tr * {
 }
 
 .notion-template-picker {
+  position: relative;
+  display: inline-block;
   margin: 12px 0;
 }
 
+.side-pane .form-header-bar,
 .side-pane .notion-form .form-header-bar,
 .side-pane .notion-form > .page-title-bar-v2,
 .side-pane .notion-form > .form-actions-top {
@@ -12179,6 +12214,29 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Notion popover submit button */
 [data-theme="dark"] .notion-popover-submit { color: #191919; }
 
+/* Split button dropdown menu in dark mode */
+[data-theme="dark"] .split-btn-menu {
+  background: var(--color-surface, #252525);
+  border-color: var(--color-border, #4a4a4a);
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.4), 
+    0 4px 6px -2px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item {
+  color: var(--color-text, #f4f4f5);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item svg {
+  color: var(--color-text-muted, #a1a1aa);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item:hover {
+  background: var(--color-bg-muted, #2f2f2f);
+  color: var(--color-primary, #d4b8ff);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item:hover svg {
+  color: var(--color-primary, #d4b8ff);
+}
+
 /* WR task detail panes */
 [data-theme="dark"] .task-details-left,
 [data-theme="dark"] .task-details-right { border-color: var(--color-border); }
@@ -12803,6 +12861,32 @@ html.loading-active #loading-screen:not(.hidden) {
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--color-border); }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
 
+/* Redesigned My Submissions Staff Page Custom Styles */
+.circular-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 6px;
+  transition: all 0.2s ease;
+}
+
+.module-tab-link.active .circular-count-badge {
+  background: var(--color-primary-alpha);
+  color: var(--color-primary);
+}
+
+.module-tab-link:not(.active) .circular-count-badge {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+
 /* ── Jira-style compact Operations toolbar ─────────────────────────────── */
 
 .jira-toolbar {
@@ -13283,6 +13367,69 @@ html.loading-active #loading-screen:not(.hidden) {
   position: relative;
 }
 
+/* ─── Jira-style inline search ────────────────────────────────── */
+.jira-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.jira-search-icon {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  z-index: 1;
+}
+.jira-search-input {
+  padding: 7px 32px 7px 32px !important;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  font-weight: 500;
+  min-width: 200px;
+  max-width: 280px;
+  height: 34px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+.jira-search-input::placeholder {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+.jira-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary), transparent 75%);
+}
+.jira-search-clear {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.jira-search-clear:hover {
+  color: var(--color-text);
+  background: var(--color-border);
+}
+.jira-search-clear.hidden {
+  display: none;
+}
+
 /* Operations toolbar overrides */
 .operations-tab-page .toolbar-sticky-container:has(.jira-toolbar),
 .operations-list-page .toolbar-sticky-container:has(.jira-toolbar) {
@@ -13659,6 +13806,120 @@ html.loading-active #loading-screen:not(.hidden) {
 [data-theme="dark"] .jira-filter-category .cat-count {
   background: var(--color-bg-muted);
   color: var(--color-text-muted);
+}
+
+/* Redesigned Admin Review Card */
+.admin-review-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 24px;
+}
+
+.admin-review-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.admin-review-submitter-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-review-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-primary-alpha);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.admin-review-meta-text {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.admin-review-meta-text strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.admin-review-status-badge {
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+}
+
+/* Warning block */
+.notion-warning-box {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #ef4444;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+/* Notion property grid */
+.notion-property-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.notion-property-row {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.notion-property-label {
+  width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.notion-property-label svg {
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+.notion-property-value {
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notion-property-value-warning {
+  color: #ef4444;
+  font-style: italic;
 }
 
 [data-theme="dark"] .jira-filter-category.active .cat-count {
@@ -14270,6 +14531,67 @@ html.loading-active #loading-screen:not(.hidden) {
   gap: 4px;
 }
 
+.notion-property-value-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.notion-property-value-link:hover {
+  text-decoration: underline;
+}
+
+.notion-property-value-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Title Section */
+.notion-title-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.notion-title-icon {
+  color: var(--color-text);
+  opacity: 0.6;
+}
+
+.notion-title-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* Checklist Section */
+.notion-section-divider {
+  border-top: 1px solid var(--color-border);
+  margin: 20px 0;
+}
+
+.notion-sub-section {
+  font-size: 0.875rem;
+}
+
+.notion-sub-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 12px;
+}
+
+.notion-sub-section-content {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .jira-backlog-tag.tag-primary {
   background: color-mix(in oklab, var(--color-primary), transparent 90%);
   border-color: color-mix(in oklab, var(--color-primary), transparent 75%);
@@ -14297,6 +14619,8 @@ html.loading-active #loading-screen:not(.hidden) {
   background: var(--color-surface);
   z-index: 2;
   padding-left: 8px;
+  padding-right: 8px;
+  justify-content: flex-end;
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
 }
 
@@ -14311,6 +14635,8 @@ html.loading-active #loading-screen:not(.hidden) {
   background: var(--color-bg-light, #fafafa);
   z-index: 3;
   padding-left: 8px;
+  padding-right: 8px;
+  text-align: right;
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
 }
 
@@ -14424,10 +14750,10 @@ html.loading-active #loading-screen:not(.hidden) {
   min-height: 1px;
 }
 
-/* Custom backlog tag styles for specific column types */
 .jira-backlog-tag-role,
 .jira-backlog-tag-action,
-.jira-backlog-tag-entity {
+.jira-backlog-tag-entity,
+.jira-backlog-tag-status {
   justify-content: center !important;
   text-align: center;
   font-size: 0.75rem;
@@ -14438,7 +14764,8 @@ html.loading-active #loading-screen:not(.hidden) {
    forced centering and let the badge shrink to its content from the left. */
 .jira-backlog-row-tags--columns .jira-backlog-tag-role,
 .jira-backlog-row-tags--columns .jira-backlog-tag-action,
-.jira-backlog-row-tags--columns .jira-backlog-tag-entity {
+.jira-backlog-row-tags--columns .jira-backlog-tag-entity,
+.jira-backlog-row-tags--columns .jira-backlog-tag-status {
   justify-content: flex-start !important;
   text-align: left;
 }
