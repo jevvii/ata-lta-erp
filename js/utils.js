@@ -2997,7 +2997,7 @@ const JiraBacklogList = {
       // Actions column pinned to the rightmost edge of the row.
       if (hasColumns && hasRowActions) {
         const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
-        actionsNode.style.gridColumn = `-1 / -1`;
+        actionsNode.style.gridColumn = `-2 / -1`;
         const rowActionsList = rowActions(item);
         if (Array.isArray(rowActionsList) && rowActionsList.length > 0) {
           rowActionsList.forEach(act => {
