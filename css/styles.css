@@ -15272,3 +15272,171 @@ html.loading-active #loading-screen:not(.hidden) {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ── DataTable shared component ──────────── */
+.data-table-view {
+  position: relative;
+  width: 100%;
+}
+
+.data-table--selectable th.dt-checkbox-col,
+.data-table--selectable td.dt-checkbox-col {
+  width: 40px;
+  min-width: 40px;
+  padding: var(--spacing-sm) var(--spacing-sm);
+  text-align: center;
+}
+
+.data-table--selectable td.dt-checkbox-col input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+.dt-select-all {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+thead:hover .dt-select-all,
+.dt-select-all:checked,
+.dt-select-all.indeterminate {
+  opacity: 1;
+}
+
+/* Row hover cursor when clickable */
+.data-table--selectable tbody tr[data-clickable="true"],
+.data-table tbody tr[data-clickable="true"] {
+  cursor: pointer;
+}
+
+/* Hover-reveal: row checkboxes and actions buttons are hidden by default
+   and appear when the row is hovered (or when a checkbox is checked). */
+.data-table--selectable tbody tr .dt-row-checkbox,
+.data-table--selectable tbody tr .dt-actions-col button {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.data-table--selectable tbody tr:hover .dt-row-checkbox,
+.data-table--selectable tbody tr:hover .dt-actions-col button,
+.data-table--selectable tbody tr .dt-row-checkbox:checked {
+  opacity: 1;
+}
+
+/* Title cell with stacked badges */
+.dt-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dt-title-cell .dt-title-link {
+  font-weight: 600;
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.dt-title-cell .dt-title-link:hover {
+  color: var(--color-primary);
+}
+
+.dt-title-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dt-title-badges .badge {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.dt-title-badges .badge-info {
+  background: var(--color-info-bg, rgba(59, 130, 246, 0.12));
+  color: var(--color-info, #3b82f6);
+}
+
+.dt-title-badges .badge-success {
+  background: var(--color-success-bg, rgba(34, 197, 94, 0.12));
+  color: var(--color-success, #22c55e);
+}
+
+.dt-title-badges .badge-warning {
+  background: var(--color-warning-bg, rgba(245, 158, 11, 0.12));
+  color: var(--color-warning, #f59e0b);
+}
+
+.dt-title-badges .badge-danger {
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.12));
+  color: var(--color-danger, #ef4444);
+}
+
+.dt-title-badges .badge-purple {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+.dt-title-badges .badge-muted {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+
+/* Priority pills */
+.dt-priority-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+
+.dt-priority-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dt-priority-urgent {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.dt-priority-medium {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.dt-priority-low {
+  background: rgba(148, 163, 184, 0.12);
+  color: #64748b;
+}
+
+.dt-priority-muted {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+/* Bulk bar used inside DataTable */
+.data-table-bulk-bar.hidden {
+  display: none !important;
+}
+
+.data-table-bulk-bar .jira-backlog-bulk-actions {
+  gap: 8px;
+}

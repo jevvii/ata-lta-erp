@@ -608,70 +608,87 @@ const Disbursement = {
   },
 
   renderTableView(container, items) {
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Employee', 'Category', 'Amount', 'Fund', 'Status', 'Payment Method', 'Date', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
+    const buildActions = (d) => {
+      const wrapper = el('div', { style: 'display: inline-flex; gap: 4px; align-items: center;' });
 
-    const tbody = el('tbody');
-    items.forEach(d => {
-      const emp = DB.getById('users', this.getEmployeeId(d));
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: emp?.name || '—' }));
-      const tdCat = el('td');
-      tdCat.appendChild(el('span', { text: d.category, style: 'font-weight:600;' }));
-      if (d.fromTemplate) {
-        tdCat.appendChild(document.createTextNode(' '));
-        tdCat.appendChild(this.recurringBadge(d));
-      }
-      if (d.linkedWorkRequestId) {
-        const wr = DB.getById('workRequests', d.linkedWorkRequestId);
-        if (wr) {
-          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: #64748b; margin-top: 4px;' });
-          wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 500;' }));
-          if (d.linkedTaskId) {
-            const task = DB.getById('tasks', d.linkedTaskId);
-            if (task) {
-              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: #8c9ba5; font-style: italic;' }));
-            }
-          } else {
-            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: #8c9ba5; font-style: italic;' }));
-          }
-          tdCat.appendChild(wrWrap);
-        }
-      }
-      tr.appendChild(tdCat);
-      tr.appendChild(el('td', { text: formatPHP(d.amount) }));
-      const source = this.getFundSource(d);
-      const fundBadge = el('span', { class: 'badge ' + (source === 'Firm Fund' ? 'badge-info' : 'badge-warning'), text: source });
-      const tdFund = el('td');
-      tdFund.appendChild(fundBadge);
-      tr.appendChild(tdFund);
-      tr.appendChild(el('td', { text: d.status }));
-      const payMethod = (d.status === 'Released' && d.paymentDetails?.method) ? d.paymentDetails.method : '—';
-      tr.appendChild(el('td', { text: payMethod }));
-      tr.appendChild(el('td', { text: formatDate(d.submittedAt) }));
-      const tdAct = el('td');
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#disbursement/detail/' + d.id; });
-      tdAct.appendChild(viewBtn);
       if (this.canEditDisbursement(d)) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
+        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(d.id); });
-        tdAct.appendChild(editBtn);
+        wrapper.appendChild(editBtn);
       }
+
       if (d.status === 'Funded' && !d.archived) {
         const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
         archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveDisbursement(d.id); });
-        tdAct.appendChild(archiveBtn);
+        wrapper.appendChild(archiveBtn);
       }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+
+      return wrapper;
+    };
+
+    const columns = [
+      { key: 'employee', label: 'Employee', render: (d) => DB.getById('users', this.getEmployeeId(d))?.name || '—' },
+      {
+        key: 'category',
+        label: 'Category',
+        width: '30%',
+        render: (d) => {
+          const cell = el('div', { class: 'dt-title-cell' });
+          const line = el('div', { style: 'display: flex; align-items: center; gap: 6px; flex-wrap: wrap;' });
+          line.appendChild(el('span', { class: 'dt-title-link', text: d.category }));
+          if (d.fromTemplate) line.appendChild(this.recurringBadge(d));
+          cell.appendChild(line);
+          if (d.linkedWorkRequestId) {
+            const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+            if (wr) {
+              const sub = el('div', { style: 'font-size: 0.725rem; color: var(--color-text-muted);' });
+              let suffix = ' (Entire WR)';
+              if (d.linkedTaskId) {
+                const task = DB.getById('tasks', d.linkedTaskId);
+                if (task) suffix = ` (Task: ${task.title})`;
+              }
+              sub.appendChild(el('span', { text: '🔗 ' + wr.title + suffix, style: 'font-weight: 500;' }));
+              cell.appendChild(sub);
+            }
+          }
+          return cell;
+        }
+      },
+      { key: 'amount', label: 'Amount', render: (d) => formatPHP(d.amount || 0), align: 'right', width: '100px' },
+      {
+        key: 'fund',
+        label: 'Fund',
+        width: '110px',
+        render: (d) => {
+          const source = this.getFundSource(d);
+          return el('span', { class: 'badge ' + (source === 'Firm Fund' ? 'badge-info' : 'badge-warning'), text: source });
+        }
+      },
+      { key: 'status', label: 'Status', render: (d) => this.statusBadge(d.status), width: '120px' },
+      { key: 'paymentMethod', label: 'Payment Method', render: (d) => (d.status === 'Released' && d.paymentDetails?.method) ? d.paymentDetails.method : '—', width: '130px' },
+      { key: 'submittedAt', label: 'Date', render: (d) => formatDate(d.submittedAt), width: '110px' },
+      { key: 'actions', label: 'Actions', render: (d) => buildActions(d), class: 'dt-actions-col', width: '180px' }
+    ];
+
+    const tableView = DataTable.render({
+      items,
+      columns,
+      selectable: true,
+      bulkActions: (ids) => {
+        const rows = ids.map(id => DB.getById('disbursements', id)).filter(Boolean);
+        const canArchive = rows.filter(d => d.status === 'Funded' && !d.archived).length;
+        if (canArchive === 0) return [];
+        return [{
+          text: `Archive (${canArchive})`,
+          className: 'btn btn-primary btn-sm',
+          onClick: (sel) => this.bulkArchiveDisbursements(sel)
+        }];
+      },
+      rowId: (d) => d.id,
+      onRowClick: (d) => { location.hash = '#disbursement/detail/' + d.id; }
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(tableView);
   },
 
   /**
@@ -2702,6 +2719,28 @@ const Disbursement = {
     DB.update('disbursements', id, { archived: true, updatedAt: new Date().toISOString() });
     Workflow.showMessage('Archived', 'Disbursement has been archived.', 'success');
     App.handleRoute();
+  },
+
+  bulkArchiveDisbursements(ids) {
+    const eligible = (ids || [])
+      .map(id => DB.getById('disbursements', id))
+      .filter(d => d && d.status === 'Funded' && !d.archived);
+
+    if (eligible.length === 0) {
+      Workflow.showMessage('No eligible records', 'Only Funded disbursements can be archived.', 'info');
+      return;
+    }
+
+    Workflow.showConfirm('Bulk Archive',
+      `Are you sure you want to archive ${eligible.length} funded disbursement(s)?`,
+      () => {
+        const now = new Date().toISOString();
+        eligible.forEach(d => DB.update('disbursements', d.id, { archived: true, updatedAt: now }));
+        Workflow.showMessage('Archived', `${eligible.length} disbursement(s) archived.`, 'success');
+        App.handleRoute();
+      },
+      'warning'
+    );
   },
 
   unarchiveDisbursement(id) {

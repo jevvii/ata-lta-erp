@@ -657,6 +657,70 @@ const Workflow = {
     App.handleRoute();
   },
 
+  bulkArchiveWorkRequests(ids) {
+    const eligible = (ids || [])
+      .map(id => DB.getById('workRequests', id))
+      .filter(wr => wr && wr.status === 'Completed' && !wr.archived);
+
+    if (eligible.length === 0) {
+      this.showMessage('No eligible records', 'Only Completed Work Requests can be archived.', 'info');
+      return;
+    }
+
+    this.showConfirm('Bulk Archive',
+      `Are you sure you want to archive ${eligible.length} completed Work Request(s)?`,
+      () => {
+        const now = new Date().toISOString();
+        eligible.forEach(wr => DB.update('workRequests', wr.id, { archived: true, updatedAt: now }));
+        this.showMessage('Archived', `${eligible.length} Work Request(s) archived.`, 'success');
+        App.handleRoute();
+      },
+      'warning'
+    );
+  },
+
+  bulkCancelWorkRequests(ids) {
+    if (Auth.user?.role !== 'Admin') {
+      this.showMessage('Permission Denied', 'Only Admin can cancel work requests.', 'danger');
+      return;
+    }
+
+    const eligible = (ids || [])
+      .map(id => DB.getById('workRequests', id))
+      .filter(wr => wr && wr.status !== 'Completed' && wr.status !== 'Cancelled');
+
+    if (eligible.length === 0) {
+      this.showMessage('No eligible records', 'Only active Work Requests can be cancelled.', 'info');
+      return;
+    }
+
+    this.showConfirm('Bulk Cancel',
+      `Are you sure you want to cancel ${eligible.length} Work Request(s) and their non-completed tasks?`,
+      () => {
+        const now = new Date().toISOString();
+        let cancelledTasks = 0;
+
+        eligible.forEach(wr => {
+          const tasks = DB.getWhere('tasks', t => t.workRequestId === wr.id);
+          tasks.forEach(t => {
+            if (t.status !== 'Completed' && t.status !== 'Cancelled') {
+              DB.update('tasks', t.id, { status: 'Cancelled', updatedAt: now });
+              cancelledTasks++;
+            }
+          });
+          DB.update('workRequests', wr.id, { status: 'Cancelled', archived: true, updatedAt: now });
+        });
+
+        this.showMessage('Cancelled',
+          `${eligible.length} Work Request(s) cancelled. ${cancelledTasks} task(s) also cancelled.`,
+          'warning'
+        );
+        App.handleRoute();
+      },
+      'danger'
+    );
+  },
+
   /**
    * Open a centered modal with a title and arbitrary body content.
    * Returns the overlay element so callers can remove it.
@@ -2864,65 +2928,19 @@ const Workflow = {
       }
       return;
     }
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Title', 'Client', 'Priority', 'Status', 'Due', 'Assignee', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-    const tbody = el('tbody');
-    wrs.forEach(wr => {
-      const client = DB.getById('clients', wr.clientId);
-      const assignedUser = DB.getById('users', wr.assignedTo);
-      const tr = el('tr');
-      const tdTitle = el('td');
-      const titleWrapper = el('div', { style: 'display: flex; align-items: center; gap: 8px;' });
-      titleWrapper.appendChild(el('div', { text: wr.title, style: 'font-weight: 600; color: var(--color-text);' }));
-      if (wr.isPendingApproval) {
-        titleWrapper.appendChild(el('span', {
-          text: 'Awaiting Approval',
-          style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning);'
-        }));
-      }
-      tdTitle.appendChild(titleWrapper);
-      const badgeRow = el('div', { style: 'display: flex; gap: 6px; margin-top: 4px;' });
-      badgeRow.appendChild(this.getFinanceBadgeForWr(wr));
-      badgeRow.appendChild(this.getDocBadgeForWr(wr));
-      tdTitle.appendChild(badgeRow);
-      tr.appendChild(tdTitle);
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: wr.priority || '—' }));
-      
-      const statusTd = el('td');
-      if (wr.isPendingApproval) {
-        statusTd.appendChild(el('span', {
-          text: 'Awaiting Approval',
-          style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px;'
-        }));
-      } else {
-        statusTd.appendChild(this.statusBadge(wr.status));
-      }
-      tr.appendChild(statusTd);
-      
-      tr.appendChild(el('td', { text: wr.dueDate ? formatDate(wr.dueDate) : '—' }));
-      tr.appendChild(el('td', { text: assignedUser ? assignedUser.name : '—' }));
-      tr.style.cursor = 'pointer';
-      tr.addEventListener('click', (e) => {
-        if (!e.target.closest('button, a, input, select')) {
-          location.hash = '#operations/detail/' + wr.id;
-        }
-      });
 
-      const tdAct = el('td');
+    const buildActions = (wr) => {
+      const wrapper = el('div', { style: 'display: inline-flex; gap: 4px; align-items: center;' });
       const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
       viewBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#operations/detail/' + wr.id; });
-      tdAct.appendChild(viewBtn);
-      
-      if (isPendingWr(wr)) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-        disableForApproval(editBtn);
-        tdAct.appendChild(editBtn);
+      wrapper.appendChild(viewBtn);
 
+      if (isPendingWr(wr)) {
+        if (canEdit) {
+          const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
+          disableForApproval(editBtn);
+          wrapper.appendChild(editBtn);
+        }
         if (Auth.user.id === wr.submittedBy || Auth.isManagerial()) {
           const cancelBtn = el('button', {
             class: 'btn btn-danger btn-sm',
@@ -2936,65 +2954,120 @@ const Workflow = {
               App.handleRoute();
             }, 'danger');
           });
-          tdAct.appendChild(cancelBtn);
+          wrapper.appendChild(cancelBtn);
         }
-      } else {
-        if (canEdit && wr.status === 'Draft') {
-          const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-          editBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#operations/form/' + wr.id; });
-          tdAct.appendChild(editBtn);
-        }
-        if (canApprove && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-          const ts = this.getPhaseTransitionStatus(wr.id);
-          if (ts && ts.canTransition && ts.nextPhase) {
-            const routeBtn = el('button', { 
-              html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Route',
-              style: 'color:#10b981;font-weight:600;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;padding:2px 8px;margin-left:4px;cursor:pointer;font-size:11px;display:inline-flex;align-items:center;gap:3px;'
-            });
-            routeBtn.title = 'Route to ' + ts.nextPhase;
-            routeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.transitionWorkRequest(wr.id); });
-            tdAct.appendChild(routeBtn);
-          } else if (ts && ts.missing && ts.missing.length > 0) {
-            const blockerBadge = el('span', {
-              html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' blocker' + (ts.missing.length > 1 ? 's' : ''),
-              style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:rgba(245,158,11,0.08);border-radius:6px;margin-left:4px;cursor:help;'
-            });
-            blockerBadge.title = ts.missing.join('\n');
-            tdAct.appendChild(blockerBadge);
-          }
-        }
+        return wrapper;
+      }
 
-        if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
-          const cancelBtn = el('button', {
-            class: 'btn btn-danger btn-sm',
-            text: 'Cancel',
-            style: 'margin-left: 4px;'
-          });
-          cancelBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.cancelWorkRequest(wr.id);
-          });
-          tdAct.appendChild(cancelBtn);
-        }
+      if (canEdit && wr.status === 'Draft') {
+        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
+        editBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#operations/form/' + wr.id; });
+        wrapper.appendChild(editBtn);
+      }
 
-        if (wr.status === 'Completed' && !wr.archived) {
-          const archiveBtn = el('button', {
-            class: 'btn btn-primary btn-sm',
-            text: 'Archive',
-            style: 'margin-left: 4px;'
+      if (canApprove && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+        const ts = this.getPhaseTransitionStatus(wr.id);
+        if (ts && ts.canTransition && ts.nextPhase) {
+          const routeBtn = el('button', {
+            html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Route',
+            style: 'color:#10b981;font-weight:600;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;padding:2px 8px;margin-left:4px;cursor:pointer;font-size:11px;display:inline-flex;align-items:center;gap:3px;'
           });
-          archiveBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.archiveWorkRequest(wr.id);
+          routeBtn.title = 'Route to ' + ts.nextPhase;
+          routeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.transitionWorkRequest(wr.id); });
+          wrapper.appendChild(routeBtn);
+        } else if (ts && ts.missing && ts.missing.length > 0) {
+          const blockerBadge = el('span', {
+            html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' blocker' + (ts.missing.length > 1 ? 's' : ''),
+            style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:rgba(245,158,11,0.08);border-radius:6px;margin-left:4px;cursor:help;'
           });
-          tdAct.appendChild(archiveBtn);
+          blockerBadge.title = ts.missing.join('\n');
+          wrapper.appendChild(blockerBadge);
         }
       }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+
+      if (Auth.user?.role === 'Admin' && wr.status !== 'Completed' && wr.status !== 'Cancelled') {
+        const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel', style: 'margin-left: 4px;' });
+        cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); this.cancelWorkRequest(wr.id); });
+        wrapper.appendChild(cancelBtn);
+      }
+
+      if (wr.status === 'Completed' && !wr.archived) {
+        const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left: 4px;' });
+        archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveWorkRequest(wr.id); });
+        wrapper.appendChild(archiveBtn);
+      }
+
+      return wrapper;
+    };
+
+    const columns = [
+      {
+        key: 'title',
+        label: 'Work Request',
+        width: '35%',
+        render: (wr) => {
+          const cell = el('div', { class: 'dt-title-cell' });
+          const titleLine = el('div', { style: 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;' });
+          titleLine.appendChild(el('span', { class: 'dt-title-link', text: wr.title }));
+          if (wr.isPendingApproval) {
+            titleLine.appendChild(el('span', {
+              text: 'Awaiting Approval',
+              style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning);'
+            }));
+          }
+          cell.appendChild(titleLine);
+          const badges = el('div', { class: 'dt-title-badges' });
+          badges.appendChild(this.getFinanceBadgeForWr(wr));
+          badges.appendChild(this.getDocBadgeForWr(wr));
+          cell.appendChild(badges);
+          return cell;
+        }
+      },
+      { key: 'clientId', label: 'Client', render: (wr) => DB.getById('clients', wr.clientId)?.name || '—' },
+      { key: 'priority', label: 'Priority', render: (wr) => DataTable.priorityCell(wr.priority), width: '120px' },
+      {
+        key: 'status',
+        label: 'Status',
+        width: '130px',
+        render: (wr) => wr.isPendingApproval
+          ? el('span', { text: 'Awaiting Approval', style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; display: inline-block;' })
+          : this.statusBadge(wr.status)
+      },
+      { key: 'dueDate', label: 'Due Date', render: (wr) => wr.dueDate ? formatDate(wr.dueDate) : '—', width: '110px' },
+      { key: 'actions', label: 'Actions', render: (wr) => buildActions(wr), class: 'dt-actions-col', width: '180px' }
+    ];
+
+    const tableView = DataTable.render({
+      items: wrs,
+      columns,
+      selectable: true,
+      bulkActions: (ids) => {
+        const rows = ids.map(id => DB.getById('workRequests', id)).filter(Boolean);
+        const canArchive = rows.filter(wr => wr.status === 'Completed' && !wr.archived).length;
+        const canCancel = rows.filter(wr => wr.status !== 'Completed' && wr.status !== 'Cancelled').length;
+        const actions = [];
+        if (canArchive > 0) {
+          actions.push({
+            text: `Archive (${canArchive})`,
+            className: 'btn btn-primary btn-sm',
+            onClick: (sel) => this.bulkArchiveWorkRequests(sel)
+          });
+        }
+        if (Auth.user?.role === 'Admin' && canCancel > 0) {
+          actions.push({
+            text: `Cancel (${canCancel})`,
+            className: 'btn btn-danger btn-sm',
+            onClick: (sel) => this.bulkCancelWorkRequests(sel)
+          });
+        }
+        return actions;
+      },
+      rowId: (wr) => wr.id,
+      onRowClick: (wr) => { location.hash = '#operations/detail/' + wr.id; },
+      rowClass: (wr) => isPendingWr(wr) ? 'pending-approval-row' : ''
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(tableView);
   },
 
   refreshBoard(container, wrs, groupBy = 'none', hasActiveFilters = false, toolbarContainer = null) {
@@ -4595,7 +4668,7 @@ const Workflow = {
     const invoices = DB.getWhere('invoices', inv => inv.workRequestId === wr.id || wr.linkedInvoiceId === inv.id);
     const disbursements = DB.getWhere('disbursements', d => d.linkedWorkRequestId === wr.id || (wr.linkedDisbursementIds || []).includes(d.id));
 
-    let text = 'No Finances';
+    let text = 'NO FINANCES';
     let cls = 'badge-muted';
 
     if (invoices.length > 0 || disbursements.length > 0) {
@@ -4603,22 +4676,22 @@ const Workflow = {
       const allDisbursementsReleased = disbursements.every(d => d.status === 'Released');
 
       if (allInvoicesPaid && allDisbursementsReleased) {
-        text = 'Finances: Settled';
-        cls = 'badge-success';
+        text = 'FINANCIAL SETTLED';
+        cls = 'badge-info';
       } else {
         const anyOverdue = invoices.some(inv => inv.status === 'Overdue');
         const anyDraftOrPending = invoices.some(inv => ['Draft', 'Pending'].includes(inv.status)) ||
                                   disbursements.some(d => ['Submitted', 'Under Review'].includes(d.status));
 
         if (anyOverdue) {
-          text = 'Finances: Overdue';
+          text = 'FINANCIAL OVERDUE';
           cls = 'badge-danger';
         } else if (anyDraftOrPending) {
-          text = 'Finances: Pending Approval';
-          cls = 'badge-warn';
+          text = 'FINANCIAL SETUP';
+          cls = 'badge-purple';
         } else {
-          text = 'Finances: Active';
-          cls = 'badge-info';
+          text = 'FINANCIAL ACTIVE';
+          cls = 'badge-success';
         }
       }
     }
@@ -4629,18 +4702,13 @@ const Workflow = {
   getDocBadgeForWr(wr) {
     const documents = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
 
-    let text = 'No Documents';
+    let text = 'NO DOCUMENTS';
     let cls = 'badge-danger';
 
     if (documents.length > 0) {
       const storedCount = documents.filter(d => d.lifecycleState === 'stored').length;
-      if (storedCount === documents.length) {
-        text = 'Docs: Stored';
-        cls = 'badge-success';
-      } else {
-        text = `Docs: ${storedCount}/${documents.length} Stored`;
-        cls = 'badge-warn';
-      }
+      text = `DOCS: ${storedCount}/${documents.length} STORED`;
+      cls = storedCount === documents.length ? 'badge-success' : 'badge-warn';
     }
 
     return el('span', { class: 'badge ' + cls, text });

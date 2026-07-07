@@ -498,78 +498,97 @@ const Billing = {
       container.appendChild(renderEmptyState('No invoices found', null, { variant: 'zero-state' }));
       return;
     }
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Invoice #', 'Client', 'Issue Date', 'Total', 'Paid', 'Balance', 'Status', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
 
-    const tbody = el('tbody');
-    invoices.forEach(inv => {
-      const client = DB.getById('clients', inv.clientId);
-      const paid = this.getPaidAmount(inv);
-      const balance = inv.total - paid;
-      const tr = el('tr');
-      const tdInvoice = el('td');
-      tdInvoice.appendChild(el('span', { text: inv.invoiceNumber, style: 'font-weight:600;' }));
-      if (inv.fromTemplate) tdInvoice.appendChild(this.recurringBadge(inv));
-      if (inv.workRequestId) {
-        const wr = DB.getById('workRequests', inv.workRequestId);
-        if (wr) {
-          const wrWrap = el('div', { style: 'font-size: 0.725rem; color: var(--color-text-muted); margin-top: 4px;' });
-          wrWrap.appendChild(el('span', { text: '🔗 ' + wr.title, style: 'font-weight: 500;' }));
-          if (inv.linkedTaskId) {
-            const task = DB.getById('tasks', inv.linkedTaskId);
-            if (task) {
-              wrWrap.appendChild(el('span', { text: ` (Task: ${task.title})`, style: 'color: var(--color-text-muted); font-style: italic;' }));
-            }
-          } else {
-            wrWrap.appendChild(el('span', { text: ' (Entire WR)', style: 'color: var(--color-text-muted); font-style: italic;' }));
-          }
-          tdInvoice.appendChild(wrWrap);
-        }
-      }
-      tr.appendChild(tdInvoice);
-      tr.appendChild(el('td', { text: client?.name || '—' }));
-      tr.appendChild(el('td', { text: formatDate(inv.issueDate) }));
-      tr.appendChild(el('td', { text: formatPHP(inv.total) }));
-      tr.appendChild(el('td', { text: formatPHP(paid) }));
-      tr.appendChild(el('td', { text: formatPHP(balance) }));
-      tr.appendChild(el('td')).appendChild(this.statusBadge(inv.status));
-      const tdAct = el('td');
+    const buildActions = (inv) => {
+      const wrapper = el('div', { style: 'display: inline-flex; gap: 4px; align-items: center;' });
       const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#billing/detail/' + inv.id; });
-      tdAct.appendChild(viewBtn);
+      viewBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#billing/detail/' + inv.id; });
+      wrapper.appendChild(viewBtn);
 
       if (inv.status === 'Draft' && Auth.can('billing:edit')) {
         const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
-        editBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.showForm(inv.id);
-        });
-        tdAct.appendChild(editBtn);
+        editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(inv.id); });
+        wrapper.appendChild(editBtn);
         const trashBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Trash', style: 'margin-left:4px;' });
-        trashBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.trashInvoice(inv.id);
-        });
-        tdAct.appendChild(trashBtn);
+        trashBtn.addEventListener('click', (e) => { e.stopPropagation(); this.trashInvoice(inv.id); });
+        wrapper.appendChild(trashBtn);
       }
 
       if (inv.status === 'Paid' && !inv.archived) {
         const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
-        archiveBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.archiveInvoice(inv.id);
-        });
-        tdAct.appendChild(archiveBtn);
+        archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveInvoice(inv.id); });
+        wrapper.appendChild(archiveBtn);
       }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+
+      return wrapper;
+    };
+
+    const columns = [
+      {
+        key: 'invoiceNumber',
+        label: 'Invoice #',
+        width: '25%',
+        render: (inv) => {
+          const cell = el('div', { class: 'dt-title-cell' });
+          const line = el('div', { style: 'display: flex; align-items: center; gap: 6px; flex-wrap: wrap;' });
+          line.appendChild(el('span', { class: 'dt-title-link', text: inv.invoiceNumber || '—' }));
+          if (inv.fromTemplate) line.appendChild(this.recurringBadge(inv));
+          cell.appendChild(line);
+          if (inv.workRequestId) {
+            const wr = DB.getById('workRequests', inv.workRequestId);
+            if (wr) {
+              const sub = el('div', { style: 'font-size: 0.725rem; color: var(--color-text-muted);' });
+              let suffix = ' (Entire WR)';
+              if (inv.linkedTaskId) {
+                const task = DB.getById('tasks', inv.linkedTaskId);
+                if (task) suffix = ` (Task: ${task.title})`;
+              }
+              sub.appendChild(el('span', { text: '🔗 ' + wr.title + suffix, style: 'font-weight: 500;' }));
+              cell.appendChild(sub);
+            }
+          }
+          return cell;
+        }
+      },
+      { key: 'clientId', label: 'Client', render: (inv) => DB.getById('clients', inv.clientId)?.name || '—' },
+      { key: 'issueDate', label: 'Issue Date', render: (inv) => formatDate(inv.issueDate), width: '110px' },
+      { key: 'total', label: 'Total', render: (inv) => formatPHP(inv.total || 0), align: 'right', width: '100px' },
+      { key: 'paid', label: 'Paid', render: (inv) => formatPHP(this.getPaidAmount(inv)), align: 'right', width: '100px' },
+      { key: 'balance', label: 'Balance', render: (inv) => formatPHP((inv.total || 0) - this.getPaidAmount(inv)), align: 'right', width: '100px' },
+      { key: 'status', label: 'Status', render: (inv) => this.statusBadge(inv.status), width: '110px' },
+      { key: 'actions', label: 'Actions', render: (inv) => buildActions(inv), class: 'dt-actions-col', width: '180px' }
+    ];
+
+    const tableView = DataTable.render({
+      items: invoices,
+      columns,
+      selectable: true,
+      bulkActions: (ids) => {
+        const rows = ids.map(id => DB.getById('invoices', id)).filter(Boolean);
+        const canArchive = rows.filter(inv => inv.status === 'Paid' && !inv.archived).length;
+        const canTrash = rows.filter(inv => inv.status === 'Draft' && Auth.can('billing:edit')).length;
+        const actions = [];
+        if (canArchive > 0) {
+          actions.push({
+            text: `Archive (${canArchive})`,
+            className: 'btn btn-primary btn-sm',
+            onClick: (sel) => this.bulkArchiveInvoices(sel)
+          });
+        }
+        if (canTrash > 0) {
+          actions.push({
+            text: `Trash (${canTrash})`,
+            className: 'btn btn-danger btn-sm',
+            onClick: (sel) => this.bulkTrashInvoices(sel)
+          });
+        }
+        return actions;
+      },
+      rowId: (inv) => inv.id,
+      onRowClick: (inv) => { if (!inv.pendingChangeId) location.hash = '#billing/detail/' + inv.id; }
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(tableView);
   },
 
   /**
@@ -3054,6 +3073,63 @@ const Billing = {
     DB.update('invoices', id, { archived: true, updatedAt: new Date().toISOString() });
     Workflow.showMessage('Archived', 'Invoice has been archived.', 'success');
     App.handleRoute();
+  },
+
+  bulkArchiveInvoices(ids) {
+    const eligible = (ids || [])
+      .map(id => DB.getById('invoices', id))
+      .filter(inv => inv && inv.status === 'Paid' && !inv.archived);
+
+    if (eligible.length === 0) {
+      Workflow.showMessage('No eligible records', 'Only Paid invoices can be archived.', 'info');
+      return;
+    }
+
+    Workflow.showConfirm('Bulk Archive',
+      `Are you sure you want to archive ${eligible.length} paid invoice(s)?`,
+      () => {
+        const now = new Date().toISOString();
+        eligible.forEach(inv => DB.update('invoices', inv.id, { archived: true, updatedAt: now }));
+        Workflow.showMessage('Archived', `${eligible.length} invoice(s) archived.`, 'success');
+        App.handleRoute();
+      },
+      'warning'
+    );
+  },
+
+  bulkTrashInvoices(ids) {
+    if (!Auth.can('billing:edit')) {
+      Workflow.showMessage('Permission Denied', 'You do not have permission to trash invoices.', 'danger');
+      return;
+    }
+
+    const eligible = (ids || [])
+      .map(id => DB.getById('invoices', id))
+      .filter(inv => inv && inv.status === 'Draft');
+
+    if (eligible.length === 0) {
+      Workflow.showMessage('No eligible records', 'Only Draft invoices can be moved to trash.', 'info');
+      return;
+    }
+
+    Workflow.showConfirm('Move to Trash',
+      `Are you sure you want to move ${eligible.length} draft invoice(s) to trash?`,
+      () => {
+        const now = new Date().toISOString();
+        eligible.forEach(inv => {
+          if (inv.workRequestId) {
+            const wr = DB.getById('workRequests', inv.workRequestId);
+            if (wr && wr.linkedInvoiceId === inv.id) {
+              DB.update('workRequests', wr.id, { linkedInvoiceId: null });
+            }
+          }
+          DB.update('invoices', inv.id, { status: 'Cancelled', updatedAt: now });
+        });
+        Workflow.showMessage('Moved to Trash', `${eligible.length} invoice(s) moved to trash.`, 'warning');
+        App.handleRoute();
+      },
+      'danger'
+    );
   },
 
   unarchiveInvoice(id) {

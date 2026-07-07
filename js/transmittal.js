@@ -545,42 +545,60 @@ const Transmittal = {
   },
 
   renderTableView(container, items) {
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Tracking #', 'Work Request', 'Client', 'Status', 'Items', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    items.forEach(t => {
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.trackingNumber }));
-      tr.appendChild(el('td', { text: this.getWorkRequestTitle(t.workRequestId) }));
-      tr.appendChild(el('td', { text: this.getClientName(t.clientId) }));
-      const tdStatus = el('td');
-      tdStatus.appendChild(this.statusBadge(t.status));
-      tr.appendChild(tdStatus);
-      tr.appendChild(el('td', { text: String((t.items || []).length) }));
-      const tdAct = el('td');
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#transmittal/detail/' + t.id; });
-      tdAct.appendChild(viewBtn);
+    const buildActions = (t) => {
+      const wrapper = el('div', { style: 'display: inline-flex; gap: 4px; align-items: center;' });
       if (this.canEditTransmittal(t)) {
         const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
-        tdAct.appendChild(editBtn);
+        wrapper.appendChild(editBtn);
       }
+
       if (t.status === 'Acknowledged' && !t.archived) {
         const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
         archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveTransmittal(t.id); });
-        tdAct.appendChild(archiveBtn);
+        wrapper.appendChild(archiveBtn);
       }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+
+      return wrapper;
+    };
+
+    const columns = [
+      {
+        key: 'trackingNumber',
+        label: 'Tracking #',
+        width: '30%',
+        render: (t) => {
+          const cell = el('div', { class: 'dt-title-cell' });
+          cell.appendChild(el('span', { class: 'dt-title-link', text: t.trackingNumber || '—' }));
+          return cell;
+        }
+      },
+      { key: 'workRequestId', label: 'Work Request', render: (t) => this.getWorkRequestTitle(t.workRequestId) },
+      { key: 'clientId', label: 'Client', render: (t) => this.getClientName(t.clientId) },
+      { key: 'status', label: 'Status', render: (t) => this.statusBadge(t.status), width: '130px' },
+      { key: 'items', label: 'Items', render: (t) => String((t.items || []).length), width: '70px', align: 'center' },
+      { key: 'actions', label: 'Actions', render: (t) => buildActions(t), class: 'dt-actions-col', width: '180px' }
+    ];
+
+    const tableView = DataTable.render({
+      items,
+      columns,
+      selectable: true,
+      bulkActions: (ids) => {
+        const rows = ids.map(id => DB.getById('transmittals', id)).filter(Boolean);
+        const canArchive = rows.filter(t => t.status === 'Acknowledged' && !t.archived).length;
+        if (canArchive === 0) return [];
+        return [{
+          text: `Archive (${canArchive})`,
+          className: 'btn btn-primary btn-sm',
+          onClick: (sel) => this.bulkArchiveTransmittals(sel)
+        }];
+      },
+      rowId: (t) => t.id,
+      onRowClick: (t) => { location.hash = '#transmittal/detail/' + t.id; }
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(tableView);
   },
 
   renderBoardView(container, items, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
@@ -1910,6 +1928,28 @@ const Transmittal = {
     DB.update('transmittals', id, { archived: true, updatedAt: new Date().toISOString() });
     Workflow.showMessage('Archived', 'Transmittal has been archived.', 'success');
     App.handleRoute();
+  },
+
+  bulkArchiveTransmittals(ids) {
+    const eligible = (ids || [])
+      .map(id => DB.getById('transmittals', id))
+      .filter(t => t && t.status === 'Acknowledged' && !t.archived);
+
+    if (eligible.length === 0) {
+      Workflow.showMessage('No eligible records', 'Only Acknowledged transmittals can be archived.', 'info');
+      return;
+    }
+
+    Workflow.showConfirm('Bulk Archive',
+      `Are you sure you want to archive ${eligible.length} acknowledged transmittal(s)?`,
+      () => {
+        const now = new Date().toISOString();
+        eligible.forEach(t => DB.update('transmittals', t.id, { archived: true, updatedAt: now }));
+        Workflow.showMessage('Archived', `${eligible.length} transmittal(s) archived.`, 'success');
+        App.handleRoute();
+      },
+      'warning'
+    );
   },
 
   unarchiveTransmittal(id) {
