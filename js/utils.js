@@ -2690,9 +2690,9 @@ const JiraBacklogList = {
       // Fixed lead widths so the header and body columns line up exactly.
       const titleColWidth = options.titleColumnWidth || '1fr';
       const actionsCol = hasRowActions ? 'minmax(120px, max-content)' : '';
-      const leadCols = `28px 24px 75px ${titleColWidth}${actionsCol ? ' ' + actionsCol : ''}`;
+      const leadCols = `28px 24px 75px ${titleColWidth}`;
       const metaCols = columns.map(c => c.width || '1fr').join(' ');
-      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols}`;
+      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols}${actionsCol ? ' ' + actionsCol : ''}`;
 
       // Lead-column placeholders: checkbox, icon, key, title.
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
@@ -2700,16 +2700,16 @@ const JiraBacklogList = {
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
 
-      // Actions column header: if hasRowActions is true, append "Actions" label header!
-      if (hasRowActions) {
-        colHeader.appendChild(el('div', { class: 'jira-backlog-col-header', text: 'Actions' }));
-      }
-
       columns.forEach(col => {
         const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
         if (col.align) h.style.textAlign = col.align;
         colHeader.appendChild(h);
       });
+
+      // Actions column header placed at the rightmost edge.
+      if (hasRowActions) {
+        colHeader.appendChild(el('div', { class: 'jira-backlog-col-header', text: 'Actions' }));
+      }
 
       container.appendChild(colHeader);
     }
@@ -2884,17 +2884,16 @@ const JiraBacklogList = {
       if (hasColumns) {
         const titleColWidth = options.titleColumnWidth || '1fr';
         const actionsCol = hasRowActions ? 'minmax(120px, max-content)' : '';
-        const leadCols = `28px 24px 75px ${titleColWidth}${actionsCol ? ' ' + actionsCol : ''}`;
+        const leadCols = `28px 24px 75px ${titleColWidth}`;
         const metaCols = columns.map(c => c.width || '1fr').join(' ');
-        row.style.gridTemplateColumns = `${leadCols} ${metaCols}`;
+        row.style.gridTemplateColumns = `${leadCols} ${metaCols}${actionsCol ? ' ' + actionsCol : ''}`;
       }
 
       // Metadata / Tags
       const tagsNode = el('div', { class: 'jira-backlog-row-tags' + (hasColumns ? ' jira-backlog-row-tags--columns' : '') });
       if (hasColumns) {
         tagsNode.style.gridTemplateColumns = columns.map(c => c.width || '1fr').join(' ');
-        const startCol = hasRowActions ? 6 : 5;
-        tagsNode.style.gridColumn = `${startCol} / span ${columns.length}`;
+        tagsNode.style.gridColumn = `5 / span ${columns.length}`;
       }
       const tagList = item.tags || [];
       tagList.forEach(tag => {
@@ -2943,9 +2942,12 @@ const JiraBacklogList = {
         }
       }
 
-      // Actions on the left of tags (column 5, if applicable)
+      row.appendChild(tagsNode);
+
+      // Actions column pinned to the rightmost edge of the row.
       if (hasColumns && hasRowActions) {
         const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
+        actionsNode.style.gridColumn = `-1 / -1`;
         const rowActionsList = rowActions(item);
         if (Array.isArray(rowActionsList) && rowActionsList.length > 0) {
           rowActionsList.forEach(act => {
@@ -2963,8 +2965,6 @@ const JiraBacklogList = {
         }
         row.appendChild(actionsNode);
       }
-
-      row.appendChild(tagsNode);
 
       // Optional secondary line (for dense pages like Active Clients)
       if (item.secondary) {

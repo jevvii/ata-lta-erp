@@ -13908,6 +13908,31 @@ html.loading-active #loading-screen:not(.hidden) {
   opacity: 1;
 }
 
+/* Pin the actions column to the right edge of wide table-like backlogs
+   so it remains visible while the rest of the row scrolls horizontally. */
+.jira-backlog-row--columns .jira-backlog-row-actions {
+  position: sticky;
+  right: 16px;
+  background: var(--color-surface);
+  z-index: 2;
+  padding-left: 8px;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
+}
+
+.jira-backlog-row:hover .jira-backlog-row-actions,
+.jira-backlog-row.selected .jira-backlog-row-actions {
+  background: var(--color-bg-light, #fafafa);
+}
+
+.jira-backlog-columns-header .jira-backlog-col-header:last-child {
+  position: sticky;
+  right: 16px;
+  background: var(--color-bg-light, #fafafa);
+  z-index: 3;
+  padding-left: 8px;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
+}
+
 /* Empty checkbox spacer used when selectable=false to preserve column alignment. */
 .jira-backlog-row-checkbox-wrap--spacer {
   width: 100%;
