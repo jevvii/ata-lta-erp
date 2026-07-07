@@ -2577,7 +2577,8 @@ const JiraBacklogList = {
     if (hasColumns) {
       const colHeader = el('div', { class: 'jira-backlog-columns-header' });
       // Fixed lead widths so the header and body columns line up exactly.
-      const leadCols = '28px 24px 75px 1fr';
+      const titleColWidth = options.titleColumnWidth || '1fr';
+      const leadCols = `28px 24px 75px ${titleColWidth}`;
       const metaCols = columns.map(c => c.width || '1fr').join(' ');
       colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
 
@@ -2708,6 +2709,7 @@ const JiraBacklogList = {
     items.forEach((item, index) => {
       const rowClasses = ['jira-backlog-row'];
       if (hasColumns) rowClasses.push('jira-backlog-row--columns');
+      if (hasColumns && options.titleColumnWidth) rowClasses.push('jira-backlog-row--fixed-title');
       const row = el('div', { class: rowClasses.join(' '), 'data-item-id': item.id });
       rows.push(row);
 
@@ -2749,7 +2751,8 @@ const JiraBacklogList = {
 
       // Column-mode grid sizing (lead columns + metadata columns + actions column)
       if (hasColumns) {
-        const leadCols = '28px 24px 75px 1fr';
+        const titleColWidth = options.titleColumnWidth || '1fr';
+        const leadCols = `28px 24px 75px ${titleColWidth}`;
         const metaCols = columns.map(c => c.width || '1fr').join(' ');
         row.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
       }

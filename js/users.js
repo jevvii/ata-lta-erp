@@ -428,7 +428,7 @@ const Users = {
   // Audit Log
   // ============================================================
   renderAuditSection() {
-    const wrapper = el('div', { class: 'page-content-section' });
+    const wrapper = el('div');
     const canViewAllAudit = Auth.can('audit:view_all');
 
     // Jira Filter Toolbar & Active Filters State
@@ -484,18 +484,24 @@ const Users = {
       }
     });
 
+    const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
+    stickyContainer.appendChild(toolbarContainer);
+    wrapper.appendChild(stickyContainer);
+
+    const content = el('div', { class: 'page-content-section' });
     const tableContainer = el('div');
-    wrapper.appendChild(tableContainer);
+    content.appendChild(tableContainer);
+    wrapper.appendChild(content);
 
     const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, activeFilters, toolbarContainer);
+      this.refreshAuditLog(tableContainer, activeFilters);
     };
 
     triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, activeFilters, toolbarContainer) {
+  refreshAuditLog(container, activeFilters) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
     const hasLogs = logs.length > 0;
@@ -573,7 +579,9 @@ const Users = {
       const user = DB.getById('users', l.userId);
       const userName = user ? user.name : (l.userName || l.userId);
       const initials = userName.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
-      const avatarIcon = `<div class="backlog-avatar">${escapeHtml(initials)}</div>`;
+      const avatarStyle = user?.avatarUrl ? `background-image:url('${escapeHtml(user.avatarUrl)}'); background-size:cover; background-position:center;` : '';
+      const avatarContent = user?.avatarUrl ? '' : escapeHtml(initials);
+      const avatarIcon = `<div class="backlog-avatar${user?.avatarUrl ? ' backlog-avatar--image' : ''}" style="${avatarStyle}">${avatarContent}</div>`;
       const ts = new Date(l.timestamp);
 
       return {
@@ -599,12 +607,11 @@ const Users = {
       countLabel: 'entry',
       bulkActions: [],
       columns: [
-        { label: 'Action', width: '130px' },
+        { label: 'Action', width: '170px' },
         { label: 'Entity', width: '60px' },
         { label: 'User', width: '140px' },
         { label: 'Timestamp', width: '160px' }
-      ],
-      toolbar: toolbarContainer
+      ]
     });
 
     container.appendChild(backlog);

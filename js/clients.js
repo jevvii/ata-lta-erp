@@ -243,6 +243,9 @@ const Clients = {
       };
     });
 
+    const longestNameLen = items.reduce((max, item) => Math.max(max, (item.name || '').length), 0);
+    const titleColumnWidth = Math.max(200, longestNameLen * 9 + 24) + 'px';
+
     const backlog = JiraBacklogList.render({
       title: 'Active Clients',
       subtitle: 'taxpayers, trade names, contacts, and retainer agreements',
@@ -251,15 +254,16 @@ const Clients = {
       rowIdPrefix: 'CL',
       countLabel: 'client',
       bulkActions: [],
+      titleColumnWidth,
       columns: [
-        { label: 'Entity', width: '60px' },
-        { label: 'Retainer', width: '60px' },
-        { label: 'TIN', width: '130px' },
-        { label: 'Point of Contact', width: '160px' },
-        { label: 'Trade Name', width: '160px' },
-        { label: 'Address', width: '200px' },
-        { label: 'Related Companies', width: '200px' },
-        { label: 'Contact Details', width: '220px' }
+        { label: 'Entity', width: '55px' },
+        { label: 'Retainer', width: '55px' },
+        { label: 'TIN', width: '110px' },
+        { label: 'Point of Contact', width: '120px' },
+        { label: 'Trade Name', width: '140px' },
+        { label: 'Address', width: '160px' },
+        { label: 'Related Companies', width: '160px' },
+        { label: 'Contact Details', width: '180px' }
       ],
       headerActions: [
         {

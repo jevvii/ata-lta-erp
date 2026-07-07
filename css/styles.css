@@ -1636,6 +1636,25 @@ tbody tr:hover {
   background: transparent;
   padding: 0;
 }
+
+.admin-tab-page .toolbar-sticky-container {
+  position: sticky;
+  top: calc(var(--admin-title-bar-height, 48px) + var(--admin-tab-nav-height, 45px));
+  z-index: 24;
+  background: var(--color-bg, #f4f6fb);
+  padding-top: 8px;
+  padding-bottom: 12px;
+  margin-top: -8px;
+  margin-bottom: 16px;
+}
+
+.admin-tab-page .toolbar-sticky-container .filters-bar {
+  position: static;
+  margin-bottom: 0;
+  background: transparent;
+  padding: 0;
+}
+
 .module-tab-link {
   display: inline-flex;
   align-items: center;
@@ -13873,7 +13892,14 @@ html.loading-active #loading-screen:not(.hidden) {
   width: 100%;
   overflow: visible;
   white-space: normal;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/* Fixed title width keeps long names on a single line while the rest of the
+   grid scrolls horizontally. */
+.jira-backlog-row--fixed-title .jira-backlog-row-title {
+  white-space: nowrap;
 }
 
 .jira-backlog-columns-header {
@@ -13909,20 +13935,23 @@ html.loading-active #loading-screen:not(.hidden) {
    boundary of the column if needed. */
 .jira-backlog-row-tags--columns .jira-backlog-tag {
   width: auto;
-  max-width: 100%;
   min-width: 0;
+  max-width: 100%;
   justify-self: start;
   justify-content: flex-start;
-  overflow: visible;
+  overflow: hidden;
   white-space: normal;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .jira-backlog-row-tags--columns .jira-backlog-tag > * {
   min-width: 0;
-  overflow: visible;
+  max-width: 100%;
+  overflow: hidden;
   white-space: normal;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .jira-backlog-tag-placeholder {
@@ -14013,6 +14042,12 @@ html.loading-active #loading-screen:not(.hidden) {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.backlog-avatar--image {
+  background-repeat: no-repeat;
+  color: transparent;
 }
 
 /* Dark mode overrides for Jira backlog */
