@@ -2931,6 +2931,20 @@ const Workflow = {
 
     const buildActions = (wr) => {
       const wrapper = el('div', { style: 'display: inline-flex; gap: 4px; align-items: center;' });
+
+      // Blocker badge always appears first in the actions column.
+      if (canApprove && wr.status !== 'Completed' && wr.status !== 'Cancelled' && !isPendingWr(wr)) {
+        const ts = this.getPhaseTransitionStatus(wr.id);
+        if (ts && ts.missing && ts.missing.length > 0) {
+          const blockerBadge = el('span', {
+            html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' blocker' + (ts.missing.length > 1 ? 's' : ''),
+            style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:rgba(245,158,11,0.08);border-radius:6px;cursor:help;'
+          });
+          blockerBadge.title = ts.missing.join('\n');
+          wrapper.appendChild(blockerBadge);
+        }
+      }
+
       const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
       viewBtn.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#operations/detail/' + wr.id; });
       wrapper.appendChild(viewBtn);
@@ -2975,13 +2989,6 @@ const Workflow = {
           routeBtn.title = 'Route to ' + ts.nextPhase;
           routeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.transitionWorkRequest(wr.id); });
           wrapper.appendChild(routeBtn);
-        } else if (ts && ts.missing && ts.missing.length > 0) {
-          const blockerBadge = el('span', {
-            html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' blocker' + (ts.missing.length > 1 ? 's' : ''),
-            style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:rgba(245,158,11,0.08);border-radius:6px;margin-left:4px;cursor:help;'
-          });
-          blockerBadge.title = ts.missing.join('\n');
-          wrapper.appendChild(blockerBadge);
         }
       }
 
