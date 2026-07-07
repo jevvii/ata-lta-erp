@@ -12214,6 +12214,29 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Notion popover submit button */
 [data-theme="dark"] .notion-popover-submit { color: #191919; }
 
+/* Split button dropdown menu in dark mode */
+[data-theme="dark"] .split-btn-menu {
+  background: var(--color-surface, #252525);
+  border-color: var(--color-border, #4a4a4a);
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.4), 
+    0 4px 6px -2px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item {
+  color: var(--color-text, #f4f4f5);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item svg {
+  color: var(--color-text-muted, #a1a1aa);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item:hover {
+  background: var(--color-bg-muted, #2f2f2f);
+  color: var(--color-primary, #d4b8ff);
+}
+[data-theme="dark"] .split-btn-menu .dropdown-item:hover svg {
+  color: var(--color-primary, #d4b8ff);
+}
+
 /* WR task detail panes */
 [data-theme="dark"] .task-details-left,
 [data-theme="dark"] .task-details-right { border-color: var(--color-border); }
