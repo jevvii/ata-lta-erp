@@ -40,9 +40,10 @@ function defaultRequirementChecklist(taskId) {
 }
 
 const seedData = {
-  schemaVersion: 4,
+  schemaVersion: 15,
   operationsRequests: [],
 
+  departments: ['Accounting', 'Operations', 'Documentation', 'HR', 'Management', 'Legal', 'Tax', 'Audit', 'Business Development'],
 
   users: [
     {
@@ -51,6 +52,7 @@ const seedData = {
       email: 'admin@ata-lta.ph',
       password: 'password123',
       role: 'Admin',
+      departments: ['Administration'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
@@ -62,6 +64,7 @@ const seedData = {
       email: 'manager@ata-lta.ph',
       password: 'password123',
       role: 'Manager',
+      departments: ['Management'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/2.jpg',
@@ -73,6 +76,7 @@ const seedData = {
       email: 'manager-ata@ata-lta.ph',
       password: 'password123',
       role: 'Manager',
+      departments: ['Management'],
       entities: ['ata'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/3.jpg',
@@ -84,6 +88,7 @@ const seedData = {
       email: 'accounting-ata@ata-lta.ph',
       password: 'password123',
       role: 'Accounting',
+      departments: ['Accounting'],
       entities: ['ata'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/4.jpg',
@@ -95,6 +100,7 @@ const seedData = {
       email: 'accounting-lta@ata-lta.ph',
       password: 'password123',
       role: 'Accounting',
+      departments: ['Accounting'],
       entities: ['lta'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/5.jpg',
@@ -106,6 +112,7 @@ const seedData = {
       email: 'ops-ata@ata-lta.ph',
       password: 'password123',
       role: 'Operations',
+      departments: ['Operations'],
       entities: ['ata'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/6.jpg',
@@ -117,6 +124,7 @@ const seedData = {
       email: 'ops-lta@ata-lta.ph',
       password: 'password123',
       role: 'Operations',
+      departments: ['Operations'],
       entities: ['lta'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/men/7.jpg',
@@ -128,6 +136,7 @@ const seedData = {
       email: 'docs@ata-lta.ph',
       password: 'password123',
       role: 'Documentation',
+      departments: ['Documentation'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/8.jpg',
@@ -139,9 +148,59 @@ const seedData = {
       email: 'hr@ata-lta.ph',
       password: 'password123',
       role: 'HR',
+      departments: ['HR'],
       entities: ['ATA', 'LTA'],
       isActive: true,
       avatarUrl: 'https://randomuser.me/api/portraits/women/9.jpg',
+      createdAt: now
+    },
+    // Mock users exercising multi-department / dynamic RBAC
+    {
+      id: makeId('u', 10),
+      name: 'Rhea Balboa',
+      email: 'rhea.b@ata-lta.ph',
+      password: 'password123',
+      role: 'Operations',
+      departments: ['Operations', 'Documentation'],
+      entities: ['ATA', 'LTA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/women/10.jpg',
+      createdAt: now
+    },
+    {
+      id: makeId('u', 11),
+      name: 'Carlos Reyes',
+      email: 'carlos.r@ata-lta.ph',
+      password: 'password123',
+      role: 'HR',
+      departments: ['HR', 'Accounting'],
+      entities: ['ATA', 'LTA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/men/11.jpg',
+      createdAt: now
+    },
+    {
+      id: makeId('u', 12),
+      name: 'Diana Cruz',
+      email: 'diana.c@ata-lta.ph',
+      password: 'password123',
+      role: 'Accounting',
+      departments: ['Accounting', 'Tax'],
+      entities: ['ATA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/women/12.jpg',
+      createdAt: now
+    },
+    {
+      id: makeId('u', 13),
+      name: 'Elena Torres',
+      email: 'elena.t@ata-lta.ph',
+      password: 'password123',
+      role: 'Manager',
+      departments: ['Management', 'Accounting'],
+      entities: ['ATA', 'LTA'],
+      isActive: true,
+      avatarUrl: 'https://randomuser.me/api/portraits/women/13.jpg',
       createdAt: now
     }
   ],
@@ -1637,7 +1696,7 @@ const seedData = {
 // ============================================================
 
 const DB = {
-  SCHEMA_VERSION: 14,
+  SCHEMA_VERSION: 15,
   _pendingWrIdsCache: null,
 
   init() {
@@ -1654,6 +1713,7 @@ const DB = {
         if (oldVersion < 12) this.migrateV11ToV12();
         if (oldVersion < 13) this.migrateV12ToV13();
         if (oldVersion < 14) this.migrateV13ToV14();
+        if (oldVersion < 15) this.migrateV14ToV15();
       } else if (oldVersion === 0) {
         this.resetToSeed();
       }
@@ -1847,6 +1907,35 @@ const DB = {
   migrateV13ToV14() {
     this.ensureWorkRequestBoardOrder();
     localStorage.setItem('erp_schema_version', '14');
+  },
+
+  migrateV14ToV15() {
+    // Seed departments table if missing
+    if (!localStorage.getItem('erp_departments')) {
+      const defaultDepartments = (seedData.departments || [])
+        .map(name => ({ id: 'dept-' + name.toLowerCase().replace(/\s+/g, '-'), name }));
+      this.save('departments', defaultDepartments);
+    }
+
+    // Back-fill departments for legacy users based on their role.
+    const roleToDept = {
+      Admin: 'Administration',
+      Manager: 'Management',
+      Accounting: 'Accounting',
+      Operations: 'Operations',
+      Documentation: 'Documentation',
+      HR: 'HR'
+    };
+    const users = this.getAll('users').map(u => {
+      const normalized = Array.isArray(u.departments) ? u.departments : [];
+      if (normalized.length === 0 && roleToDept[u.role]) {
+        return { ...u, departments: [roleToDept[u.role]] };
+      }
+      return { ...u, departments: normalized };
+    });
+    this.save('users', users);
+
+    localStorage.setItem('erp_schema_version', '15');
   },
 
   ensureWorkRequestBoardOrder() {

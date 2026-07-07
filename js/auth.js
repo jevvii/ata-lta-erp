@@ -48,6 +48,29 @@ const Auth = {
   /** Convenience: every valid role in the system. */
   ALL_ROLES: ['Admin', 'Manager', 'Accounting', 'Operations', 'Documentation', 'HR'],
 
+  /**
+   * Departments a user may be assigned to. Department assignment drives RBAC
+   * dynamically on top of the user's base role permissions.
+   */
+  DEPARTMENTS: ['Accounting', 'Operations', 'Documentation', 'HR', 'Management', 'Legal', 'Tax', 'Audit', 'Business Development'],
+
+  /**
+   * Permission set granted by each department. A user assigned to multiple
+   * departments receives the union of those permission sets plus their
+   * base role permissions.
+   */
+  DEPARTMENT_PERMISSIONS: {
+    'Accounting': ['clients:view','workflow:view','workflow:task_add','billing:view','billing:edit','disbursement:view','disbursement:create','disbursement:edit','dms:view','transmittal:view'],
+    'Operations': ['clients:view','workflow:view','workflow:task_add','workflow:task_upload','billing:view','billing:request','disbursement:view','disbursement:request','dms:view','transmittal:view','transmittal:request'],
+    'Documentation': ['clients:view','workflow:view','workflow:task_add','billing:view','disbursement:view','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:create','transmittal:edit','transmittal:mark'],
+    'HR': ['clients:view','workflow:view','billing:view','disbursement:view','dms:view'],
+    'Management': ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:mark','bypass_review:tasks','approve_change:tasks'],
+    'Legal': ['clients:view','workflow:view','billing:view','disbursement:view','dms:view','transmittal:view'],
+    'Tax': ['clients:view','workflow:view','billing:view','billing:edit','disbursement:view','dms:view','transmittal:view'],
+    'Audit': ['clients:view','workflow:view','billing:view','disbursement:view','dms:view','transmittal:view'],
+    'Business Development': ['clients:view','workflow:view','billing:view','disbursement:view','transmittal:view']
+  },
+
   updateSessionClasses(hasSession) {
     if (hasSession) {
       document.documentElement.classList.add('has-session');
@@ -70,6 +93,8 @@ const Auth = {
     this.user = user;
     // Normalize entity values to uppercase for consistency
     this.user.entities = this.user.entities.map(e => e.toUpperCase());
+    // Ensure the new multi-department field is always an array.
+    if (!Array.isArray(this.user.departments)) this.user.departments = [];
     this.activeEntity = this.user.entities.includes('ATA') ? 'ATA' : 'LTA';
     localStorage.setItem(this._sessionKey, JSON.stringify({ userId: user.id, activeEntity: this.activeEntity }));
     this.updateSessionClasses(true);
@@ -97,6 +122,7 @@ const Auth = {
     this.user = DB.getById('users', s.userId);
     if (this.user && this.user.isActive !== false) {
       this.user.entities = this.user.entities.map(e => e.toUpperCase());
+      if (!Array.isArray(this.user.departments)) this.user.departments = [];
       this.activeEntity = s.activeEntity;
       this.updateSessionClasses(true);
       return true;
@@ -113,7 +139,7 @@ const Auth = {
     const role = this.user.role;
     if (role === 'Admin') return true;
     if (!this.user.entities.includes(entity)) return false;
-    const perms = {
+    const rolePerms = {
       Manager: ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:mark','bypass_review:tasks','approve_change:tasks'],
       Accounting: ['clients:view','workflow:view','workflow:task_add','billing:view','billing:edit','disbursement:view','disbursement:create','disbursement:edit','dms:view','transmittal:view'],
       Operations: ['clients:view','workflow:view','workflow:task_add','workflow:task_upload','billing:view','billing:request','disbursement:view','disbursement:request','dms:view','transmittal:view','transmittal:request'],
@@ -122,8 +148,19 @@ const Auth = {
       // pending business owner confirmation of actual HR permission requirements.
       HR: ['clients:view','workflow:view','billing:view','disbursement:view','dms:view']
     };
+
+    // Start with the base role permissions, then merge any permissions granted
+    // by the departments the user is assigned to. This makes RBAC dynamic:
+    // assigning a user to multiple departments expands their effective scope
+    // without changing their base role.
+    const granted = new Set(rolePerms[role] || []);
+    const departments = Array.isArray(this.user.departments) ? this.user.departments : [];
+    departments.forEach(dept => {
+      (this.DEPARTMENT_PERMISSIONS[dept] || []).forEach(p => granted.add(p));
+    });
+
     // Note: audit:view_all is shared by Admin and Manager (Admin always returns true).
-    return perms[role]?.includes(action) || false;
+    return granted.has(action);
   },
 
   canBypassReview(table) {

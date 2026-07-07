@@ -174,14 +174,10 @@ const Users = {
   renderUsersSection() {
     const wrapper = el('div', { class: 'page-content-section' });
 
-    // List container
+    // List container (forms open in the shared side-peek panel, not inline)
     const listContainer = el('div', { class: 'list-container' });
     wrapper.appendChild(listContainer);
     this.renderUserList(listContainer);
-
-    // Form container
-    const formContainer = el('div', { class: 'form-container hidden' });
-    wrapper.appendChild(formContainer);
 
     // Reset Demo Data section (kept subtle at the bottom of the page)
     const resetSection = el('div', { class: 'reset-section reset-section--subtle' });
@@ -223,18 +219,25 @@ const Users = {
       'HR': 'jira-backlog-tag-role-hr'
     };
 
-    const items = users.map((u, idx) => ({
-      id: u.id,
-      keyText: 'USR-' + String(idx + 1).padStart(2, '0'),
-      name: u.name,
-      iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-      tags: [
-        { text: u.role, type: 'role', className: roleClassMap[u.role] || '' },
-        { text: u.email, type: 'category' },
-        { text: (u.entities || []).join(', ') || 'No entities', type: 'client' },
-        { text: u.isActive !== false ? 'Active' : 'Disabled', type: 'status', className: u.isActive !== false ? 'jira-backlog-tag-status-active' : 'jira-backlog-tag-status-disabled' }
-      ]
-    }));
+    const items = users.map((u, idx) => {
+      const depts = Array.isArray(u.departments) ? u.departments : [];
+      const deptText = depts.length
+        ? depts.map(d => '<span class="user-dept-badge">' + escapeHtml(d) + '</span>').join('')
+        : '<span class="text-muted">No departments</span>';
+      return {
+        id: u.id,
+        keyText: 'USR-' + String(idx + 1).padStart(2, '0'),
+        name: u.name,
+        iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+        tags: [
+          { text: u.role, type: 'role', className: roleClassMap[u.role] || '' },
+          { isHtml: true, text: deptText, type: 'client' },
+          { text: u.email, type: 'category' },
+          { text: (u.entities || []).join(', ') || 'No entities', type: 'client' },
+          { text: u.isActive !== false ? 'Active' : 'Disabled', type: 'status', className: u.isActive !== false ? 'jira-backlog-tag-status-active' : 'jira-backlog-tag-status-disabled' }
+        ]
+      };
+    });
 
     const backlog = JiraBacklogList.render({
       title: 'Team Members',
@@ -296,10 +299,11 @@ const Users = {
         }
       ],
       columns: [
-        { label: 'Role', width: '110px' },
-        { label: 'Email', width: '220px' },
-        { label: 'Entities', width: '180px' },
-        { label: 'Status', width: '100px' }
+        { label: 'Role', width: '100px', align: 'left' },
+        { label: 'Departments', width: '180px', align: 'left' },
+        { label: 'Email', width: '200px', align: 'left' },
+        { label: 'Entities', width: '120px', align: 'left' },
+        { label: 'Status', width: '90px', align: 'left' }
       ],
       headerActions: [
         {
@@ -337,23 +341,10 @@ const Users = {
   },
 
   showUserForm(userId) {
-    const container = document.querySelector('#content .form-container');
-    const list = document.querySelector('#content .list-container');
-    const actions = document.querySelector('#content .actions-bar');
-    const resetSection = document.querySelector('#content .reset-section');
-    if (container) container.classList.remove('hidden');
-    if (list) list.classList.add('hidden');
-    if (actions) actions.classList.add('hidden');
-    if (resetSection) resetSection.classList.add('hidden');
-
     this.editingId = userId || null;
-    this.updateBreadcrumb(null, userId ? 'Edit User' : 'Add User');
     const user = userId ? DB.getById('users', userId) : null;
 
-    this.clearNode(container);
-    container.appendChild(el('h2', { text: userId ? 'Edit User' : 'Add User' }));
-
-    const form = el('form', { class: 'form-stacked user-form' });
+    const form = el('form', { id: 'user-form', class: 'form-stacked user-form' });
 
     // Name
     const nameGroup = el('div', { class: 'form-group' });
@@ -389,6 +380,25 @@ const Users = {
     roleGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
     form.appendChild(roleGroup);
 
+    // Departments (multi-select); skip for Admin because Admin is all-powerful.
+    if (!user || user.role !== 'Admin') {
+      const deptGroup = el('div', { class: 'form-group' });
+      deptGroup.appendChild(el('label', { text: 'Departments' }));
+      const deptWrap = el('div', { class: 'department-checkboxes' });
+      const departmentList = Auth.DEPARTMENTS || DB.getAll('departments').map(d => d.name || d);
+      departmentList.forEach(d => {
+        const label = el('label', { class: 'checkbox-label' });
+        const cb = el('input', { type: 'checkbox', name: 'departments', value: d });
+        if (user && Array.isArray(user.departments) && user.departments.includes(d)) cb.checked = true;
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(' ' + d));
+        deptWrap.appendChild(label);
+      });
+      deptGroup.appendChild(deptWrap);
+      deptGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+      form.appendChild(deptGroup);
+    }
+
     // Entity access
     const entityGroup = el('div', { class: 'form-group' });
     entityGroup.appendChild(el('label', { text: 'Entity Access *' }));
@@ -405,33 +415,28 @@ const Users = {
     entityGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
     form.appendChild(entityGroup);
 
-    const btnGroup = el('div', { class: 'form-group form-actions' });
-    const saveBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save User' });
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => this.showUserList());
-    btnGroup.appendChild(saveBtn);
-    btnGroup.appendChild(cancelBtn);
-    form.appendChild(btnGroup);
-
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       this.submitUserForm(form);
     });
 
-    container.appendChild(form);
+    openFormPanel({
+      icon: '👤',
+      title: userId ? 'Edit User' : 'Add User',
+      formContent: form,
+      formId: 'user-form',
+      mode: PaneMode.SIDE_PEEK,
+      viewContext: 'user-form',
+      actions: [
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showUserList() },
+        { text: 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' }
+      ]
+    });
   },
 
   showUserList() {
     this.editingId = null;
-    const container = document.querySelector('#content .form-container');
-    const list = document.querySelector('#content .list-container');
-    const actions = document.querySelector('#content .actions-bar');
-    const resetSection = document.querySelector('#content .reset-section');
-    if (container) { this.clearNode(container); container.classList.add('hidden'); }
-    if (list) list.classList.remove('hidden');
-    if (actions) actions.classList.remove('hidden');
-    if (resetSection) resetSection.classList.remove('hidden');
-    this.renderUserList(list);
+    closeFormPanelAndRoute();
     this.updateBreadcrumb(null);
   },
 
@@ -439,6 +444,17 @@ const Users = {
     const data = Object.fromEntries(new FormData(form).entries());
     const entityCheckboxes = form.querySelectorAll('input[name="entities"]:checked');
     const entities = Array.from(entityCheckboxes).map(cb => cb.value);
+    const departmentCheckboxes = form.querySelectorAll('input[name="departments"]:checked');
+    let departments = Array.from(departmentCheckboxes).map(cb => cb.value);
+
+    // Preserve existing department assignments when the department field is not
+    // rendered (e.g. Admin users) or when no checkboxes are checked on edit.
+    if (this.editingId && departments.length === 0) {
+      const existing = DB.getById('users', this.editingId);
+      if (existing && Array.isArray(existing.departments) && existing.departments.length > 0) {
+        departments = existing.departments;
+      }
+    }
 
     // Clear previous errors
     form.querySelectorAll('.field-error').forEach(e => { e.classList.add('hidden'); e.textContent = ''; });
@@ -475,6 +491,7 @@ const Users = {
       name: data.name.trim(),
       email: data.email.trim(),
       role: data.role,
+      departments: departments,
       entities: entities,
       isActive: true
     };

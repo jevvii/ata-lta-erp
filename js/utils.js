@@ -2748,7 +2748,8 @@ const JiraBacklogList = {
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
 
       columns.forEach(col => {
-        const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
+        const alignClass = col.align ? ' jira-backlog-col-header--' + col.align : '';
+        const h = el('div', { class: 'jira-backlog-col-header' + alignClass, text: col.label || '' });
         if (col.align) h.style.textAlign = col.align;
         colHeader.appendChild(h);
       });
@@ -2943,7 +2944,9 @@ const JiraBacklogList = {
         tagsNode.style.gridColumn = `5 / span ${columns.length}`;
       }
       const tagList = item.tags || [];
-      tagList.forEach(tag => {
+      tagList.forEach((tag, tagIdx) => {
+        const col = hasColumns ? columns[tagIdx] : null;
+        const alignCls = col?.align ? ' jira-backlog-col-cell--' + col.align : '';
         const typeCls = tag.type ? ` jira-backlog-tag-${tag.type}` : '';
         let valCls = '';
         if (tag.type === 'schedule' && tag.value) {
@@ -2952,7 +2955,7 @@ const JiraBacklogList = {
           valCls = ` jira-backlog-tag-fund-${tag.value.toLowerCase().replace(/\s+/g, '')}`;
         }
 
-        const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') });
+        const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') + alignCls });
 
         let iconHtml = '';
         if (tag.type === 'client') {

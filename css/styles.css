@@ -1911,6 +1911,23 @@ tbody tr:hover {
 [data-theme="dark"] .jira-backlog-tag-role-documentation { background: rgba(91,33,182,0.25); color: #c4b5fd; border-color: rgba(196,181,253,0.3); }
 [data-theme="dark"] .jira-backlog-tag-role-hr { background: rgba(71,85,105,0.25); color: #cbd5e1; border-color: rgba(203,213,225,0.3); }
 
+/* Department badges shown inside the Users backlog list cell. */
+.user-dept-badge {
+  display: inline-block;
+  background: var(--color-bg-muted, #f1f5f9);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin: 0 4px 4px 0;
+  font-size: 0.75rem;
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+[data-theme="dark"] .user-dept-badge {
+  background: var(--color-bg-muted);
+}
+
 /* Jira backlog status tags */
 .jira-backlog-tag-status {
   text-transform: uppercase;
@@ -2206,10 +2223,13 @@ tbody tr:hover {
   margin-bottom: var(--spacing-sm);
 }
 .entity-checkboxes { display: flex; gap: var(--spacing-lg); flex-wrap: wrap; margin-bottom: var(--spacing-md); }
+.department-checkboxes { display: flex; gap: var(--spacing-md); flex-wrap: wrap; margin-bottom: var(--spacing-md); }
 .audit-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); }
 .audit-filters .form-select { max-width: 200px; }
 .user-form { max-width: 500px; margin: 0 auto; background: var(--color-surface); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); }
 .user-form h3 { margin-bottom: var(--spacing-md); font-size: 1.25rem; }
+/* Inside the shared side-peek panel, the user form should fill the panel naturally. */
+.side-pane-form-content .user-form { max-width: none; margin: 0; background: transparent; padding: 0; border-radius: 0; box-shadow: none; }
 
 .doc-type-badge-original { background: #f4f6fb; color: var(--color-text); }
 .doc-type-badge-generated { background: #dbeafe; color: var(--color-primary); }
@@ -14768,6 +14788,29 @@ html.loading-active #loading-screen:not(.hidden) {
 .jira-backlog-row-tags--columns .jira-backlog-tag-status {
   justify-content: flex-start !important;
   text-align: left;
+}
+
+/* Explicit column alignment helpers. These override the role/status/action/entity
+   centering helpers above when a caller passes col.align. */
+.jira-backlog-col-header--left,
+.jira-backlog-row-tags--columns .jira-backlog-col-cell--left,
+.jira-backlog-tag.jira-backlog-col-cell--left {
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.jira-backlog-col-header--center,
+.jira-backlog-row-tags--columns .jira-backlog-col-cell--center,
+.jira-backlog-tag.jira-backlog-col-cell--center {
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.jira-backlog-col-header--right,
+.jira-backlog-row-tags--columns .jira-backlog-col-cell--right,
+.jira-backlog-tag.jira-backlog-col-cell--right {
+  justify-content: flex-end !important;
+  text-align: right !important;
 }
 
 .jira-backlog-tag-client,
