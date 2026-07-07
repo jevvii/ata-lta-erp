@@ -13372,7 +13372,6 @@ html.loading-active #loading-screen:not(.hidden) {
   position: relative;
   display: flex;
   align-items: center;
-  order: -1;
 }
 .jira-search-icon {
   position: absolute;
