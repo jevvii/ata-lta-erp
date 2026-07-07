@@ -161,7 +161,7 @@ const App = {
 
     // Admin nav badge: reflect pending approvals / pending submissions to draw attention.
     const adminNav = document.querySelector('nav a[href="#admin"]');
-    if (adminNav && Auth.user?.role !== 'Manager') {
+    if (adminNav) {
       const canManageUsers = Auth.can('users:view');
       let adminCount = 0;
       if (canManageUsers) {
@@ -222,7 +222,7 @@ const App = {
       }
     }
 
-    // Hide Reports nav link for non-Managerial users
+    // Hide Reports nav link for non-Admin users
     const reportsNav = document.querySelector('nav a[href="#reports"]');
     if (reportsNav) {
       const canViewReports = Auth.can('reports:view');
