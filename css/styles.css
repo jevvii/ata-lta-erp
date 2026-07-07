@@ -1710,6 +1710,169 @@ tbody tr:hover {
 .progress-label { font-size: 0.8125rem; color: var(--color-text-muted); white-space: nowrap; font-weight: 500; }
 .card-actions { margin-top: auto; padding-top: var(--spacing-md); }
 
+/* Client & Audit data cards — modern backlog-style card lists */
+.client-cards-list,
+.audit-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.client-card,
+.audit-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--spacing-md) var(--spacing-lg);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.client-card:hover,
+.audit-card:hover {
+  border-color: var(--color-border-strong, var(--color-border));
+  box-shadow: var(--shadow-card, 0 4px 12px rgba(0,0,0,0.06));
+}
+
+.client-card-header,
+.audit-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.client-card-title-row,
+.audit-card-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.client-card-key,
+.audit-card-key {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.client-card-title,
+.audit-card-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.client-card:hover .client-card-actions {
+  opacity: 1;
+}
+
+.client-card-badges,
+.audit-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.client-card-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.client-card-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.client-card-meta-label,
+.client-card-section-label,
+.audit-card-details-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.client-card-meta-value,
+.client-card-section-value,
+.audit-card-details-value {
+  font-size: 0.875rem;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.client-card-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.client-card-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audit-card-time {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.audit-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Jira backlog role tags */
+.jira-backlog-tag-role {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+}
+
+.jira-backlog-tag-role-admin { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.jira-backlog-tag-role-manager { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.jira-backlog-tag-role-accounting { background: #e0f2fe; color: #075985; border-color: #bae6fd; }
+.jira-backlog-tag-role-operations { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.jira-backlog-tag-role-documentation { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+.jira-backlog-tag-role-hr { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+
+[data-theme="dark"] .jira-backlog-tag-role-admin { background: rgba(153,27,27,0.2); color: #fca5a5; border-color: rgba(252,165,165,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-manager { background: rgba(146,64,14,0.2); color: #fcd34d; border-color: rgba(253,224,71,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-accounting { background: rgba(7,89,133,0.25); color: #7dd3fc; border-color: rgba(125,211,252,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-operations { background: rgba(22,101,52,0.25); color: #86efac; border-color: rgba(134,239,172,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-documentation { background: rgba(91,33,182,0.25); color: #c4b5fd; border-color: rgba(196,181,253,0.3); }
+[data-theme="dark"] .jira-backlog-tag-role-hr { background: rgba(71,85,105,0.25); color: #cbd5e1; border-color: rgba(203,213,225,0.3); }
+
 /* Workflow Progress Bar */
 .workflow-progress { display: flex; gap: 6px; margin-bottom: var(--spacing-md); overflow-x: auto; }
 .progress-step { flex: 1; padding: 8px 6px; text-align: center; background: var(--color-border); border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); white-space: nowrap; }

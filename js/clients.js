@@ -49,6 +49,11 @@ const Clients = {
 
     const content = el('div', { class: 'page-content-section' });
 
+    if (this.activeTab === 'active') {
+      content.appendChild(el('div', { class: 'page-section-title', text: 'Active Clients' }));
+      content.appendChild(el('div', { class: 'page-section-subtitle', text: 'Taxpayers, trade names, contacts, and retainer agreements.' }));
+    }
+
     const listContainer = el('div', { class: 'list-container' + (this.activeTab === 'archived' ? ' hidden' : '') });
     content.appendChild(listContainer);
     if (this.activeTab === 'active') {
@@ -200,70 +205,92 @@ const Clients = {
       return;
     }
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const headerRow = el('tr');
-    ['Taxpayer', 'TIN', 'Point of Contact', 'Trade Name', 'Address', 'Related Companies', 'Contact Details', 'Entity', 'Retainer', 'Actions'].forEach(h => {
-      headerRow.appendChild(el('th', { text: h }));
+    const list = el('div', { class: 'client-cards-list' });
+    clients.forEach((c, index) => {
+      list.appendChild(this.renderClientCard(c, index + 1));
     });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
+    container.appendChild(list);
+  },
 
-    const tbody = el('tbody');
-    clients.forEach(c => {
-      const pocUser = DB.getById('users', c.contactUserId);
-      const row = el('tr');
-      row.appendChild(el('td', { text: c.name }));
-      row.appendChild(el('td', { text: c.tin }));
-      row.appendChild(el('td', { text: pocUser?.name || c.contactPerson || '—' }));
-      row.appendChild(el('td', { text: c.tradeName || '—' }));
-      row.appendChild(el('td', { text: c.address || '—' }));
+  renderClientCard(c, index) {
+    const pocUser = DB.getById('users', c.contactUserId);
+    const card = el('div', { class: 'client-card' });
 
-      // Related Companies
-      const rcList = (c.relatedCompanies || []).map(rc => {
-        const rcClient = DB.getById('clients', rc.clientId);
-        return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
-      }).join(', ');
-      row.appendChild(el('td', { text: rcList || '—' }));
+    const header = el('div', { class: 'client-card-header' });
+    const titleRow = el('div', { class: 'client-card-title-row' });
+    titleRow.appendChild(el('span', { class: 'client-card-key', text: 'CL-' + String(index).padStart(2, '0') }));
+    titleRow.appendChild(el('span', { class: 'client-card-title', text: c.name || '(untitled)' }));
+    header.appendChild(titleRow);
 
-      // Contact Details
-      const cdList = (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ');
-      row.appendChild(el('td', { text: cdList || '—' }));
+    const actions = el('div', { class: 'client-card-actions' });
+    if (Auth.can('clients:edit')) {
+      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
+      editBtn.addEventListener('click', () => this.showForm(c.id));
+      actions.appendChild(editBtn);
 
-      const badge = el('span', { class: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), text: c.entity });
-      const tdEntity = el('td');
-      tdEntity.appendChild(badge);
-      row.appendChild(tdEntity);
-      row.appendChild(el('td', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }));
-      const actions = el('td');
-      if (Auth.can('clients:edit')) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-        editBtn.addEventListener('click', () => this.showForm(c.id));
-        actions.appendChild(editBtn);
-      }
-      
-      if (Auth.can('clients:edit')) {
-        const archiveBtn = el('button', { 
-          class: 'btn btn-secondary btn-sm text-danger', 
-          text: 'Archive', 
-          style: 'margin-left: 8px;' 
-        });
-        archiveBtn.addEventListener('click', () => {
-          // Admin bypasses PendingChanges — intentional direct-role check (Gap 6)
-          if (Auth.user.role === 'Admin') {
-            this.archiveClientDirectly(c.id);
-          } else {
-            this.archiveClientRequest(c.id);
-          }
-        });
-        actions.appendChild(archiveBtn);
-      }
+      const archiveBtn = el('button', {
+        class: 'btn btn-secondary btn-sm text-danger',
+        text: 'Archive',
+        style: 'margin-left: 8px;'
+      });
+      archiveBtn.addEventListener('click', () => {
+        // Admin bypasses PendingChanges — intentional direct-role check (Gap 6)
+        if (Auth.user.role === 'Admin') {
+          this.archiveClientDirectly(c.id);
+        } else {
+          this.archiveClientRequest(c.id);
+        }
+      });
+      actions.appendChild(archiveBtn);
+    }
+    header.appendChild(actions);
+    card.appendChild(header);
 
-      row.appendChild(actions);
-      tbody.appendChild(row);
+    const badges = el('div', { class: 'client-card-badges' });
+    badges.appendChild(el('span', { class: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), text: c.entity }));
+    if (c.retainer || c.isRetainer) {
+      badges.appendChild(el('span', { class: 'badge badge-recurring', text: 'Retainer' }));
+    }
+    card.appendChild(badges);
+
+    const meta = el('div', { class: 'client-card-meta' });
+    const metaItems = [
+      { label: 'TIN', value: c.tin || '—' },
+      { label: 'Point of Contact', value: pocUser?.name || c.contactPerson || '—' },
+      { label: 'Trade Name', value: c.tradeName || '—' }
+    ];
+    metaItems.forEach(item => {
+      const node = el('div', { class: 'client-card-meta-item' });
+      node.appendChild(el('span', { class: 'client-card-meta-label', text: item.label }));
+      node.appendChild(el('span', { class: 'client-card-meta-value', text: item.value }));
+      meta.appendChild(node);
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+    card.appendChild(meta);
+
+    const sections = el('div', { class: 'client-card-sections' });
+
+    const addressSection = el('div', { class: 'client-card-section' });
+    addressSection.appendChild(el('span', { class: 'client-card-section-label', text: 'Address' }));
+    addressSection.appendChild(el('span', { class: 'client-card-section-value', text: c.address || '—' }));
+    sections.appendChild(addressSection);
+
+    const rcList = (c.relatedCompanies || []).map(rc => {
+      const rcClient = DB.getById('clients', rc.clientId);
+      return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
+    }).join(', ') || '—';
+    const relatedSection = el('div', { class: 'client-card-section' });
+    relatedSection.appendChild(el('span', { class: 'client-card-section-label', text: 'Related Companies' }));
+    relatedSection.appendChild(el('span', { class: 'client-card-section-value', text: rcList }));
+    sections.appendChild(relatedSection);
+
+    const cdList = (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ') || '—';
+    const contactSection = el('div', { class: 'client-card-section' });
+    contactSection.appendChild(el('span', { class: 'client-card-section-label', text: 'Contact Details' }));
+    contactSection.appendChild(el('span', { class: 'client-card-section-value', text: cdList }));
+    sections.appendChild(contactSection);
+
+    card.appendChild(sections);
+    return card;
   },
 
   showForm(clientId) {

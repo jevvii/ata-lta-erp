@@ -2516,7 +2516,8 @@ const JiraBacklogList = {
       headerActions = [],
       rowActions = () => [],
       rowIdPrefix = 'TPL',
-      bulkActions
+      bulkActions,
+      countLabel = 'template'
     } = options;
 
     const container = el('div', { class: 'jira-backlog-container' });
@@ -2541,7 +2542,8 @@ const JiraBacklogList = {
     }
     headerLeft.appendChild(titleText);
     
-    const countBadge = el('span', { class: 'jira-backlog-count-badge', text: `${items.length} ${items.length === 1 ? 'template' : 'templates'}` });
+    const countText = `${items.length} ${items.length === 1 ? countLabel : countLabel + 's'}`;
+    const countBadge = el('span', { class: 'jira-backlog-count-badge', text: countText });
     headerLeft.appendChild(countBadge);
     header.appendChild(headerLeft);
 

@@ -159,22 +159,32 @@ const App = {
       }
     }
 
-    // Staff-level: badge count of user's own pending changes, rejected changes, and pending requests
-    // on the Admin nav (the dedicated page for all pending items).
-    const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
-    const rejectedChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getRejectedForUser === 'function') ? PendingChanges.getRejectedForUser(Auth.user.id) : [];
-    const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
-    const staffCount = pendingChanges.length + rejectedChanges.length + myReqs.length;
+    // Admin nav badge: reflect pending approvals / pending submissions to draw attention.
     const adminNav = document.querySelector('nav a[href="#admin"]');
     if (adminNav && Auth.user?.role !== 'Manager') {
+      const canManageUsers = Auth.can('users:view');
+      let adminCount = 0;
+      if (canManageUsers) {
+        // For admins/managers-with-user-access: count all pending approvals.
+        if (typeof Users !== 'undefined' && typeof Users.getPendingCategories === 'function') {
+          const categories = Users.getPendingCategories();
+          adminCount = Object.values(categories).reduce((sum, arr) => sum + (arr || []).length, 0);
+        }
+      } else {
+        // For staff: count their own pending submissions.
+        const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
+        const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
+        adminCount = pendingChanges.length + myReqs.length;
+      }
+
       let adminBadge = adminNav.querySelector('.nav-badge');
-      if (staffCount > 0) {
+      if (adminCount > 0) {
         if (!adminBadge) {
           adminBadge = document.createElement('span');
           adminBadge.className = 'nav-badge';
           adminNav.appendChild(adminBadge);
         }
-        adminBadge.textContent = staffCount > 99 ? '99+' : staffCount;
+        adminBadge.textContent = adminCount > 99 ? '99+' : adminCount;
       } else if (adminBadge) {
         adminBadge.remove();
       }

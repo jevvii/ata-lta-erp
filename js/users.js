@@ -135,7 +135,7 @@ const Users = {
   // Users Section
   // ============================================================
   renderUsersSection() {
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
 
     // Reset Demo Data section
     const resetSection = el('div', { class: 'reset-section' });
@@ -145,13 +145,6 @@ const Users = {
     resetBtn.addEventListener('click', () => this.handleReset(resetSection));
     resetSection.appendChild(resetBtn);
     wrapper.appendChild(resetSection);
-
-    // Actions bar
-    const actions = el('div', { class: 'actions-bar' });
-    const addBtn = el('button', { class: 'btn btn-primary', text: 'Add User' });
-    addBtn.addEventListener('click', () => this.showUserForm());
-    actions.appendChild(addBtn);
-    wrapper.appendChild(actions);
 
     // List container
     const listContainer = el('div', { class: 'list-container' });
@@ -178,29 +171,56 @@ const Users = {
       return;
     }
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Name', 'Email', 'Role', 'Entities', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
+    const roleClassMap = {
+      'Admin': 'jira-backlog-tag-role-admin',
+      'Manager': 'jira-backlog-tag-role-manager',
+      'Accounting': 'jira-backlog-tag-role-accounting',
+      'Operations': 'jira-backlog-tag-role-operations',
+      'Documentation': 'jira-backlog-tag-role-documentation',
+      'HR': 'jira-backlog-tag-role-hr'
+    };
 
-    const tbody = el('tbody');
-    users.forEach(u => {
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: u.name }));
-      tr.appendChild(el('td', { text: u.email }));
-      tr.appendChild(el('td')).appendChild(this.roleBadge(u.role));
-      tr.appendChild(el('td', { text: (u.entities || []).join(', ') }));
-      const tdAct = el('td');
-      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-      editBtn.addEventListener('click', () => this.showUserForm(u.id));
-      tdAct.appendChild(editBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const items = users.map((u, idx) => ({
+      id: u.id,
+      keyText: 'USR-' + String(idx + 1).padStart(2, '0'),
+      name: u.name,
+      iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+      tags: [
+        { text: u.role, type: 'custom', className: 'jira-backlog-tag-role ' + (roleClassMap[u.role] || '') },
+        { text: u.email, type: 'category' },
+        { text: (u.entities || []).join(', ') || 'No entities', type: 'client' }
+      ]
+    }));
+
+    const backlog = JiraBacklogList.render({
+      title: 'Team Members',
+      subtitle: 'users, roles, and entity access',
+      items,
+      emptyText: 'No users found',
+      rowIdPrefix: 'USR',
+      countLabel: 'user',
+      bulkActions: [],
+      headerActions: [
+        {
+          text: '+ Add User',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => this.showUserForm()
+        }
+      ],
+      rowActions: (item) => {
+        const user = users.find(u => u.id === item.id);
+        if (!user) return [];
+        return [
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showUserForm(user.id)
+          }
+        ];
+      }
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(backlog);
   },
 
   roleBadge(role) {
@@ -403,8 +423,11 @@ const Users = {
   // Audit Log
   // ============================================================
   renderAuditSection() {
-    const wrapper = el('div');
+    const wrapper = el('div', { class: 'page-content-section' });
     const canViewAllAudit = Auth.can('audit:view_all');
+
+    wrapper.appendChild(el('div', { class: 'page-section-title', text: 'Audit Log' }));
+    wrapper.appendChild(el('div', { class: 'page-section-subtitle', text: 'Track changes, approvals, and system activity across entities.' }));
 
     // Filters
     const filters = el('div', { class: 'audit-filters' });
@@ -531,27 +554,40 @@ const Users = {
       return;
     }
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Timestamp', 'User', 'Action', 'Entity', 'Details'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    logs.forEach(l => {
-      const user = DB.getById('users', l.userId);
-      const tr = el('tr');
-      const ts = new Date(l.timestamp);
-      tr.appendChild(el('td', { text: formatDate(l.timestamp) + ' ' + ts.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) }));
-      tr.appendChild(el('td', { text: user ? user.name : l.userId }));
-      tr.appendChild(el('td', { text: l.action }));
-      tr.appendChild(el('td')).appendChild(el('span', { class: 'badge badge-' + (l.entity === 'ATA' ? 'ata' : 'lta'), text: l.entity }));
-      tr.appendChild(el('td', { text: l.details || '—' }));
-      tbody.appendChild(tr);
+    const list = el('div', { class: 'audit-cards-list' });
+    logs.forEach((l, index) => {
+      list.appendChild(this.renderAuditCard(l, index + 1));
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+    container.appendChild(list);
+  },
+
+  renderAuditCard(log, index) {
+    const user = DB.getById('users', log.userId);
+    const ts = new Date(log.timestamp);
+    const card = el('div', { class: 'audit-card' });
+
+    const header = el('div', { class: 'audit-card-header' });
+    const titleRow = el('div', { class: 'audit-card-title-row' });
+    titleRow.appendChild(el('span', { class: 'audit-card-key', text: 'AUD-' + String(index).padStart(2, '0') }));
+    titleRow.appendChild(el('span', { class: 'audit-card-title', text: log.action || 'Activity' }));
+    header.appendChild(titleRow);
+
+    const timeBadge = el('span', { class: 'audit-card-time', text: formatDate(log.timestamp) + ' ' + ts.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) });
+    header.appendChild(timeBadge);
+    card.appendChild(header);
+
+    const badges = el('div', { class: 'audit-card-badges' });
+    badges.appendChild(el('span', { class: 'badge badge-' + (log.entity === 'ATA' ? 'ata' : 'lta'), text: log.entity }));
+    const userBadge = el('span', { class: 'badge badge-info', text: user ? user.name : log.userId });
+    badges.appendChild(userBadge);
+    card.appendChild(badges);
+
+    const details = el('div', { class: 'audit-card-details' });
+    details.appendChild(el('span', { class: 'audit-card-details-label', text: 'Details' }));
+    details.appendChild(el('span', { class: 'audit-card-details-value', text: log.details || '—' }));
+    card.appendChild(details);
+
+    return card;
   },
 
   // ============================================================
