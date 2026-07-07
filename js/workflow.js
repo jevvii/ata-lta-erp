@@ -2905,6 +2905,7 @@ const Workflow = {
       tr.appendChild(statusTd);
       
       tr.appendChild(el('td', { text: wr.dueDate ? formatDate(wr.dueDate) : '—' }));
+      tr.appendChild(el('td', { text: assignedUser ? assignedUser.name : '—' }));
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', (e) => {
         if (!e.target.closest('button, a, input, select')) {
