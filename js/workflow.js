@@ -2199,6 +2199,7 @@ const Workflow = {
       dueDate: new Set(),
       client: new Set()
     };
+    let searchQuery = '';
 
     // Restore saved filters (v2 format)
     const savedFilters = App.restoreFilters('operations');
@@ -2331,6 +2332,21 @@ const Workflow = {
 
       if (activeFilters.client.size > 0) {
         result = result.filter(r => activeFilters.client.has(r.clientId));
+      }
+
+      if (searchQuery) {
+        result = result.filter(r => {
+          const client = DB.getById('clients', r.clientId);
+          const assignees = Array.from(this.getWorkRequestAssigneeNames(r, resolvedTaskMap));
+          const hay = [
+            r.title || '',
+            client?.name || '',
+            r.status || '',
+            r.description || '',
+            ...assignees
+          ].join(' ').toLowerCase();
+          return hay.includes(searchQuery);
+        });
       }
 
       return result;
@@ -2636,10 +2652,61 @@ const Workflow = {
     filterWrap.appendChild(filterTrigger);
     filterWrap.appendChild(filterDropdown);
 
+    // Search input (beside filter)
+    const searchWrap = el('div', { class: 'jira-search-wrap' });
+    const searchInput = el('input', {
+      type: 'text',
+      class: 'jira-search-input',
+      placeholder: 'Search operations...',
+      autocomplete: 'off'
+    });
+    const searchIcon = el('span', {
+      class: 'jira-search-icon',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    });
+    const clearBtn = el('button', {
+      type: 'button',
+      class: 'jira-search-clear hidden',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+      title: 'Clear search'
+    });
+
+    searchInput.addEventListener('input', debounce(() => {
+      searchQuery = searchInput.value.trim().toLowerCase();
+      clearBtn.classList.toggle('hidden', !searchQuery);
+      refresh();
+      updateToolbar();
+    }, 200));
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      searchQuery = '';
+      refresh();
+      updateToolbar();
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        clearBtn.classList.add('hidden');
+        searchQuery = '';
+        refresh();
+        updateToolbar();
+      }
+    });
+
+    searchWrap.appendChild(searchIcon);
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(clearBtn);
+
     // Clear filters button
     const clearFiltersBtn = el('button', { type: 'button', class: 'jira-clear-filters hidden', text: 'Clear filters' });
     clearFiltersBtn.addEventListener('click', () => {
       Object.keys(activeFilters).forEach(cat => activeFilters[cat].clear());
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      searchQuery = '';
       App.clearSavedFilters('operations');
       updateFilterUI();
       refresh();
@@ -2650,11 +2717,12 @@ const Workflow = {
       const count = getActiveFilterCount();
       filterBadge.textContent = String(count);
       filterBadge.classList.toggle('hidden', count === 0);
-      clearFiltersBtn.classList.toggle('hidden', count === 0);
+      clearFiltersBtn.classList.toggle('hidden', count === 0 && !searchQuery);
     };
     updateToolbar();
 
     jiraToolbar.appendChild(vmToggle);
+    jiraToolbar.appendChild(searchWrap);
     jiraToolbar.appendChild(filterWrap);
     jiraToolbar.appendChild(clearFiltersBtn);
     if (viewMode === 'board') {
@@ -2727,7 +2795,7 @@ const Workflow = {
       wrs = wrs.filter(r => Auth.canViewWrWithTasks(r, listTaskMap));
       wrs = applyFilters(wrs, listTaskMap);
 
-      const hasActiveFilters = getActiveFilterCount() > 0;
+      const hasActiveFilters = getActiveFilterCount() > 0 || !!searchQuery;
       if (viewMode === 'table') this.refreshTable(contentContainer, wrs, hasActiveFilters);
       else if (viewMode === 'board') this.refreshBoard(contentContainer, wrs, groupBy, stickyContainer);
       else this.refreshListCompact(contentContainer, wrs, hasActiveFilters);
@@ -9667,12 +9735,16 @@ const Workflow = {
       rowIdPrefix: 'RT',
       bulkActions: (selectedIds) => [
         {
-          text: 'Bulk Generate',
+          text: selectedIds.length === 1 ? 'Generate' : 'Bulk Generate',
           className: 'btn btn-primary btn-sm',
           onClick: (ids) => {
+            const title = ids.length === 1 ? 'Generate Work Request' : 'Bulk Generate Work Requests';
+            const message = ids.length === 1
+              ? 'Are you sure you want to generate a Work Request for this selected retainer template?'
+              : `Are you sure you want to generate Work Requests for these ${ids.length} selected retainer templates?`;
             this.showConfirm(
-              'Bulk Generate Work Requests',
-              `Are you sure you want to generate Work Requests for these ${ids.length} selected retainer templates?`,
+              title,
+              message,
               () => {
                 this.bulkGenerateFromTemplates(ids);
               }
@@ -9683,9 +9755,13 @@ const Workflow = {
           text: 'Delete',
           className: 'btn btn-danger btn-sm',
           onClick: (ids) => {
+            const title = ids.length === 1 ? 'Delete Template' : 'Delete Templates';
+            const message = ids.length === 1
+              ? 'Are you sure you want to delete this template?'
+              : `Are you sure you want to delete these ${ids.length} templates?`;
             this.showConfirm(
-              'Delete Templates',
-              `Are you sure you want to delete these ${ids.length} templates?`,
+              title,
+              message,
               () => {
                 ids.forEach(id => {
                   DB.delete('retainerTemplates', id);

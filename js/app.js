@@ -670,14 +670,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const password = document.getElementById('password').value;
       const errorEl = document.getElementById('login-error');
 
-      if (Auth.login(email, password)) {
+      const loginResult = Auth.login(email, password);
+      if (loginResult === true) {
         if (errorEl) errorEl.classList.add('hidden');
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('app-shell').classList.remove('hidden');
         App.init();
       } else {
         if (errorEl) {
-          errorEl.textContent = 'Invalid email or password.';
+          errorEl.textContent = loginResult === 'disabled'
+            ? 'Your account has been disabled. Please contact the administrator.'
+            : 'Invalid email or password.';
           errorEl.classList.remove('hidden');
         }
       }

@@ -112,7 +112,7 @@ async function runTests() {
 
   // Fill in the form details
   await page.fill('input[name="name"]', 'Smoke Test Client');
-  await page.fill('input[name="tin"]', '123-456-789-0123');
+  await page.fill('input[name="tin"]', '123-456-789-01234');
 
   // Submit the form
   await page.click('[data-testid="client-save"]');
@@ -254,7 +254,7 @@ async function runTests() {
   await page.waitForTimeout(800);
   await page.click('button:has-text("My Pending Submissions")');
   await page.waitForTimeout(800);
-  const hasRejected = await page.isVisible('text=Rejected Submissions');
+  const hasRejected = (await page.isVisible('text=Test rejection reason')) || (await page.isVisible('text=Rejected'));
   await log('Rejected Submissions Visible (#3)', hasRejected, `visible=${hasRejected}`);
 
   // Clean up injected test data

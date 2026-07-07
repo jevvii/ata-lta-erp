@@ -1911,6 +1911,19 @@ tbody tr:hover {
 [data-theme="dark"] .jira-backlog-tag-role-documentation { background: rgba(91,33,182,0.25); color: #c4b5fd; border-color: rgba(196,181,253,0.3); }
 [data-theme="dark"] .jira-backlog-tag-role-hr { background: rgba(71,85,105,0.25); color: #cbd5e1; border-color: rgba(203,213,225,0.3); }
 
+/* Jira backlog status tags */
+.jira-backlog-tag-status {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+}
+
+.jira-backlog-tag-status-active { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.jira-backlog-tag-status-disabled { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+[data-theme="dark"] .jira-backlog-tag-status-active { background: rgba(22,101,52,0.25); color: #86efac; border-color: rgba(134,239,172,0.3); }
+[data-theme="dark"] .jira-backlog-tag-status-disabled { background: rgba(153, 27, 27, 0.2); color: #fca5a5; border-color: rgba(252, 165, 165, 0.3); }
+
 /* Workflow Progress Bar */
 .workflow-progress { display: flex; gap: 6px; margin-bottom: var(--spacing-md); overflow-x: auto; }
 .progress-step { flex: 1; padding: 8px 6px; text-align: center; background: var(--color-border); border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); white-space: nowrap; }
@@ -3059,7 +3072,7 @@ tbody tr:hover {
 }
 
 .filters-bar .form-select,
-.filters-bar input:not([type="checkbox"]):not(.jira-filter-search):not(.jira-filter-date-input) {
+.filters-bar input:not([type="checkbox"]):not(.jira-filter-search):not(.jira-filter-date-input):not(.jira-search-input) {
   min-width: 120px;
   height: 34px;
   min-height: 34px !important;
@@ -13331,6 +13344,70 @@ html.loading-active #loading-screen:not(.hidden) {
   position: relative;
 }
 
+/* ─── Jira-style inline search ────────────────────────────────── */
+.jira-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  order: -1;
+}
+.jira-search-icon {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  z-index: 1;
+}
+.jira-search-input {
+  padding: 7px 32px 7px 32px !important;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  font-weight: 500;
+  min-width: 200px;
+  max-width: 280px;
+  height: 34px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+.jira-search-input::placeholder {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+.jira-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary), transparent 75%);
+}
+.jira-search-clear {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.jira-search-clear:hover {
+  color: var(--color-text);
+  background: var(--color-border);
+}
+.jira-search-clear.hidden {
+  display: none;
+}
+
 /* Operations toolbar overrides */
 .operations-tab-page .toolbar-sticky-container:has(.jira-toolbar),
 .operations-list-page .toolbar-sticky-container:has(.jira-toolbar) {
@@ -14651,10 +14728,10 @@ html.loading-active #loading-screen:not(.hidden) {
   min-height: 1px;
 }
 
-/* Custom backlog tag styles for specific column types */
 .jira-backlog-tag-role,
 .jira-backlog-tag-action,
-.jira-backlog-tag-entity {
+.jira-backlog-tag-entity,
+.jira-backlog-tag-status {
   justify-content: center !important;
   text-align: center;
   font-size: 0.75rem;
@@ -14665,7 +14742,8 @@ html.loading-active #loading-screen:not(.hidden) {
    forced centering and let the badge shrink to its content from the left. */
 .jira-backlog-row-tags--columns .jira-backlog-tag-role,
 .jira-backlog-row-tags--columns .jira-backlog-tag-action,
-.jira-backlog-row-tags--columns .jira-backlog-tag-entity {
+.jira-backlog-row-tags--columns .jira-backlog-tag-entity,
+.jira-backlog-row-tags--columns .jira-backlog-tag-status {
   justify-content: flex-start !important;
   text-align: left;
 }

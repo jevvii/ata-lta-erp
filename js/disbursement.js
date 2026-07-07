@@ -398,6 +398,8 @@ const Disbursement = {
       if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
+    this.searchQuery = '';
+
     const saveCurrentFilters = () => {
       App.saveFilters('disbursement', {
         workRequest: Array.from(activeFilters.workRequest),
@@ -465,6 +467,10 @@ const Disbursement = {
 
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'disbursement',
+      searchConfig: {
+        placeholder: 'Search disbursement...',
+        onSearch: (q) => { this.searchQuery = q; refresh(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -556,9 +562,27 @@ const Disbursement = {
         return activeFilters.date.has(bucket);
       });
     }
+    // Text search filter
+    if (this.searchQuery) {
+      items = items.filter(d => {
+        const wr = d.linkedWorkRequestId ? DB.getById('workRequests', d.linkedWorkRequestId) : null;
+        const client = wr ? DB.getById('clients', wr.clientId) : null;
+        const emp = d.employeeId ? DB.getById('users', d.employeeId) : null;
+        const hay = [
+          d.voucherNumber || '',
+          d.description || d.purpose || '',
+          client?.name || '',
+          wr?.title || '',
+          emp?.name || '',
+          d.status || '',
+          String(d.amount || ''),
+        ].join(' ').toLowerCase();
+        return hay.includes(this.searchQuery);
+      });
+    }
     items.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
-    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0) || !!this.searchQuery;
 
     if (items.length === 0) {
       if (hasActiveFilters && hasItems) {
@@ -2324,10 +2348,14 @@ const Disbursement = {
       },
       bulkActions: (selectedIds) => [
         {
-          text: '⚡ Bulk Generate Disbursements',
+          text: selectedIds.length === 1 ? '⚡ Generate Disbursement' : '⚡ Bulk Generate Disbursements',
           className: 'btn btn-primary btn-sm',
           onClick: (ids) => {
-            Workflow.showConfirm('Bulk Generate Disbursements', `Are you sure you want to generate disbursements for all ${ids.length} selected templates?`, () => {
+            const title = ids.length === 1 ? 'Generate Disbursement' : 'Bulk Generate Disbursements';
+            const message = ids.length === 1
+              ? 'Are you sure you want to generate a disbursement for this selected template?'
+              : `Are you sure you want to generate disbursements for all ${ids.length} selected templates?`;
+            Workflow.showConfirm(title, message, () => {
               let count = 0;
               ids.forEach(id => {
                 const t = templates.find(temp => temp.id === id);
@@ -2364,7 +2392,7 @@ const Disbursement = {
                   count++;
                 }
               });
-              Workflow.showMessage('Success', `Generated ${count} disbursements successfully.`, 'success');
+              Workflow.showMessage('Success', `Generated ${count} disbursement${count === 1 ? '' : 's'} successfully.`, 'success');
               this.view = 'list';
               App.handleRoute();
             });
@@ -2374,7 +2402,11 @@ const Disbursement = {
           text: 'Delete',
           className: 'btn btn-danger btn-sm',
           onClick: (ids) => {
-            Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${ids.length} selected templates?`, () => {
+            const title = ids.length === 1 ? 'Delete Template' : 'Delete Templates';
+            const message = ids.length === 1
+              ? 'Are you sure you want to delete this selected template?'
+              : `Are you sure you want to delete these ${ids.length} selected templates?`;
+            Workflow.showConfirm(title, message, () => {
               ids.forEach(id => {
                 DB.delete('disbursementTemplates', id);
               });

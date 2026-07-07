@@ -231,7 +231,8 @@ const Users = {
       tags: [
         { text: u.role, type: 'role', className: roleClassMap[u.role] || '' },
         { text: u.email, type: 'category' },
-        { text: (u.entities || []).join(', ') || 'No entities', type: 'client' }
+        { text: (u.entities || []).join(', ') || 'No entities', type: 'client' },
+        { text: u.isActive !== false ? 'Active' : 'Disabled', type: 'status', className: u.isActive !== false ? 'jira-backlog-tag-status-active' : 'jira-backlog-tag-status-disabled' }
       ]
     }));
 
@@ -242,11 +243,63 @@ const Users = {
       emptyText: 'No users found',
       rowIdPrefix: 'USR',
       countLabel: 'user',
-      bulkActions: [],
+      bulkActions: (selectedIds) => [
+        {
+          text: 'Disable',
+          className: 'btn btn-outline-warning btn-sm',
+          onClick: (ids) => {
+            const hasSelf = ids.includes(Auth.user.id);
+            const targetIds = ids.filter(id => id !== Auth.user.id);
+            
+            if (targetIds.length === 0) {
+              alert('You cannot disable your own user account.');
+              return;
+            }
+            
+            let message = `Are you sure you want to disable ${targetIds.length} selected user${targetIds.length === 1 ? '' : 's'}?`;
+            if (hasSelf) {
+              message += ' (Your own account will not be disabled.)';
+            }
+            
+            Workflow.showConfirm('Disable Users', message, () => {
+              targetIds.forEach(id => {
+                DB.update('users', id, { isActive: false });
+              });
+              App.handleRoute();
+            }, 'warning');
+          }
+        },
+        {
+          text: 'Delete',
+          className: 'btn btn-danger btn-sm',
+          onClick: (ids) => {
+            const hasSelf = ids.includes(Auth.user.id);
+            const targetIds = ids.filter(id => id !== Auth.user.id);
+            
+            if (targetIds.length === 0) {
+              alert('You cannot delete your own user account.');
+              return;
+            }
+            
+            let message = `Are you sure you want to permanently delete ${targetIds.length} selected user${targetIds.length === 1 ? '' : 's'}? This cannot be undone.`;
+            if (hasSelf) {
+              message += ' (Your own account will not be deleted.)';
+            }
+            
+            Workflow.showConfirm('Delete Users', message, () => {
+              targetIds.forEach(id => {
+                DB.delete('users', id);
+              });
+              App.handleRoute();
+            }, 'danger');
+          }
+        }
+      ],
       columns: [
         { label: 'Role', width: '110px' },
         { label: 'Email', width: '220px' },
-        { label: 'Entities', width: '180px' }
+        { label: 'Entities', width: '180px' },
+        { label: 'Status', width: '100px' }
       ],
       headerActions: [
         {
@@ -517,8 +570,13 @@ const Users = {
       date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
     };
 
+    let searchQuery = '';
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'audit',
+      searchConfig: {
+        placeholder: 'Search audit log...',
+        onSearch: (q) => { searchQuery = q; triggerRefresh(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -537,14 +595,14 @@ const Users = {
     wrapper.appendChild(content);
 
     const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, activeFilters);
+      this.refreshAuditLog(tableContainer, activeFilters, searchQuery);
     };
 
     triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, activeFilters) {
+  refreshAuditLog(container, activeFilters, searchQuery) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
     const hasLogs = logs.length > 0;
@@ -581,10 +639,22 @@ const Users = {
       });
     }
 
+    // Text search filter
+    if (searchQuery) {
+      logs = logs.filter(l => {
+        const hay = [
+          l.action || '',
+          l.details || '',
+          l.userName || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(searchQuery);
+      });
+    }
+
     // Sort newest first
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    const hasActiveFilters = activeFilters && Object.values(activeFilters).some(s => s && s.size > 0);
+    const hasActiveFilters = (activeFilters && Object.values(activeFilters).some(s => s && s.size > 0)) || !!searchQuery;
 
     if (logs.length === 0) {
       if (hasActiveFilters && hasLogs) {
@@ -1585,8 +1655,13 @@ const Users = {
 
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
 
+    let searchQuery = '';
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'myPending',
+      searchConfig: {
+        placeholder: 'Search pending...',
+        onSearch: (q) => { searchQuery = q; updateFilters(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -1608,13 +1683,13 @@ const Users = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => self.refreshMyPendingList(listContainer, activeFilters, self.myPendingViewMode || 'table');
+    const updateFilters = () => self.refreshMyPendingList(listContainer, activeFilters, self.myPendingViewMode || 'table', searchQuery);
     updateFilters();
 
     return wrapper;
   },
 
-  refreshMyPendingList(container, activeFilters, viewMode) {
+  refreshMyPendingList(container, activeFilters, viewMode, searchQuery) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const self = this;
 
@@ -1661,10 +1736,23 @@ const Users = {
       });
     }
 
+    // Text search filter
+    if (searchQuery) {
+      allItems = allItems.filter(pc => {
+        const hay = [
+          pc.table || '',
+          pc.status || '',
+          pc.proposedData?.name || pc.proposedData?.title || '',
+          pc.submittedBy || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(searchQuery);
+      });
+    }
+
     // Sort newest first
     allItems.sort((a, b) => new Date(b.submittedAt || '') - new Date(a.submittedAt || ''));
 
-    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0) || !!searchQuery;
 
     if (allItems.length === 0) {
       if (hasActiveFilters && hasItems) {
@@ -2391,8 +2479,13 @@ const Users = {
 
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
 
+    let searchQuery = '';
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'myRequests',
+      searchConfig: {
+        placeholder: 'Search requests...',
+        onSearch: (q) => { searchQuery = q; updateFilters(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -2414,7 +2507,7 @@ const Users = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => self.refreshMyRequestsList(listContainer, activeFilters, self.myRequestsViewMode || 'table');
+    const updateFilters = () => self.refreshMyRequestsList(listContainer, activeFilters, self.myRequestsViewMode || 'table', searchQuery);
     updateFilters();
 
     return wrapper;
@@ -2434,7 +2527,7 @@ const Users = {
     return map[type] || type;
   },
 
-  refreshMyRequestsList(container, activeFilters, viewMode) {
+  refreshMyRequestsList(container, activeFilters, viewMode, searchQuery) {
     while (container.firstChild) container.removeChild(container.firstChild);
 
     let requests = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
@@ -2473,10 +2566,22 @@ const Users = {
       });
     }
 
+    // Text search filter
+    if (searchQuery) {
+      requests = requests.filter(r => {
+        const hay = [
+          r.type || '',
+          r.status || '',
+          r.description || r.reason || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(searchQuery);
+      });
+    }
+
     // Sort newest first
     requests.sort((a, b) => new Date(b.requestedAt || '') - new Date(a.requestedAt || ''));
 
-    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0) || !!searchQuery;
 
     if (requests.length === 0) {
       if (hasActiveFilters && hasItems) {

@@ -329,6 +329,8 @@ const Transmittal = {
       date: new Set()
     };
 
+    this.searchQuery = '';
+
     const savedFilters = App.restoreFilters('transmittals');
     if (savedFilters) {
       if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
@@ -411,6 +413,10 @@ const Transmittal = {
 
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'transmittals',
+      searchConfig: {
+        placeholder: 'Search transmittal...',
+        onSearch: (q) => { this.searchQuery = q; updateFilters(); }
+      },
       categories,
       activeFilters,
       onFilterChange: () => {
@@ -493,6 +499,21 @@ const Transmittal = {
         return activeFilters.date.has(bucket);
       });
     }
+
+    // Text search filter
+    if (this.searchQuery) {
+      items = items.filter(t => {
+        const client = t.clientId ? DB.getById('clients', t.clientId) : null;
+        const hay = [
+          t.transmittalNumber || '',
+          t.title || t.subject || '',
+          client?.name || '',
+          t.status || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(this.searchQuery);
+      });
+    }
+
     items.sort((a, b) => {
       const da = a.sentAt || a.createdAt || '';
       const db = b.sentAt || b.createdAt || '';

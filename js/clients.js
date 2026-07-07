@@ -36,7 +36,7 @@ const Clients = {
     
     const search = el('input', {
       type: 'text',
-      placeholder: 'Search by taxpayer, trade name, or TIN...',
+      placeholder: 'Search client...',
       class: 'form-control search-input',
       style: 'width: 100%; padding-left: 36px; max-width: 320px;'
     });

@@ -264,6 +264,62 @@ body {
 }
 .search-input:focus-visible { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
 
+/* ─── Jira-style expandable search ─────────────────────────────── */
+.toolbar-search {
+  position: relative; display: inline-flex; align-items: center;
+}
+.toolbar-search-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--muted); font-size: var(--text-xs); font-weight: 500;
+  cursor: pointer; transition: all var(--motion-fast) var(--ease-standard);
+  white-space: nowrap;
+}
+.toolbar-search-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.toolbar-search-toggle.active {
+  background: color-mix(in oklab, var(--accent), transparent 92%);
+  border-color: var(--accent); color: var(--accent);
+}
+.toolbar-search-field {
+  display: flex; align-items: center; gap: var(--space-2);
+  max-width: 0; overflow: hidden; opacity: 0;
+  transition: max-width 0.25s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease, margin 0.25s ease;
+  margin-left: 0;
+}
+.toolbar-search.expanded .toolbar-search-field {
+  max-width: 280px; opacity: 1; margin-left: var(--space-2);
+}
+.toolbar-search.expanded .toolbar-search-toggle {
+  background: color-mix(in oklab, var(--accent), transparent 92%);
+  border-color: var(--accent); color: var(--accent);
+  border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none;
+}
+.toolbar-search-input {
+  padding: 6px 10px; border: 1px solid var(--accent); border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: var(--text-xs); font-weight: 500; width: 200px;
+  background: var(--surface); color: var(--fg);
+  outline: none; box-shadow: var(--focus-ring);
+  font-family: inherit;
+}
+.toolbar-search-input::placeholder { color: var(--muted); }
+.toolbar-search-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: none; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border: none; background: transparent;
+  color: var(--muted); cursor: pointer; padding: 0; border-radius: 50%;
+  transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+}
+.toolbar-search-clear:hover { color: var(--fg); background: var(--border); }
+.toolbar-search.has-query .toolbar-search-clear { display: inline-flex; }
+.toolbar-search-badge {
+  display: none; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-on);
+  font-size: 10px; font-weight: 700; line-height: 1; margin-left: var(--space-1);
+}
+.toolbar-search.has-query:not(.expanded) .toolbar-search-badge { display: inline-flex; }
+
 /* ─── View switcher / Notion-style toolbar ──────────────────────── */
 .view-bar {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
@@ -709,6 +765,20 @@ body {
               </button>
             </div>
             <div class="view-tools">
+              <div class="toolbar-search" id="toolbarSearch">
+                <button class="toolbar-search-toggle" id="searchToggleBtn" title="Search (Ctrl+K)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Search
+                  <span class="toolbar-search-badge" id="searchBadge"></span>
+                </button>
+                <div class="toolbar-search-field">
+                  <input type="text" class="toolbar-search-input" placeholder="Search by task, ID, assignee…" id="taskSearch" autocomplete="off">
+                  <button class="toolbar-search-clear" id="searchClearBtn" title="Clear search">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              </div>
+
               <div style="position:relative;">
                 <button class="tool-btn" data-toggle-popover="filter" id="filterBtn">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
@@ -790,7 +860,6 @@ body {
           <div class="controls" style="margin-top:var(--space-3);">
             <div class="filter-chips" id="activeFilters"></div>
             <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;">
-              <input type="search" class="search-input" placeholder="Search tasks, assignees, records…" id="taskSearch">
               <button class="btn btn-primary" data-action="add-task"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Task</button>
             </div>
           </div>
@@ -1708,7 +1777,78 @@ document.querySelector('.segmented').addEventListener('click', e => {
   }
 });
 
-document.querySelector('#taskSearch').addEventListener('input', ()=>render());
+/* ─── Jira-style toolbar search ────────────────────────────────── */
+(function initToolbarSearch() {
+  const wrapper    = qs('#toolbarSearch');
+  const toggleBtn  = qs('#searchToggleBtn');
+  const input      = qs('#taskSearch');
+  const clearBtn   = qs('#searchClearBtn');
+  const badge      = qs('#searchBadge');
+
+  function expand() {
+    wrapper.classList.add('expanded');
+    requestAnimationFrame(() => input.focus());
+  }
+  function collapse() {
+    wrapper.classList.remove('expanded');
+    toggleBtn.focus();
+  }
+  function updateState() {
+    const hasQuery = input.value.trim().length > 0;
+    wrapper.classList.toggle('has-query', hasQuery);
+    if (hasQuery) {
+      badge.textContent = '✓';
+    }
+    render();
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    if (wrapper.classList.contains('expanded')) {
+      collapse();
+    } else {
+      expand();
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    updateState();
+    collapse();
+  });
+
+  input.addEventListener('input', updateState);
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (input.value) {
+        input.value = '';
+        updateState();
+      } else {
+        collapse();
+      }
+    }
+  });
+
+  // Ctrl+K / Cmd+K keyboard shortcut
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      if (!wrapper.classList.contains('expanded')) {
+        expand();
+      } else {
+        input.focus();
+        input.select();
+      }
+    }
+  });
+
+  // Close when clicking outside
+  document.addEventListener('click', (e) => {
+    if (wrapper.classList.contains('expanded') && !wrapper.contains(e.target)) {
+      collapse();
+    }
+  });
+})();
 
 function updateStickyOffsets() {
   const toolbar = qs('.toolbar-anchor');

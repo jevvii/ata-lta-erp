@@ -66,6 +66,7 @@ const Auth = {
     const users = DB.getAll('users');
     const user = users.find(u => u.email === email && u.password === password);
     if (!user) return false;
+    if (user.isActive === false) return 'disabled';
     this.user = user;
     // Normalize entity values to uppercase for consistency
     this.user.entities = this.user.entities.map(e => e.toUpperCase());
@@ -94,12 +95,13 @@ const Auth = {
       return false;
     }
     this.user = DB.getById('users', s.userId);
-    if (this.user) {
+    if (this.user && this.user.isActive !== false) {
       this.user.entities = this.user.entities.map(e => e.toUpperCase());
       this.activeEntity = s.activeEntity;
       this.updateSessionClasses(true);
       return true;
     } else {
+      this.user = null;
       this.updateSessionClasses(false);
       return false;
     }
