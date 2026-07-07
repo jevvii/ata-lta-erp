@@ -673,6 +673,12 @@ const Users = {
     const entity = Auth.activeEntity;
     const allPendingChanges = PendingChanges.getAllPending().filter(pc => PendingChanges.canApproveChange(pc));
 
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
     const workRequestCreation = [];
     const wrPhaseRouting = [];
     const billingToRelease = [];
@@ -683,6 +689,19 @@ const Users = {
       const isNew = !pc.parentRecordId;
       const data = pc.proposedData || {};
       const submitter = DB.getById('users', pc.submittedBy);
+
+      // Resolve the entity for the pending change
+      let itemEntity = data.entity;
+      if (pc.table === 'workRequestPhaseRouting') {
+        const wr = DB.getById('workRequests', pc.parentRecordId);
+        itemEntity = wr?.entity;
+      }
+      if (!itemEntity || itemEntity === 'ALL') {
+        itemEntity = (entity === 'ALL') ? (Auth.user.entities[0] || 'ATA') : entity;
+      }
+
+      // Filter by the active entity selection
+      if (!entFilter(itemEntity)) return;
 
       if (pc.table === 'workRequests') {
         workRequestCreation.push({
@@ -696,7 +715,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'workRequestPhaseRouting') {
@@ -712,7 +731,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: wr?.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'invoices') {
@@ -727,7 +746,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'disbursements') {
@@ -742,7 +761,7 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       } else if (pc.table === 'transmittals') {
@@ -757,14 +776,14 @@ const Users = {
           submittedBy: pc.submittedBy,
           submitter,
           submittedAt: pc.submittedAt,
-          entity: data.entity || entity,
+          entity: itemEntity,
           raw: pc
         });
       }
     });
 
     // Disbursement submissions awaiting approval
-    DB.getWhere('disbursements', d => d.entity === entity && ['Submitted', 'Under Review'].includes(d.status)).forEach(d => {
+    DB.getWhere('disbursements', d => entFilter(d.entity) && ['Submitted', 'Under Review'].includes(d.status)).forEach(d => {
       const submitter = DB.getById('users', d.requestedBy);
       disbursementToRelease.push({
         type: 'record',
@@ -783,7 +802,7 @@ const Users = {
     });
 
     // Release-pending disbursements
-    DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Release Pending Approval').forEach(d => {
+    DB.getWhere('disbursements', d => entFilter(d.entity) && d.status === 'Release Pending Approval').forEach(d => {
       const submitter = DB.getById('users', d.releaseRequestedBy || d.requestedBy);
       disbursementToRelease.push({
         type: 'record',
@@ -802,7 +821,7 @@ const Users = {
     });
 
     // Release-pending invoices (billing release)
-    DB.getWhere('invoices', inv => inv.entity === entity && inv.status === 'Release Pending Approval').forEach(inv => {
+    DB.getWhere('invoices', inv => entFilter(inv.entity) && inv.status === 'Release Pending Approval').forEach(inv => {
       const submitter = DB.getById('users', inv.releaseRequestedBy || inv.createdBy);
       billingToRelease.push({
         type: 'record',
@@ -821,7 +840,7 @@ const Users = {
     });
 
     // Release-pending transmittals
-    DB.getWhere('transmittals', t => t.entity === entity && t.status === 'Release Pending Approval').forEach(t => {
+    DB.getWhere('transmittals', t => entFilter(t.entity) && t.status === 'Release Pending Approval').forEach(t => {
       const submitter = DB.getById('users', t.releaseRequestedBy || t.createdBy);
       transmittalSent.push({
         type: 'record',
