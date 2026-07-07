@@ -236,10 +236,6 @@ const Clients = {
       return;
     }
 
-    // Render hidden elements for smoke-test compatibility
-    container.appendChild(el('div', { class: 'jira-backlog-col-header', style: 'display: none;', text: 'Related Companies' }));
-    container.appendChild(el('div', { class: 'jira-backlog-col-header', style: 'display: none;', text: 'Contact Details' }));
-
     // Floating Bulk Action Bar (Jira backlog style)
     const bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
     const countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
@@ -275,22 +271,24 @@ const Clients = {
     thCheckbox.appendChild(selectAllCheckbox);
     headerRow.appendChild(thCheckbox);
 
-    // Work column header
-    const thWork = el('th', { style: 'width: 340px;' });
+    // Work column header (labeled "Client")
+    const thWork = el('th', { class: 'jira-backlog-col-header', style: 'width: 260px;' });
     const workHeaderDiv = el('div', { class: 'jira-th-work' });
     workHeaderDiv.appendChild(el('span', { class: 'jira-header-chevron', text: '▶' }));
-    workHeaderDiv.appendChild(el('span', { text: 'Work' }));
+    workHeaderDiv.appendChild(el('span', { text: 'Client' }));
     thWork.appendChild(workHeaderDiv);
     headerRow.appendChild(thWork);
 
-    // Other headers
-    headerRow.appendChild(el('th', { text: 'Assignee', style: 'width: 160px;' }));
-    headerRow.appendChild(el('th', { text: 'Reporter', style: 'width: 160px;' }));
-    headerRow.appendChild(el('th', { text: 'Priority', style: 'width: 100px;' }));
-    headerRow.appendChild(el('th', { text: 'Status', style: 'width: 120px;' }));
-    headerRow.appendChild(el('th', { text: 'Resolution', style: 'width: 110px;' }));
-    headerRow.appendChild(el('th', { text: 'Created', style: 'width: 180px;' }));
-    headerRow.appendChild(el('th', { text: 'Updated', style: 'width: 180px;' }));
+    // Client columns headers
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Entity', style: 'width: 80px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Retainer', style: 'width: 80px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'TIN', style: 'width: 140px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'RDO Code', style: 'width: 90px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Point of Contact', style: 'width: 160px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Trade Name', style: 'width: 140px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Address', style: 'width: 180px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Related Companies', style: 'width: 180px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Contact Details', style: 'width: 180px;' }));
 
     // Trash bin header
     const thTrash = el('th', { style: 'width: 45px; text-align: center;' });
@@ -415,7 +413,41 @@ const Clients = {
       workDiv.appendChild(nameText);
       tr.appendChild(tdWork);
 
-      // 3. Assignee (Point of Contact)
+      // 3. Entity
+      const tdEntity = el('td');
+      const entityBadge = el('span', {
+        class: 'badge badge-' + (client.entity === 'ATA' ? 'info' : 'success'),
+        text: client.entity
+      });
+      tdEntity.appendChild(entityBadge);
+      tr.appendChild(tdEntity);
+
+      // 4. Retainer
+      const tdRetainer = el('td', { style: 'text-align: center;' });
+      if (isRetainer) {
+        const retainerIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        retainerIcon.setAttribute('width', '14');
+        retainerIcon.setAttribute('height', '14');
+        retainerIcon.setAttribute('viewBox', '0 0 24 24');
+        retainerIcon.setAttribute('fill', 'none');
+        retainerIcon.setAttribute('stroke', '#006644');
+        retainerIcon.setAttribute('stroke-width', '3');
+        retainerIcon.setAttribute('stroke-linecap', 'round');
+        retainerIcon.setAttribute('stroke-linejoin', 'round');
+        retainerIcon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+        tdRetainer.appendChild(retainerIcon);
+      }
+      tr.appendChild(tdRetainer);
+
+      // 5. TIN
+      const tdTin = el('td', { text: client.tin || '—' });
+      tr.appendChild(tdTin);
+
+      // 6. RDO Code
+      const tdRdo = el('td', { text: client.rdoCode || '—' });
+      tr.appendChild(tdRdo);
+
+      // 7. Point of Contact
       const tdAssignee = el('td');
       const pocUser = client.contactUserId ? DB.getById('users', client.contactUserId) : null;
       if (pocUser) {
@@ -424,6 +456,14 @@ const Clients = {
         const color = getUserColor(pocUser.id);
         const avatarCircle = el('span', { class: 'jira-avatar-circle', text: initials, style: `background: ${color};` });
         const nameSpan = el('span', { text: pocUser.name });
+        avatarCell.appendChild(avatarCircle);
+        avatarCell.appendChild(nameSpan);
+        tdAssignee.appendChild(avatarCell);
+      } else if (client.contactPerson) {
+        const avatarCell = el('div', { class: 'jira-avatar-cell' });
+        const initials = getInitials(client.contactPerson);
+        const avatarCircle = el('span', { class: 'jira-avatar-circle', text: initials, style: 'background: #7a869a;' });
+        const nameSpan = el('span', { text: client.contactPerson });
         avatarCell.appendChild(avatarCircle);
         avatarCell.appendChild(nameSpan);
         tdAssignee.appendChild(avatarCell);
@@ -437,86 +477,28 @@ const Clients = {
       }
       tr.appendChild(tdAssignee);
 
-      // 4. Reporter
-      const tdReporter = el('td');
-      const change = DB.getWhere('pendingChanges', pc => pc.table === 'clients' && pc.parentRecordId === client.id)[0];
-      const submitter = change ? DB.getById('users', change.submittedBy) : null;
-      const reporterUser = submitter || { name: 'Jayvee Marcelo', id: 'default-reporter' };
-      const repAvatarCell = el('div', { class: 'jira-avatar-cell' });
-      const repInitials = getInitials(reporterUser.name);
-      const repColor = getUserColor(reporterUser.id);
-      const repAvatarCircle = el('span', { class: 'jira-avatar-circle', text: repInitials, style: `background: ${repColor};` });
-      const repNameSpan = el('span', { text: reporterUser.name });
-      repAvatarCell.appendChild(repAvatarCircle);
-      repAvatarCell.appendChild(repNameSpan);
-      tdReporter.appendChild(repAvatarCell);
-      tr.appendChild(tdReporter);
+      // 8. Trade Name
+      const tdTradeName = el('td', { text: client.tradeName || '—' });
+      tr.appendChild(tdTradeName);
 
-      // 5. Priority
-      const tdPriority = el('td');
-      const priorityDiv = el('div', { class: 'jira-priority-container' });
-      const prioIcon = el('span', { class: 'jira-priority-icon' });
-      const bar1 = el('span', { class: 'jira-priority-icon-bar', style: 'background: #ff8b00;' });
-      const bar2 = el('span', { class: 'jira-priority-icon-bar', style: 'background: #ff8b00;' });
-      prioIcon.appendChild(bar1);
-      prioIcon.appendChild(bar2);
-      priorityDiv.appendChild(prioIcon);
-      priorityDiv.appendChild(el('span', { text: 'Medium' }));
-      tdPriority.appendChild(priorityDiv);
-      tr.appendChild(tdPriority);
+      // 9. Address
+      const tdAddress = el('td', { text: client.address || '—' });
+      tr.appendChild(tdAddress);
 
-      // 6. Status
-      const tdStatus = el('td');
-      const statusWrap = el('div', { class: 'jira-status-dropdown-wrap' });
-      const statusPill = el('button', {
-        class: 'jira-status-pill jira-status-pill-todo',
-        text: 'ACTIVE ▾'
-      });
-      statusWrap.appendChild(statusPill);
+      // 10. Related Companies
+      const rcList = (client.relatedCompanies || []).map(rc => {
+        const rcClient = DB.getById('clients', rc.clientId);
+        return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
+      }).join(', ') || '—';
+      const tdRc = el('td', { text: rcList });
+      tr.appendChild(tdRc);
 
-      const dropdownMenu = el('div', { class: 'jira-status-dropdown-menu hidden' });
-      const activeItem = el('div', { class: 'jira-status-dropdown-item', text: 'Active' });
-      const archiveItem = el('div', { class: 'jira-status-dropdown-item', text: 'Archive' });
-      dropdownMenu.appendChild(activeItem);
-      dropdownMenu.appendChild(archiveItem);
-      statusWrap.appendChild(dropdownMenu);
-      tdStatus.appendChild(statusWrap);
-      tr.appendChild(tdStatus);
+      // 11. Contact Details
+      const cdList = (client.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ') || '—';
+      const tdCd = el('td', { text: cdList });
+      tr.appendChild(tdCd);
 
-      statusPill.addEventListener('click', (e) => {
-        e.stopPropagation();
-        document.querySelectorAll('.jira-status-dropdown-menu').forEach(m => {
-          if (m !== dropdownMenu) m.classList.add('hidden');
-        });
-        dropdownMenu.classList.toggle('hidden');
-      });
-
-      activeItem.addEventListener('click', () => {
-        dropdownMenu.classList.add('hidden');
-      });
-
-      archiveItem.addEventListener('click', () => {
-        dropdownMenu.classList.add('hidden');
-        if (Auth.user.role === 'Admin') {
-          this.archiveClientDirectly(client.id);
-        } else {
-          this.archiveClientRequest(client.id);
-        }
-      });
-
-      // 7. Resolution
-      const tdRes = el('td', { text: isRetainer ? 'Done' : 'Unresolved' });
-      tr.appendChild(tdRes);
-
-      // 8. Created
-      const tdCreated = el('td', { text: formatJiraDate(client.createdAt) });
-      tr.appendChild(tdCreated);
-
-      // 9. Updated
-      const tdUpdated = el('td', { text: formatJiraDate(client.updatedAt || client.createdAt) });
-      tr.appendChild(tdUpdated);
-
-      // 10. Trash (Archive Action)
+      // 12. Trash (Archive Action)
       const tdTrash = el('td', { style: 'text-align: center;' });
       const trashBtn = el('button', { class: 'jira-trash-btn', title: 'Archive Client' });
       const trashSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -545,7 +527,7 @@ const Clients = {
 
       // Accordion Row
       const accordionRow = el('tr', { class: 'jira-accordion-tr hidden' });
-      const accordionTd = el('td', { colspan: '10', class: 'jira-accordion-td' });
+      const accordionTd = el('td', { colspan: '12', class: 'jira-accordion-td' });
       accordionRow.appendChild(accordionTd);
       tbody.appendChild(accordionRow);
 
