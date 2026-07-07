@@ -16,9 +16,10 @@ const Users = {
   render() {
     const container = el('div', { class: 'page admin-tab-page' });
 
-    // Keep the main "Admin" page header but drop the nested breadcrumb
+    // Keep the main page header — use role-appropriate title
+    const isAdmin = Auth.user.role === 'Admin';
     const titleBar = el('div', { class: 'page-title-bar-v2' });
-    const h1 = el('h1', { class: 'page-title-h1', text: 'Admin' });
+    const h1 = el('h1', { class: 'page-title-h1', text: isAdmin ? 'Admin' : 'My Submissions' });
     titleBar.appendChild(h1);
     container.appendChild(titleBar);
 

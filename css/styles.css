@@ -13683,7 +13683,6 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 [data-theme="dark"] .jira-filter-category .cat-count {
-[data-theme="dark"] .jira-filter-category .cat-count {
   background: var(--color-bg-muted);
   color: var(--color-text-muted);
 }
