@@ -174,7 +174,12 @@ const App = {
         // For staff: count their own pending submissions.
         const pendingChanges = (typeof PendingChanges !== 'undefined' && typeof PendingChanges.getPendingForUser === 'function') ? PendingChanges.getPendingForUser(Auth.user.id) : [];
         const myReqs = (typeof DB !== 'undefined' && typeof DB.getWhere === 'function') ? DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending') : [];
-        adminCount = pendingChanges.length + myReqs.length;
+        let approvalsCount = 0;
+        if (Auth.user.role === 'Manager' && typeof Users !== 'undefined' && typeof Users.getPendingCategories === 'function') {
+          const categories = Users.getPendingCategories();
+          approvalsCount = Object.values(categories).reduce((sum, arr) => sum + (arr || []).length, 0);
+        }
+        adminCount = pendingChanges.length + myReqs.length + approvalsCount;
       }
 
       let adminBadge = adminNav.querySelector('.nav-badge');

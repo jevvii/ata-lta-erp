@@ -44,10 +44,12 @@ const Users = {
       if (!validAdminViews.includes(this.view)) this.view = 'users';
     } else {
       const showRequestsTab = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
-      if (this.view === 'myRequests' && !showRequestsTab) {
-        this.view = 'myPending';
-      }
-      if (!['myPending', 'myRequests'].includes(this.view)) {
+      const isManager = Auth.user.role === 'Manager';
+      const validViews = ['myPending'];
+      if (showRequestsTab) validViews.push('myRequests');
+      if (isManager) validViews.push('pending');
+
+      if (!validViews.includes(this.view)) {
         this.view = showRequestsTab ? 'myRequests' : 'myPending';
       }
     }
@@ -61,7 +63,7 @@ const Users = {
       container.appendChild(this.renderUsersSection());
     } else if (this.view === 'audit' && canManageUsers) {
       container.appendChild(this.renderAuditSection());
-    } else if (this.view === 'pending' && canManageUsers) {
+    } else if (this.view === 'pending' && (canManageUsers || Auth.user.role === 'Manager')) {
       container.appendChild(this.renderPendingSection());
     } else if (this.view === 'myPending' && !canManageUsers) {
       container.appendChild(this.renderMyPendingSection());
@@ -70,6 +72,8 @@ const Users = {
     } else if (!canManageUsers) {
       if (this.view === 'myRequests') {
         container.appendChild(this.renderMyRequestsSection());
+      } else if (this.view === 'pending' && Auth.user.role === 'Manager') {
+        container.appendChild(this.renderPendingSection());
       } else {
         container.appendChild(this.renderMyPendingSection());
       }
@@ -113,6 +117,15 @@ const Users = {
     if (showRequestsTab) {
       const myRequestsCount = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id).length;
       tabs.push({ key: 'myRequests', label: 'My Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>', count: myRequestsCount });
+    }
+    const isManager = Auth.user.role === 'Manager';
+    if (isManager) {
+      const pendingCount = (() => {
+        if (typeof this.getPendingCategories !== 'function') return 0;
+        const categories = this.getPendingCategories();
+        return Object.values(categories).reduce((sum, arr) => sum + arr.length, 0);
+      })();
+      tabs.push({ key: 'pending', label: 'Pending Approvals', icon: BoardCardIcons.checkCircle, count: pendingCount });
     }
     return renderModuleTabNav(tabs, this.view, changeTab);
   },
@@ -684,6 +697,7 @@ const Users = {
     const billingToRelease = [];
     const disbursementToRelease = [];
     const transmittalSent = [];
+    const taskCreation = [];
 
     allPendingChanges.forEach(pc => {
       const isNew = !pc.parentRecordId;
@@ -779,6 +793,23 @@ const Users = {
           entity: itemEntity,
           raw: pc
         });
+      } else if (pc.table === 'tasks') {
+        const wrId = data.workRequestId;
+        const wr = wrId ? DB.getById('workRequests', wrId) : null;
+        taskCreation.push({
+          type: 'change',
+          kind: 'taskCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Task: ${data.title || 'Untitled Task'}`,
+          description: wr ? `For WR: ${wr.title}` : 'Task creation/edit awaiting approval',
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: itemEntity,
+          raw: pc
+        });
       }
     });
 
@@ -863,7 +894,8 @@ const Users = {
       wrPhaseRouting,
       billingToRelease,
       disbursementToRelease,
-      transmittalSent
+      transmittalSent,
+      taskCreation
     };
   },
 
@@ -883,7 +915,8 @@ const Users = {
       wrPhaseRouting: { label: 'WR Phase Routing', keyPrefix: 'ROUTE' },
       billingToRelease: { label: 'Billing to Release', keyPrefix: 'BIL' },
       disbursementToRelease: { label: 'Disbursement to Release', keyPrefix: 'EXP' },
-      transmittalSent: { label: 'Mark Transmittal as Sent', keyPrefix: 'TX' }
+      transmittalSent: { label: 'Mark Transmittal as Sent', keyPrefix: 'TX' },
+      taskCreation: { label: 'Task Creation', keyPrefix: 'TSK' }
     };
 
     if (totalPending === 0) {
