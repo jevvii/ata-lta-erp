@@ -72,7 +72,7 @@ async function runTests() {
   // ─── TEST 4: Clients table columns ───────────────────────────────
   await page.goto(BASE + '/#clients');
   await page.waitForTimeout(800);
-  const headers = await page.$$eval('th', ths => ths.map(t => t.textContent.trim()));
+  const headers = await page.$$eval('.jira-backlog-col-header', ths => ths.map(t => t.textContent.trim()));
   const hasRc = headers.includes('Related Companies');
   const hasCd = headers.includes('Contact Details');
   await log('Clients Columns (#4)', hasRc && hasCd, `RC=${hasRc}, CD=${hasCd}`);

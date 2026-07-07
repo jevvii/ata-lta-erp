@@ -2627,6 +2627,10 @@ const JiraBacklogList = {
 
     const hasColumns = Array.isArray(columns) && columns.length > 0;
     const showCheckboxes = selectable !== false;
+    const hasRowActions = items.some(item => {
+      const acts = rowActions(item);
+      return Array.isArray(acts) && acts.length > 0;
+    });
 
     const container = el('div', { class: 'jira-backlog-container' + (hasColumns ? ' jira-backlog-container--columns' : '') });
 
@@ -2685,10 +2689,10 @@ const JiraBacklogList = {
       const colHeader = el('div', { class: 'jira-backlog-columns-header' });
       // Fixed lead widths so the header and body columns line up exactly.
       const titleColWidth = options.titleColumnWidth || '1fr';
-      const leadCols = `28px 24px 75px ${titleColWidth}`;
+      const actionsCol = hasRowActions ? 'minmax(120px, max-content)' : '';
+      const leadCols = `28px 24px 75px ${titleColWidth}${actionsCol ? ' ' + actionsCol : ''}`;
       const metaCols = columns.map(c => c.width || '1fr').join(' ');
-      const actionsCol = 'minmax(auto, max-content)';
-      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols} ${actionsCol}`;
+      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols}`;
 
       // Lead-column placeholders: checkbox, icon, key, title.
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
@@ -2696,14 +2700,16 @@ const JiraBacklogList = {
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
 
+      // Actions column header: if hasRowActions is true, append "Actions" label header!
+      if (hasRowActions) {
+        colHeader.appendChild(el('div', { class: 'jira-backlog-col-header', text: 'Actions' }));
+      }
+
       columns.forEach(col => {
         const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
         if (col.align) h.style.textAlign = col.align;
         colHeader.appendChild(h);
       });
-
-      // Actions column header placeholder (aligns with the far-right actions cell).
-      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--actions' }));
 
       container.appendChild(colHeader);
     }
@@ -2874,20 +2880,21 @@ const JiraBacklogList = {
       const titleNode = el('div', { class: 'jira-backlog-row-title', text: item.name });
       row.appendChild(titleNode);
 
-      // Column-mode grid sizing (lead columns + metadata columns + actions column)
+      // Column-mode grid sizing (lead columns + metadata columns)
       if (hasColumns) {
         const titleColWidth = options.titleColumnWidth || '1fr';
-        const leadCols = `28px 24px 75px ${titleColWidth}`;
+        const actionsCol = hasRowActions ? 'minmax(120px, max-content)' : '';
+        const leadCols = `28px 24px 75px ${titleColWidth}${actionsCol ? ' ' + actionsCol : ''}`;
         const metaCols = columns.map(c => c.width || '1fr').join(' ');
-        const actionsCol = 'minmax(auto, max-content)';
-        row.style.gridTemplateColumns = `${leadCols} ${metaCols} ${actionsCol}`;
+        row.style.gridTemplateColumns = `${leadCols} ${metaCols}`;
       }
 
       // Metadata / Tags
       const tagsNode = el('div', { class: 'jira-backlog-row-tags' + (hasColumns ? ' jira-backlog-row-tags--columns' : '') });
       if (hasColumns) {
         tagsNode.style.gridTemplateColumns = columns.map(c => c.width || '1fr').join(' ');
-        tagsNode.style.gridColumn = `5 / span ${columns.length}`;
+        const startCol = hasRowActions ? 6 : 5;
+        tagsNode.style.gridColumn = `${startCol} / span ${columns.length}`;
       }
       const tagList = item.tags || [];
       tagList.forEach(tag => {
@@ -2935,6 +2942,28 @@ const JiraBacklogList = {
           tagsNode.appendChild(el('div', { class: 'jira-backlog-tag-placeholder' }));
         }
       }
+
+      // Actions on the left of tags (column 5, if applicable)
+      if (hasColumns && hasRowActions) {
+        const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
+        const rowActionsList = rowActions(item);
+        if (Array.isArray(rowActionsList) && rowActionsList.length > 0) {
+          rowActionsList.forEach(act => {
+            const btn = el('button', {
+              class: act.className || 'btn btn-secondary btn-xs',
+              html: act.html || act.text
+            });
+            if (act.title) btn.setAttribute('title', act.title);
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              act.onClick(item);
+            });
+            actionsNode.appendChild(btn);
+          });
+        }
+        row.appendChild(actionsNode);
+      }
+
       row.appendChild(tagsNode);
 
       // Optional secondary line (for dense pages like Active Clients)
@@ -2944,23 +2973,25 @@ const JiraBacklogList = {
         row.appendChild(secondaryNode);
       }
 
-      // Actions on the far right
-      const rowActionsList = rowActions(item);
-      if (rowActionsList && rowActionsList.length > 0) {
-        const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
-        rowActionsList.forEach(act => {
-          const btn = el('button', {
-            class: act.className || 'btn btn-secondary btn-xs',
-            html: act.html || act.text
+      // Actions on the far right (only if NOT in columns mode)
+      if (!hasColumns) {
+        const rowActionsList = rowActions(item);
+        if (rowActionsList && rowActionsList.length > 0) {
+          const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
+          rowActionsList.forEach(act => {
+            const btn = el('button', {
+              class: act.className || 'btn btn-secondary btn-xs',
+              html: act.html || act.text
+            });
+            if (act.title) btn.setAttribute('title', act.title);
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              act.onClick(item);
+            });
+            actionsNode.appendChild(btn);
           });
-          if (act.title) btn.setAttribute('title', act.title);
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            act.onClick(item);
-          });
-          actionsNode.appendChild(btn);
-        });
-        row.appendChild(actionsNode);
+          row.appendChild(actionsNode);
+        }
       }
 
       list.appendChild(row);
