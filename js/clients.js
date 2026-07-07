@@ -265,11 +265,14 @@ const Clients = {
         { label: 'Related Companies', width: '160px' },
         { label: 'Contact Details', width: '180px' }
       ],
-      headerActions: [
+      headerActions: [],
+      bulkActions: (ids) => [
         {
-          text: '+ Add Client',
-          className: 'btn btn-primary btn-sm',
-          onClick: () => this.showForm()
+          text: 'Archive Selected',
+          className: 'btn btn-outline-danger btn-sm',
+          onClick: (selectedIds) => {
+            this.bulkArchiveClients(selectedIds);
+          }
         }
       ],
       rowActions: (item) => {
@@ -732,10 +735,114 @@ const Clients = {
     App.handleRoute();
   },
 
+  bulkArchiveClients(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const isAdmin = Auth.user?.role === 'Admin';
+    if (isAdmin) {
+      this.archiveClientsDirectly(clientIds);
+    } else {
+      this.archiveClientsRequest(clientIds);
+    }
+  },
+
+  archiveClientsDirectly(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
+    if (!confirm(`Are you sure you want to archive ${label}? This will cancel all related work requests and archive all associated documents.`)) return;
+
+    let archivedCount = 0;
+    clientIds.forEach(clientId => {
+      const client = DB.getById('clients', clientId);
+      if (!client) return;
+      client.status = 'Archived';
+      client.updatedAt = new Date().toISOString();
+      DB.update('clients', clientId, client);
+
+      const wrs = DB.getWhere('workRequests', wr => wr.clientId === clientId);
+      wrs.forEach(wr => {
+        DB.update('workRequests', wr.id, { status: 'Cancelled', updatedAt: new Date().toISOString() });
+        const docs = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
+        docs.forEach(doc => {
+          DB.update('documents', doc.id, { status: 'Archived', archived: true });
+        });
+      });
+      archivedCount++;
+    });
+
+    alert(archivedCount === 1 ? 'Client archived successfully.' : `${archivedCount} clients archived successfully.`);
+    App.handleRoute();
+  },
+
+  archiveClientsRequest(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
+    if (!confirm(`Are you sure you want to request archiving ${label}? This requires Admin approval.`)) return;
+
+    let requestedCount = 0;
+    clientIds.forEach(clientId => {
+      const pending = DB.getWhere('pendingChanges', pc =>
+        pc.table === 'clients' &&
+        pc.parentRecordId === clientId &&
+        pc.status === 'pending' &&
+        pc.proposedData &&
+        pc.proposedData.status === 'Archived'
+      );
+      if (pending.length > 0) return;
+
+      const client = DB.getById('clients', clientId);
+      if (!client) return;
+
+      const proposed = deepClone(client);
+      proposed.status = 'Archived';
+      proposed.updatedAt = new Date().toISOString();
+
+      const pc = {
+        id: generateId('pc'),
+        table: 'clients',
+        parentRecordId: clientId,
+        proposedData: proposed,
+        submittedBy: Auth.user.id,
+        submittedAt: new Date().toISOString(),
+        status: 'pending',
+        rejectionReason: '',
+        reviewedBy: '',
+        reviewedAt: ''
+      };
+      DB.insert('pendingChanges', pc);
+      requestedCount++;
+    });
+
+    if (requestedCount === 0) {
+      alert('Archive requests for the selected clients are already pending approval.');
+    } else {
+      alert(requestedCount === 1 ? 'Archive request submitted for Admin approval.' : `${requestedCount} archive requests submitted for Admin approval.`);
+    }
+    App.handleRoute();
+  },
+
   unarchiveClient(id) {
     const client = DB.getById('clients', id);
     if (!client || client.status !== 'Archived') return;
     DB.update('clients', id, { status: 'Active', archived: false, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
+
+  bulkUnarchiveClients(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const validIds = clientIds.filter(id => {
+      const client = DB.getById('clients', id);
+      return client && client.status === 'Archived';
+    });
+    if (validIds.length === 0) return;
+
+    const label = validIds.length === 1 ? 'this client' : `these ${validIds.length} clients`;
+    if (!confirm(`Are you sure you want to restore ${label} to Active Clients?`)) return;
+
+    validIds.forEach(id => {
+      DB.update('clients', id, { status: 'Active', archived: false, updatedAt: new Date().toISOString() });
+    });
+
+    alert(validIds.length === 1 ? 'Client restored successfully.' : `${validIds.length} clients restored successfully.`);
     App.handleRoute();
   },
 
@@ -863,7 +970,16 @@ const Clients = {
           ...rejectedClientRequests.map(buildRejectedItem)
         ]
       },
-      emptyText: 'Archive is empty.'
+      emptyText: 'Archive is empty.',
+      bulkActions: (ids) => [
+        {
+          text: 'Restore Selected',
+          className: 'btn btn-primary btn-sm',
+          onClick: (selectedIds) => {
+            this.bulkUnarchiveClients(selectedIds);
+          }
+        }
+      ]
     });
   }
 };

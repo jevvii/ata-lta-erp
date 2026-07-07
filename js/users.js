@@ -624,6 +624,7 @@ const Users = {
       rowIdPrefix: 'AUD',
       countLabel: 'entry',
       bulkActions: [],
+      selectable: false,
       columns: [
         { label: 'Action', width: '220px' },
         { label: 'Entity', width: '60px' },

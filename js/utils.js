@@ -2329,7 +2329,7 @@ const ArchivePage = {
    * @param {string} [opts.emptyText] - message shown when archive is empty.
    * @returns {HTMLElement}
    */
-  render({ module, categoryLabels = {}, categories, emptyText = 'Archive is empty.' }) {
+  render({ module, categoryLabels = {}, categories, emptyText = 'Archive is empty.', bulkActions }) {
     const wrapper = el('div');
     const storageKey = 'erp_archive_category_' + (typeof module === 'string' ? module : (module?.constructor?.name || 'module'));
     let selected = sessionStorage.getItem(storageKey) || 'all';
@@ -2340,13 +2340,63 @@ const ArchivePage = {
           key,
           label: categoryLabels[key] || key,
           items: items || [],
-          renderItem: (item) => ArchivePage.renderSimpleItem(item)
+          renderItem: (item, idx, selectable) => ArchivePage.renderSimpleItem(item, idx, selectable)
         }));
 
     const total = categoryList.reduce((sum, cat) => sum + (cat.items || []).length, 0);
     if (total === 0) {
       wrapper.appendChild(renderEmptyState(emptyText, null, { variant: 'zero-state' }));
       return wrapper;
+    }
+
+    const hasBulkActions = Array.isArray(bulkActions) || typeof bulkActions === 'function';
+    const selectedIds = new Set();
+    const rowCheckboxes = [];
+    let bulkBar = null, bulkCount = null, bulkActionsContainer = null, bulkClose = null;
+
+    if (hasBulkActions) {
+      bulkBar = el('div', { class: 'jira-backlog-bulk-bar archive-page-bulk-bar hidden' });
+      bulkCount = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
+      bulkBar.appendChild(bulkCount);
+      bulkBar.appendChild(el('span', { class: 'jira-backlog-bulk-divider', text: '|' }));
+      bulkActionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
+      bulkBar.appendChild(bulkActionsContainer);
+      bulkBar.appendChild(el('span', { class: 'jira-backlog-bulk-divider', text: '|' }));
+      bulkClose = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
+      bulkBar.appendChild(bulkClose);
+      wrapper.appendChild(bulkBar);
+    }
+
+    const updateBulkBar = () => {
+      if (!bulkBar) return;
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0) {
+        bulkBar.classList.add('hidden');
+        return;
+      }
+      bulkCount.textContent = `${ids.length} selected`;
+      bulkActionsContainer.innerHTML = '';
+      const actionsList = typeof bulkActions === 'function' ? bulkActions(ids) : bulkActions;
+      (actionsList || []).forEach(act => {
+        const btn = el('button', {
+          class: act.className || 'btn btn-secondary btn-sm',
+          text: act.text
+        });
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          act.onClick(ids);
+        });
+        bulkActionsContainer.appendChild(btn);
+      });
+      bulkBar.classList.remove('hidden');
+    };
+
+    if (bulkClose) {
+      bulkClose.addEventListener('click', () => {
+        selectedIds.clear();
+        rowCheckboxes.forEach(cb => { cb.checked = false; });
+        updateBulkBar();
+      });
     }
 
     const selectCategory = (key) => {
@@ -2361,13 +2411,13 @@ const ArchivePage = {
       const items = cat.items || [];
       if (items.length === 0) return;
       if (selected !== 'all' && selected !== cat.key) return;
-      wrapper.appendChild(this.renderCategoryCard(cat));
+      wrapper.appendChild(this.renderCategoryCard(cat, hasBulkActions, selectedIds, rowCheckboxes, updateBulkBar));
     });
 
     return wrapper;
   },
 
-  renderSimpleItem(item) {
+  renderSimpleItem(item, idx, selectable) {
     const iconKey = item.icon || (item.category === 'cancelled' ? 'cancelled' : item.category === 'rejected' ? 'rejected' : 'accomplished');
     const metaNodes = (item.meta || []).map(m => ArchivePage.metaNode(m.icon || '', m.text, m.className || ''));
     const actionButtons = (item.actions || []).map(a => ({
@@ -2377,12 +2427,14 @@ const ArchivePage = {
       onClick: a.onClick
     }));
     return ArchivePage.renderItemRow({
+      id: item.id,
       iconHtml: item.iconHtml || ArchivePage.icons[iconKey],
       keyText: item.keyText,
       title: item.title,
       description: item.description,
       metaNodes,
-      actions: actionButtons
+      actions: actionButtons,
+      selectable
     });
   },
 
@@ -2416,7 +2468,7 @@ const ArchivePage = {
     return wrap;
   },
 
-  renderCategoryCard(category) {
+  renderCategoryCard(category, hasBulkActions, selectedIds, rowCheckboxes, updateBulkBar) {
     const card = el('div', { class: 'approval-category-card' });
 
     const header = el('div', { class: 'approval-category-header' });
@@ -2425,12 +2477,50 @@ const ArchivePage = {
     const countText = category.items.length + (category.items.length === 1 ? ' item' : ' items');
     title.appendChild(el('span', { class: 'count', text: countText }));
     header.appendChild(title);
+
+    let selectAllCheckbox = null;
+    if (hasBulkActions) {
+      selectAllCheckbox = el('input', {
+        type: 'checkbox',
+        class: 'archive-category-select-all',
+        title: 'Select all'
+      });
+      header.appendChild(selectAllCheckbox);
+    }
+
     card.appendChild(header);
 
     const list = el('div', { class: 'approval-items-list' });
+    const categoryCheckboxes = [];
+
     category.items.forEach((item, idx) => {
-      list.appendChild(category.renderItem(item, idx));
+      const row = category.renderItem(item, idx, hasBulkActions);
+      if (hasBulkActions && row.dataset && row.dataset.id) {
+        const chk = row.querySelector('.archive-row-checkbox');
+        if (chk) {
+          categoryCheckboxes.push(chk);
+          rowCheckboxes.push(chk);
+          chk.addEventListener('change', () => {
+            if (chk.checked) selectedIds.add(chk.dataset.id);
+            else selectedIds.delete(chk.dataset.id);
+            updateBulkBar();
+          });
+        }
+      }
+      list.appendChild(row);
     });
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', () => {
+        categoryCheckboxes.forEach(chk => {
+          chk.checked = selectAllCheckbox.checked;
+          if (chk.checked) selectedIds.add(chk.dataset.id);
+          else selectedIds.delete(chk.dataset.id);
+        });
+        updateBulkBar();
+      });
+    }
+
     card.appendChild(list);
 
     return card;
@@ -2447,8 +2537,21 @@ const ArchivePage = {
    * @param {Array<{label, onClick, className, iconHtml}>} [opts.actions] - action buttons.
    * @returns {HTMLElement}
    */
-  renderItemRow({ iconHtml, keyText, title, description, metaNodes = [], actions = [] }) {
+  renderItemRow({ id, iconHtml, keyText, title, description, metaNodes = [], actions = [], selectable }) {
     const row = el('div', { class: 'approval-item' });
+    if (id) row.dataset.id = id;
+
+    if (selectable && id) {
+      const checkbox = el('input', {
+        type: 'checkbox',
+        class: 'archive-row-checkbox',
+        'data-id': id,
+        title: 'Select'
+      });
+      const checkboxWrap = el('div', { class: 'archive-row-checkbox-wrap' });
+      checkboxWrap.appendChild(checkbox);
+      row.appendChild(checkboxWrap);
+    }
 
     const icon = el('div', { class: 'approval-item-icon' });
     icon.innerHTML = iconHtml || '';
@@ -2518,10 +2621,12 @@ const JiraBacklogList = {
       rowIdPrefix = 'TPL',
       bulkActions,
       countLabel = 'template',
-      columns
+      columns,
+      selectable = true
     } = options;
 
     const hasColumns = Array.isArray(columns) && columns.length > 0;
+    const showCheckboxes = selectable !== false;
 
     const container = el('div', { class: 'jira-backlog-container' + (hasColumns ? ' jira-backlog-container--columns' : '') });
 
@@ -2531,12 +2636,14 @@ const JiraBacklogList = {
     // Left side info (Select All checkbox replaces chevron)
     const headerLeft = el('div', { class: 'jira-backlog-header-left', style: 'cursor: default;' });
 
-    const selectAllCheckbox = el('input', {
-      type: 'checkbox',
-      class: 'jira-backlog-header-checkbox',
-      style: 'margin-right: 8px; cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
-    });
-    headerLeft.appendChild(selectAllCheckbox);
+    const selectAllCheckbox = showCheckboxes
+      ? el('input', {
+          type: 'checkbox',
+          class: 'jira-backlog-header-checkbox',
+          style: 'margin-right: 8px; cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
+        })
+      : null;
+    if (selectAllCheckbox) headerLeft.appendChild(selectAllCheckbox);
 
     const titleText = el('div', { class: 'jira-backlog-title-text' });
     titleText.appendChild(el('span', { class: 'jira-backlog-title', text: title }));
@@ -2580,7 +2687,8 @@ const JiraBacklogList = {
       const titleColWidth = options.titleColumnWidth || '1fr';
       const leadCols = `28px 24px 75px ${titleColWidth}`;
       const metaCols = columns.map(c => c.width || '1fr').join(' ');
-      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
+      const actionsCol = 'minmax(auto, max-content)';
+      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols} ${actionsCol}`;
 
       // Lead-column placeholders: checkbox, icon, key, title.
       colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
@@ -2610,23 +2718,26 @@ const JiraBacklogList = {
     }
 
     // Floating Bulk Action Bar (Jira backlog style)
-    const bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
-    
-    const countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
-    bulkBar.appendChild(countInfo);
-    
-    const divider1 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
-    bulkBar.appendChild(divider1);
-    
-    const actionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
-    bulkBar.appendChild(actionsContainer);
-    
-    const divider2 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
-    bulkBar.appendChild(divider2);
-    
-    const closeBtn = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
-    bulkBar.appendChild(closeBtn);
-    container.appendChild(bulkBar);
+    let bulkBar = null, countInfo = null, actionsContainer = null, closeBtn = null;
+    if (showCheckboxes) {
+      bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
+      
+      countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
+      bulkBar.appendChild(countInfo);
+      
+      const divider1 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider1);
+      
+      actionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
+      bulkBar.appendChild(actionsContainer);
+      
+      const divider2 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider2);
+      
+      closeBtn = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
+      bulkBar.appendChild(closeBtn);
+      container.appendChild(bulkBar);
+    }
 
     const list = el('div', { class: 'jira-backlog-list' });
 
@@ -2664,47 +2775,55 @@ const JiraBacklogList = {
         }
       });
 
-      if (selectedIds.length > 0) {
-        countInfo.textContent = `${selectedIds.length} selected`;
-        
-        actionsContainer.innerHTML = '';
-        const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
-        actionsList.forEach(act => {
-          const btn = el('button', {
-            class: act.className || 'btn btn-secondary btn-sm',
-            text: act.text
+      if (bulkBar) {
+        if (selectedIds.length > 0) {
+          countInfo.textContent = `${selectedIds.length} selected`;
+          
+          actionsContainer.innerHTML = '';
+          const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
+          actionsList.forEach(act => {
+            const btn = el('button', {
+              class: act.className || 'btn btn-secondary btn-sm',
+              text: act.text
+            });
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              act.onClick(selectedIds);
+            });
+            actionsContainer.appendChild(btn);
           });
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            act.onClick(selectedIds);
-          });
-          actionsContainer.appendChild(btn);
-        });
-        
-        bulkBar.classList.remove('hidden');
-      } else {
-        bulkBar.classList.add('hidden');
+          
+          bulkBar.classList.remove('hidden');
+        } else {
+          bulkBar.classList.add('hidden');
+        }
       }
 
-      const allChecked = checkBoxes.length > 0 && checkBoxes.every(c => c.checked);
-      const someChecked = checkBoxes.some(c => c.checked);
-      selectAllCheckbox.checked = allChecked;
-      selectAllCheckbox.indeterminate = someChecked && !allChecked;
+      if (selectAllCheckbox) {
+        const allChecked = checkBoxes.length > 0 && checkBoxes.every(c => c.checked);
+        const someChecked = checkBoxes.some(c => c.checked);
+        selectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = someChecked && !allChecked;
+      }
     };
 
-    selectAllCheckbox.addEventListener('change', () => {
-      checkBoxes.forEach(c => {
-        c.checked = selectAllCheckbox.checked;
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', () => {
+        checkBoxes.forEach(c => {
+          c.checked = selectAllCheckbox.checked;
+        });
+        updateSelection();
       });
-      updateSelection();
-    });
+    }
 
-    closeBtn.addEventListener('click', () => {
-      checkBoxes.forEach(c => {
-        c.checked = false;
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        checkBoxes.forEach(c => {
+          c.checked = false;
+        });
+        updateSelection();
       });
-      updateSelection();
-    });
+    }
 
     items.forEach((item, index) => {
       const rowClasses = ['jira-backlog-row'];
@@ -2714,26 +2833,32 @@ const JiraBacklogList = {
       rows.push(row);
 
       // Checkbox container (shows on hover, stays visible when checked)
-      const checkboxWrap = el('div', { class: 'jira-backlog-row-checkbox-wrap' });
-      const chk = el('input', {
-        type: 'checkbox',
-        class: 'jira-backlog-row-checkbox',
-        'data-id': item.id
-      });
-      checkBoxes.push(chk);
+      if (showCheckboxes) {
+        const checkboxWrap = el('div', { class: 'jira-backlog-row-checkbox-wrap' });
+        const chk = el('input', {
+          type: 'checkbox',
+          class: 'jira-backlog-row-checkbox',
+          'data-id': item.id
+        });
+        checkBoxes.push(chk);
 
-      chk.addEventListener('change', () => {
-        updateSelection();
-      });
-      checkboxWrap.addEventListener('click', (e) => {
-        if (e.target !== chk) {
-          e.stopPropagation();
-          chk.checked = !chk.checked;
-          chk.dispatchEvent(new Event('change'));
-        }
-      });
-      checkboxWrap.appendChild(chk);
-      row.appendChild(checkboxWrap);
+        chk.addEventListener('change', () => {
+          updateSelection();
+        });
+        checkboxWrap.addEventListener('click', (e) => {
+          if (e.target !== chk) {
+            e.stopPropagation();
+            chk.checked = !chk.checked;
+            chk.dispatchEvent(new Event('change'));
+          }
+        });
+        checkboxWrap.appendChild(chk);
+        row.appendChild(checkboxWrap);
+      } else {
+        // Keep alignment by reserving the checkbox lead column when hidden.
+        const checkboxSpacer = el('div', { class: 'jira-backlog-row-checkbox-wrap jira-backlog-row-checkbox-wrap--spacer' });
+        row.appendChild(checkboxSpacer);
+      }
 
       // Icon (Jira backlog icon)
       const iconWrap = el('div', { class: 'jira-backlog-row-icon', html: item.iconHtml || `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` });
@@ -2754,7 +2879,8 @@ const JiraBacklogList = {
         const titleColWidth = options.titleColumnWidth || '1fr';
         const leadCols = `28px 24px 75px ${titleColWidth}`;
         const metaCols = columns.map(c => c.width || '1fr').join(' ');
-        row.style.gridTemplateColumns = `${leadCols} ${metaCols} auto`;
+        const actionsCol = 'minmax(auto, max-content)';
+        row.style.gridTemplateColumns = `${leadCols} ${metaCols} ${actionsCol}`;
       }
 
       // Metadata / Tags
