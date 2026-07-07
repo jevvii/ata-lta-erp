@@ -11,8 +11,9 @@ const DMS = {
   render() {
     this.listViewMode = App.getPreferredViewMode('documents');
 
-    const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', { text: 'Documents' }));
+    const container = el('div', { class: 'page documents-tab-page' });
+    const title = el('h1', { text: 'Documents', class: 'page-title-bar-v2' });
+    container.appendChild(title);
 
     if (this.view === 'list') container.appendChild(this.renderList());
     else if (this.view === 'form') container.appendChild(this.renderForm());
@@ -70,7 +71,7 @@ const DMS = {
     // Restrict Documents module to roles with dms:edit or dms:handover
     if (!Auth.can('dms:edit') && !Auth.can('dms:handover')) {
       const wrapper = el('div');
-      wrapper.appendChild(el('p', { text: 'Documents are restricted to Admin, Manager, and Documentation users.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('Permission denied', 'Documents are restricted to Admin, Manager, and Documentation users.', { variant: 'zero-state' }));
       return wrapper;
     }
 
@@ -90,7 +91,7 @@ const DMS = {
         saveCurrentFilters();
         App.setPreferredViewMode('documents', mode);
         this.listViewMode = mode;
-        this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
+        this.refreshList(listContainer, activeFilters, groupBy);
       });
       viewToggle.appendChild(btn);
     });
@@ -109,110 +110,123 @@ const DMS = {
     }
 
     const wrapper = el('div');
-    wrapper.appendChild(actions);
+    const toolbarStickyWrap = el('div', { class: 'toolbar-sticky-container' });
+    toolbarStickyWrap.appendChild(actions);
+    wrapper.appendChild(toolbarStickyWrap);
 
     // Filters bar
-    const filtersBar = el('div', { class: 'filters-bar' });
+    // Jira Filter Toolbar & Active Filters State
+    let groupBy = App.restoreGroupBy('documents') || 'none';
+    const activeFilters = {
+      workRequest: new Set(),
+      client: new Set(),
+      employee: new Set(),
+      date: new Set()
+    };
 
-    const wrFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
-    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
-    DB.getWhere('workRequests', wr => {
-      const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).forEach(wr => {
-      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title }));
-    });
-    filtersBar.appendChild(wrapFilterFieldWithClear(wrFilter));
-
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '200px' });
-    filtersBar.appendChild(clientFilter);
-
-    const empOptions = [{ value: '', text: 'All Uploaders' }];
-    DB.getWhere('users', u => Auth.ALL_ROLES.includes(u.role)).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Uploaders', options: empOptions, maxWidth: '180px' });
-    filtersBar.appendChild(empFilter);
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filtersBar.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filtersBar.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filtersBar.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filtersBar.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      wrFilter.value = '';
-      clientFilter.value = '';
-      empFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      App.clearSavedFilters('documents');
-      updateFilters();
-    });
-    filtersBar.appendChild(clearBtn);
-
-    wrapper.appendChild(filtersBar);
-
-    // Restore saved filters
     const savedFilters = App.restoreFilters('documents');
     if (savedFilters) {
-      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+      if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
+      else if (savedFilters.workRequest) activeFilters.workRequest.add(savedFilters.workRequest);
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      else if (savedFilters.client) activeFilters.client.add(savedFilters.client);
+      if (Array.isArray(savedFilters.employee)) savedFilters.employee.forEach(v => activeFilters.employee.add(v));
+      else if (savedFilters.employee) activeFilters.employee.add(savedFilters.employee);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
     saveCurrentFilters = () => {
       App.saveFilters('documents', {
-        workRequest: wrFilter.value,
-        client: clientFilter.value,
-        employee: empFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value
+        workRequest: Array.from(activeFilters.workRequest),
+        client: Array.from(activeFilters.client),
+        employee: Array.from(activeFilters.employee),
+        date: Array.from(activeFilters.date)
       });
     };
+
+    const getWorkRequestOptions = () => DB.getWhere('workRequests', wr => {
+      const wrEnt = (wr.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase();
+    }).map(wr => ({ value: wr.id, label: wr.title }));
+
+    const getClientOptions = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt) : clientEnt === entity.toUpperCase();
+    }).map(c => ({ value: c.id, label: c.name }));
+
+    const getEmployeeOptions = () => {
+      const set = new Set();
+      DB.getWhere('users', u => Auth.ALL_ROLES.includes(u.role)).forEach(u => set.add(u.name));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) set.add(name);
+      });
+      return Array.from(set).map(n => ({ value: n, label: n }));
+    };
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      workRequest: { label: 'Work Request', getOptions: getWorkRequestOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      employee: { label: 'Uploader', getOptions: getEmployeeOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const self = this;
+    const groupOptions = [
+      { key: 'workRequest', label: 'Work Request', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        return wr ? wr.title : 'No Work Request';
+      }},
+      { key: 'client', label: 'Client', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        const client = wr && DB.getById('clients', wr.clientId);
+        return client ? client.name : 'No Client';
+      }},
+      { key: 'employee', label: 'Uploader', getName: doc => {
+        const u = doc.uploader ? DB.getById('users', doc.uploader) : null;
+        return u ? u.name : 'No Uploader';
+      }},
+      { key: 'status', label: 'Lifecycle', getName: doc => self.lifecycleLabel(doc.documentLifecycle || 'collected') }
+    ];
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'documents',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        updateFilters();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: newGroupBy => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('documents', groupBy);
+        updateFilters();
+      }
+    });
+
+    toolbarStickyWrap.appendChild(toolbarContainer);
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
-    [wrFilter, clientFilter, empFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); updateFilters(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); updateFilters(); }));
-    if (entityFilter) {
-      entityFilter.addEventListener('change', () => { saveCurrentFilters(); this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText); });
-    }
-
-    this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
+    const updateFilters = () => this.refreshList(listContainer, activeFilters, groupBy, toolbarStickyWrap);
+    updateFilters();
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, empFilter, dateFrom, dateTo, empSearchText, clientSearchText) {
+  refreshList(container, activeFilters, groupBy = 'none', toolbarContainer = null) {
     while (container.firstChild) container.removeChild(container.firstChild);
+    toolbarContainer?.classList.remove('grouped-board-active');
     const entity = Auth.activeEntity;
 
     let docs = DB.getWhere('documents', d => {
@@ -222,55 +236,66 @@ const DMS = {
       if (d.status === 'Archived' || d.archived === true) return false;
       return true;
     });
+    const hasDocs = docs.length > 0;
 
-    if (wrFilter) docs = docs.filter(d => d.workRequestId === wrFilter);
-    if (clientFilter || (clientSearchText && clientSearchText.trim() !== '')) {
-      const selectedClient = clientFilter ? DB.getById('clients', clientFilter) : null;
-      if (selectedClient && selectedClient.name === clientSearchText) {
-        docs = docs.filter(d => {
-          const wr = DB.getById('workRequests', d.workRequestId);
-          return wr && wr.clientId === clientFilter;
-        });
-      } else if (clientSearchText && clientSearchText.trim() !== '') {
-        const query = clientSearchText.trim().toLowerCase();
-        docs = docs.filter(d => {
-          const wr = DB.getById('workRequests', d.workRequestId);
-          if (!wr) return false;
-          const client = DB.getById('clients', wr.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
-      }
+    if (activeFilters && activeFilters.workRequest && activeFilters.workRequest.size > 0) {
+      docs = docs.filter(d => activeFilters.workRequest.has(d.workRequestId));
     }
-    if (empSearchText && empSearchText.trim() !== '') {
-      const query = empSearchText.trim().toLowerCase();
+    if (activeFilters && activeFilters.client && activeFilters.client.size > 0) {
+      docs = docs.filter(d => {
+        const wr = DB.getById('workRequests', d.workRequestId);
+        return wr && activeFilters.client.has(wr.clientId);
+      });
+    }
+    if (activeFilters && activeFilters.employee && activeFilters.employee.size > 0) {
       docs = docs.filter(d => {
         const u = d.uploader ? DB.getById('users', d.uploader) : null;
-        return u && u.name.toLowerCase().includes(query);
+        return u && activeFilters.employee.has(u.name);
       });
-    } else if (empFilter) {
-      docs = docs.filter(d => d.uploader === empFilter);
     }
-    if (dateFrom) {
-      const fromTime = new Date(dateFrom).getTime();
-      docs = docs.filter(d => new Date(d.uploadDate).getTime() >= fromTime);
-    }
-    if (dateTo) {
-      const toTime = new Date(dateTo);
-      toTime.setHours(23, 59, 59, 999);
-      docs = docs.filter(d => new Date(d.uploadDate).getTime() <= toTime.getTime());
+    if (activeFilters && activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
+      docs = docs.filter(d => {
+        const dStr = (d.uploadDate || d.createdAt || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
     }
 
     docs.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
 
+    const hasActiveFilters = activeFilters && Object.values(activeFilters).some(s => s && s.size > 0);
+
     if (docs.length === 0) {
-      container.appendChild(el('p', { text: 'No documents found.', class: 'empty-state' }));
+      if (hasActiveFilters && hasDocs) {
+        container.appendChild(renderFilterEmptyState(
+          'No documents match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('documents'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No documents found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 
     if (this.listViewMode === 'table') {
       this.renderTableView(container, docs);
     } else if (this.listViewMode === 'board') {
-      this.renderBoardView(container, docs);
+      this.renderBoardView(container, docs, groupBy, toolbarContainer);
     } else {
       this.renderCompactListView(container, docs);
     }
@@ -330,7 +355,7 @@ const DMS = {
     container.appendChild(table);
   },
 
-  renderBoardView(container, docs) {
+  renderBoardView(container, docs, groupBy = 'none', toolbarContainer = null) {
     const states = ['collected', 'with_documentations', 'scanned', 'in_envelope', 'stored'];
     const stateColors = {
       'collected': '#94a3b8',
@@ -341,6 +366,88 @@ const DMS = {
     };
     const canEdit = Auth.can('dms:edit');
     const self = this;
+
+    const columns = states.map(state => ({
+      key: state,
+      label: self.lifecycleLabel(state),
+      targetStatus: state,
+      color: stateColors[state] || '#cbd5e1',
+      emptyState: { variant: 'compact', title: `No ${self.lifecycleLabel(state).toLowerCase()}`, body: '' }
+    }));
+
+    const groupOptions = [
+      { key: 'workRequest', label: 'Work Request', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        return wr ? wr.title : 'No Work Request';
+      }},
+      { key: 'client', label: 'Client', getName: doc => {
+        const wr = DB.getById('workRequests', doc.workRequestId);
+        const client = wr && DB.getById('clients', wr.clientId);
+        return client ? client.name : 'No Client';
+      }},
+      { key: 'employee', label: 'Uploader', getName: doc => {
+        const u = doc.uploader ? DB.getById('users', doc.uploader) : null;
+        return u ? u.name : 'No Uploader';
+      }},
+      { key: 'status', label: 'Lifecycle', getName: doc => self.lifecycleLabel(doc.documentLifecycle || 'collected') }
+    ];
+
+    const renderCard = (doc) => {
+      const uploader = DB.getById('users', doc.uploader);
+      const badge = self.docTypeBadge(doc.document_type);
+      return buildCompactBoardCard({
+        key: 'DOC-' + (doc.id || ''),
+        title: doc.fileName,
+        description: uploader?.name || '—',
+        date: doc.uploadDate ? formatDate(doc.uploadDate) : '',
+        statusColor: stateColors[doc.documentLifecycle || 'collected'] || '#cbd5e1',
+        badges: [badge],
+        onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
+      });
+    };
+
+    const cardMenuItems = (doc) => {
+      const menu = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
+      }];
+      const nextState = self.lifecycleNext(doc.documentLifecycle || 'collected');
+      if (canEdit && nextState) {
+        menu.push({
+          label: `Move to ${self.lifecycleLabel(nextState)}`,
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
+          onClick: () => {
+            const updates = { documentLifecycle: nextState };
+            if (nextState === 'with_documentations') updates.receivedByDocumentationAt = new Date().toISOString();
+            if (nextState === 'scanned') updates.scannedAt = new Date().toISOString();
+            if (nextState === 'in_envelope') updates.storedInEnvelopeAt = new Date().toISOString();
+            if (nextState === 'stored') updates.storedAt = new Date().toISOString();
+            DB.update('documents', doc.id, updates);
+            App.handleRoute();
+          }
+        });
+      }
+      return menu;
+    };
+
+    if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
+      renderGroupedKanbanBoard({
+        container,
+        items: docs,
+        columns,
+        getColumnKey: doc => doc.documentLifecycle || 'collected',
+        renderCard,
+        cardMenuItems,
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        storageKey: 'erp_documents_grouped_collapsed'
+      });
+      return;
+    }
 
     // Normalize boardOrder within each lifecycle column.
     states.forEach(state => {
@@ -362,57 +469,13 @@ const DMS = {
       });
     });
 
-    let cardNumber = 1;
-
     KanbanBoard.render({
       container,
       items: docs,
       getColumnKey: doc => doc.documentLifecycle || 'collected',
-      columns: states.map(state => ({
-        key: state,
-        label: self.lifecycleLabel(state),
-        targetStatus: state,
-        color: stateColors[state] || '#cbd5e1',
-        emptyState: { variant: 'compact', title: `No ${self.lifecycleLabel(state).toLowerCase()}`, body: '' }
-      })),
-      renderCard(doc) {
-        const uploader = DB.getById('users', doc.uploader);
-        const badge = self.docTypeBadge(doc.document_type);
-        return buildCompactBoardCard({
-          key: 'DOC-' + cardNumber++,
-          title: doc.fileName,
-          description: uploader?.name || '—',
-          date: doc.uploadDate ? formatDate(doc.uploadDate) : '',
-          statusColor: stateColors[doc.documentLifecycle || 'collected'] || '#cbd5e1',
-          badges: [badge],
-          onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
-        });
-      },
-      cardMenuItems(doc) {
-        const menu = [{
-          label: 'View Details',
-          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-          onClick: () => { self.view = 'detail'; self.detailId = doc.id; App.handleRoute(); }
-        }];
-        const nextState = self.lifecycleNext(doc.documentLifecycle || 'collected');
-        if (canEdit && nextState) {
-          menu.push({
-            label: `Move to ${self.lifecycleLabel(nextState)}`,
-            className: 'primary',
-            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M19 12l-4-4m4 4l-4 4"/></svg>',
-            onClick: () => {
-              const updates = { documentLifecycle: nextState };
-              if (nextState === 'with_documentations') updates.receivedByDocumentationAt = new Date().toISOString();
-              if (nextState === 'scanned') updates.scannedAt = new Date().toISOString();
-              if (nextState === 'in_envelope') updates.storedInEnvelopeAt = new Date().toISOString();
-              if (nextState === 'stored') updates.storedAt = new Date().toISOString();
-              DB.update('documents', doc.id, updates);
-              App.handleRoute();
-            }
-          });
-        }
-        return menu;
-      },
+      columns,
+      renderCard,
+      cardMenuItems,
       drag: {
         enabled: true,
         canDrag: () => canEdit,
@@ -762,7 +825,7 @@ const DMS = {
       });
       commentsSection.appendChild(thread);
     } else {
-      commentsSection.appendChild(el('p', { class: 'empty-state', text: 'No comments yet.' }));
+      commentsSection.appendChild(renderEmptyState('No comments yet'));
     }
 
     if (Auth.can('dms:edit')) {
@@ -870,7 +933,7 @@ const DMS = {
         handoverSection.appendChild(recordBtn);
         handoverSection.appendChild(handoverForm);
       } else {
-        handoverSection.appendChild(el('p', { class: 'empty-state', text: 'Only authorized users can record handovers.' }));
+        handoverSection.appendChild(renderEmptyState('Only authorized users can record handovers'));
       }
       container.appendChild(handoverSection);
     }

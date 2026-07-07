@@ -59,6 +59,17 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function getInitials(name = '') {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('');
+}
+
+function groupColor(str) {
+  const palette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+  let h = 0;
+  for (let i = 0; i < (str || '').length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  return palette[Math.abs(h) % palette.length];
+}
+
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -164,6 +175,106 @@ function parseHTML(html) {
   return doc.body.firstChild || document.createTextNode('');
 }
 
+/**
+ * Build a Notion-style empty-state v2 component.
+ * @param {Object} opts
+ * @param {string} [opts.variant='zero-state'] - 'zero-state' | 'filtered-empty' | 'compact' | 'card-empty'
+ * @param {string} [opts.icon] - SVG string
+ * @param {string} opts.title
+ * @param {string} [opts.body]
+ * @param {Array<{text:string, className:string, onClick:Function}>} [opts.actions]
+ * @returns {HTMLElement}
+ */
+function renderEmptyStateV2(opts = {}) {
+  const { variant = 'zero-state', icon, title, body, actions = [], className, style } = opts;
+  const classes = ['empty-state-v2', variant, className].filter(Boolean).join(' ');
+  const wrap = el('div', { class: classes });
+  if (style) wrap.setAttribute('style', style);
+  if (icon) {
+    wrap.appendChild(el('div', { class: 'empty-state-icon', html: icon }));
+  }
+  wrap.appendChild(el('div', { class: 'empty-state-title', text: title }));
+  if (body) {
+    wrap.appendChild(el('div', { class: 'empty-state-body', text: body }));
+  }
+  if (actions.length > 0) {
+    const actionsWrap = el('div', { class: 'empty-state-actions' });
+    actions.forEach(action => {
+      let btn;
+      if (action.tag === 'a' || action.href != null) {
+        btn = el('a', { href: action.href || 'javascript:void(0)', class: action.className || 'empty-state-clear', text: action.text });
+      } else {
+        btn = el('button', { type: 'button', class: action.className || 'btn btn-primary btn-sm', text: action.text });
+      }
+      if (action.onClick) {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          action.onClick(e);
+        });
+      }
+      actionsWrap.appendChild(btn);
+    });
+    wrap.appendChild(actionsWrap);
+  }
+  return wrap;
+}
+
+/**
+ * Shared, simple wrapper for a consistent empty-state across pages, views, and cards.
+ * @param {string} title - Primary empty-state message.
+ * @param {string} [body] - Optional secondary message.
+ * @param {Object} [opts] - Overrides for renderEmptyStateV2 (variant, icon, actions, etc.).
+ * @returns {HTMLElement}
+ */
+function renderEmptyState(title, body, opts = {}) {
+  return renderEmptyStateV2({
+    title,
+    body,
+    variant: opts.variant || (body ? 'zero-state' : 'compact'),
+    ...opts
+  });
+}
+
+/**
+ * Render a consistent "no filter results" empty-state with a search icon
+ * and optional clear-filters action.
+ * @param {string} title - e.g. "No invoices match your filters"
+ * @param {string} [body]
+ * @param {Array} [actions] - renderEmptyStateV2 actions array; default none.
+ * @returns {HTMLElement}
+ */
+function renderFilterEmptyState(title, body, actions = []) {
+  return renderEmptyStateV2({
+    variant: 'filtered-empty',
+    icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>',
+    title,
+    body: body || 'Try adjusting or clearing the active filters to see more results.',
+    actions
+  });
+}
+
+/**
+ * Render a shareable module page tab navigation bar.
+ * @param {Array} tabs - [{ key, label, icon?: string, count?: number }]
+ * @param {string} currentKey - active tab key
+ * @param {Function} onTabChange - (key) => void
+ * @returns {HTMLElement}
+ */
+function renderModuleTabNav(tabs, currentKey, onTabChange) {
+  const tabNav = el('div', { class: 'module-tab-nav' });
+  tabs.forEach(tab => {
+    const btn = el('button', { class: 'module-tab-link' + (currentKey === tab.key ? ' active' : '') });
+    if (tab.icon) btn.appendChild(parseHTML(tab.icon));
+    btn.appendChild(document.createTextNode(' ' + tab.label));
+    if (tab.count !== undefined) {
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
+    }
+    btn.addEventListener('click', () => onTabChange(tab.key));
+    tabNav.appendChild(btn);
+  });
+  return tabNav;
+}
 
 /**
  * Compact board-card icons used across Operations, Billing, Disbursement,
@@ -181,7 +292,10 @@ const BoardCardIcons = {
   document: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
   billing: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15h.01M12 15h.01M16 15h.01"/></svg>',
   disbursement: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="12" cy="15" r="2"/></svg>',
-  transmittal: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="3 8 12 14 21 8"/></svg>'
+  transmittal: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="3 8 12 14 21 8"/></svg>',
+  checkCircle: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  reject: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+  clock: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
 };
 
 /**
@@ -350,7 +464,8 @@ function buildCompactBoardCard(opts) {
 const ViewIcons = {
   table: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>',
   board: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="18" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>',
-  list: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>'
+  list: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+  group: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="7" rx="1"/><line x1="11" y1="7" x2="21" y2="7"/><rect x="3" y="14" width="5" height="7" rx="1"/><line x1="11" y1="17" x2="21" y2="17"/></svg>'
 };
 
 const PaymentIcons = {
@@ -958,7 +1073,8 @@ class SidePane {
     if (opts.content) {
       if (typeof opts.content === 'string') {
         console.warn('SidePane.open received string content; rejecting for security. Pass an HTMLElement or DocumentFragment.');
-        this.body.innerHTML = '<p class="empty-state">Unable to load panel content.</p>';
+        this.body.innerHTML = '';
+        this.body.appendChild(renderEmptyState('Unable to load panel content'));
       } else {
         this.body.innerHTML = '';
         this.body.appendChild(opts.content);
@@ -1202,7 +1318,8 @@ class SidePane {
       this.onExpandCallback();
     } else if (this.fullPageRoute) {
       location.hash = this.fullPageRoute;
-      if (window.App && typeof App.handleRoute === 'function') App.handleRoute();
+      const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
+      if (appRef && typeof appRef.handleRoute === 'function') appRef.handleRoute();
     } else {
       console.warn('SidePane: full-page requested but no route or onExpand provided.');
     }
@@ -1413,7 +1530,8 @@ function openFormPanel({ icon, title, formContent, formId, actions, mode, viewCo
     if (route) {
       if (mode === PaneMode.FULL_PAGE) {
         location.hash = route;
-        if (window.App && typeof App.handleRoute === 'function') App.handleRoute();
+        const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
+        if (appRef && typeof appRef.handleRoute === 'function') appRef.handleRoute();
       } else {
         window.open(location.origin + location.pathname + route, '_blank', 'noopener,noreferrer');
       }
@@ -1509,8 +1627,9 @@ function closeFormPanelAndRoute(hash, messageConfig) {
     if (hash) {
       location.hash = hash;
     }
-    if (window.App && typeof window.App.handleRoute === 'function') {
-      window.App.handleRoute();
+    const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
+    if (appRef && typeof appRef.handleRoute === 'function') {
+      appRef.handleRoute();
     }
   }
 }
@@ -1543,4 +1662,1344 @@ function classNames(...args) {
   return classes.join(' ');
 }
 
+/**
+ * Creates a compact Jira-style two-pane filter toolbar.
+ * Used system-wide across Operations, Billing, Disbursement, Transmittal, DMS, Users, etc.
+ */
+function createJiraFilterToolbar(config) {
+  const {
+    moduleName,
+    categories,
+    activeFilters,
+    onFilterChange,
+    viewMode,
+    onViewModeChange,
+    groupByOptions,
+    currentGroupBy,
+    onGroupByChange
+  } = config;
+
+  const container = el('div', { class: 'jira-toolbar-sticky-container filters-bar' });
+  const toolbar = el('div', { class: 'jira-toolbar' });
+
+  let activeViewMode = viewMode || 'table';
+  let groupWrap = null;
+
+  // 1. View Mode Toggle
+  if (viewMode && onViewModeChange) {
+    const vmToggle = el('div', { class: 'view-mode-toggle' });
+    const modes = [
+      { key: 'table', label: 'Table', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.table : '' },
+      { key: 'board', label: 'Board', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.board : '' },
+      { key: 'list', label: 'List', icon: typeof ViewIcons !== 'undefined' ? ViewIcons.list : '' }
+    ];
+    const vmButtons = [];
+    const renderViewModeToggle = () => {
+      vmButtons.forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-mode') === activeViewMode));
+    };
+    modes.forEach(m => {
+      const btn = el('button', {
+        type: 'button',
+        html: m.icon + ' ' + m.label,
+        class: activeViewMode === m.key ? 'active' : '',
+        'data-mode': m.key
+      });
+      btn.addEventListener('click', () => {
+        activeViewMode = m.key;
+        onViewModeChange(m.key);
+        renderViewModeToggle();
+        if (groupWrap) groupWrap.classList.toggle('hidden', activeViewMode !== 'board');
+      });
+      vmButtons.push(btn);
+      vmToggle.appendChild(btn);
+    });
+    toolbar.appendChild(vmToggle);
+  }
+
+  // 2. Filter Wrap & Dropdown
+  const filterWrap = el('div', { class: 'jira-filter-wrap' });
+  const filterTrigger = el('button', {
+    type: 'button',
+    class: 'jira-filter-trigger',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="11" y2="16"/></svg> Filter'
+  });
+  const filterBadge = el('span', { class: 'jira-filter-badge hidden' });
+  filterTrigger.appendChild(filterBadge);
+  const filterDropdown = el('div', { class: 'jira-dropdown jira-filter-dropdown hidden' });
+
+  const getActiveFilterCount = () => Object.values(activeFilters).reduce((sum, set) => sum + (set ? set.size : 0), 0);
+
+  let selectedCategory = Object.keys(categories)[0];
+
+  const renderFilterValues = () => {
+    const catConfig = categories[selectedCategory];
+    if (!catConfig) return;
+    const options = typeof catConfig.getOptions === 'function' ? catConfig.getOptions() : [];
+    const list = filterDropdown.querySelector('.jira-filter-values-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const searchInput = filterDropdown.querySelector('.jira-filter-search');
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    let visibleCount = 0;
+    const allOptions = options.slice();
+
+    if (catConfig.hasDatePicker || catConfig.hasDateInput) {
+      const dateWrap = el('div', { class: 'jira-filter-select-date-wrap' });
+      let activeCustomDate = '';
+      if (activeFilters[selectedCategory]) {
+        activeFilters[selectedCategory].forEach(val => {
+          if (val.startsWith('DATE:')) activeCustomDate = val.slice(5);
+        });
+      }
+
+      const dateInput = el('input', {
+        type: 'date',
+        class: 'jira-filter-date-input',
+        value: activeCustomDate || ''
+      });
+
+      dateInput.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const val = dateInput.value;
+        if (activeFilters[selectedCategory]) {
+          Array.from(activeFilters[selectedCategory]).forEach(v => {
+            if (v.startsWith('DATE:')) activeFilters[selectedCategory].delete(v);
+          });
+          if (val) activeFilters[selectedCategory].add(`DATE:${val}`);
+        }
+        updateFilterUI();
+        if (onFilterChange) onFilterChange();
+      });
+
+      dateWrap.appendChild(dateInput);
+      list.appendChild(dateWrap);
+
+      if (!dateInput.dataset.mdpAttached && typeof MaterialDatePicker !== 'undefined' && typeof MaterialDatePicker.attach === 'function') {
+        setTimeout(() => MaterialDatePicker.attach(dateInput), 0);
+      }
+    }
+
+    if (allOptions.length === 0 && !catConfig.hasDatePicker) {
+      list.appendChild(el('div', { class: 'jira-filter-values-empty', text: 'No results' }));
+    } else {
+      allOptions.forEach(opt => {
+        const catSet = activeFilters[selectedCategory];
+        const isChecked = catSet ? catSet.has(opt.value) : false;
+        const isVisible = !query || opt.label.toLowerCase().includes(query);
+        if (isVisible) visibleCount++;
+
+        const row = el('button', {
+          type: 'button',
+          class: 'jira-filter-value-item' + (isVisible ? '' : ' hidden')
+        });
+        const checkbox = el('input', { type: 'checkbox', class: 'jira-filter-checkbox' });
+        checkbox.checked = isChecked;
+        checkbox.addEventListener('click', (e) => e.stopPropagation());
+
+        const label = el('span', { text: opt.label });
+        row.appendChild(checkbox);
+        row.appendChild(label);
+
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (catSet) {
+            if (catSet.has(opt.value)) catSet.delete(opt.value);
+            else catSet.add(opt.value);
+          }
+          updateFilterUI();
+          if (onFilterChange) onFilterChange();
+        });
+
+        list.appendChild(row);
+      });
+    }
+
+    const footer = filterDropdown.querySelector('.jira-filter-values-footer');
+    if (footer) {
+      footer.innerHTML = '';
+      const selectedInCat = activeFilters[selectedCategory] ? activeFilters[selectedCategory].size : 0;
+      const clearCatBtn = el('button', {
+        type: 'button',
+        class: 'jira-filter-clear-cat' + (selectedInCat > 0 ? '' : ' disabled'),
+        text: 'Clear'
+      });
+      if (selectedInCat > 0) {
+        clearCatBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (activeFilters[selectedCategory]) activeFilters[selectedCategory].clear();
+          updateFilterUI();
+          if (onFilterChange) onFilterChange();
+        });
+      }
+      footer.appendChild(clearCatBtn);
+      footer.appendChild(el('span', { class: 'jira-filter-footer-count', text: `${visibleCount} of ${allOptions.length}` }));
+    }
+  };
+
+  const updateFilterUI = () => {
+    const catList = filterDropdown.querySelector('.jira-filter-categories-list');
+    if (catList) {
+      const catKeys = Object.keys(categories);
+      catKeys.forEach((cat, index) => {
+        const catBtn = catList.children[index];
+        if (catBtn) {
+          catBtn.className = 'jira-filter-category' + (selectedCategory === cat ? ' active' : '');
+          catBtn.textContent = categories[cat].label;
+          const count = activeFilters[cat] ? activeFilters[cat].size : 0;
+          if (count > 0) {
+            catBtn.appendChild(el('span', { class: 'cat-count', text: String(count) }));
+          }
+        }
+      });
+    }
+
+    const clearAllBtn = filterDropdown.querySelector('.jira-filter-clear-all');
+    if (clearAllBtn) {
+      const totalActive = getActiveFilterCount();
+      clearAllBtn.className = 'jira-filter-clear-all' + (totalActive > 0 ? '' : ' disabled');
+    }
+
+    const count = getActiveFilterCount();
+    filterBadge.textContent = String(count);
+    filterBadge.classList.toggle('hidden', count === 0);
+    clearFiltersBtn.classList.toggle('hidden', count === 0);
+
+    renderFilterValues();
+  };
+
+  const renderFilterDropdown = () => {
+    filterDropdown.innerHTML = '';
+    const body = el('div', { class: 'jira-filter-body' });
+
+    // Left Pane: Categories
+    const leftPane = el('div', { class: 'jira-filter-categories' });
+    const catList = el('div', { class: 'jira-filter-categories-list' });
+
+    Object.keys(categories).forEach(cat => {
+      const catBtn = el('button', {
+        type: 'button',
+        class: 'jira-filter-category' + (selectedCategory === cat ? ' active' : '')
+      });
+      catBtn.appendChild(document.createTextNode(categories[cat].label));
+      const count = activeFilters[cat] ? activeFilters[cat].size : 0;
+      if (count > 0) {
+        catBtn.appendChild(el('span', { class: 'cat-count', text: String(count) }));
+      }
+      catBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedCategory = cat;
+        renderFilterDropdown();
+      });
+      catList.appendChild(catBtn);
+    });
+    leftPane.appendChild(catList);
+
+    const catFooter = el('div', { class: 'jira-filter-categories-footer' });
+    const totalActive = getActiveFilterCount();
+    const clearAllBtn = el('button', {
+      type: 'button',
+      class: 'jira-filter-clear-all' + (totalActive > 0 ? '' : ' disabled'),
+      text: 'Clear all'
+    });
+    clearAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (getActiveFilterCount() === 0) return;
+      Object.keys(activeFilters).forEach(cat => activeFilters[cat] && activeFilters[cat].clear());
+      if (moduleName) App.clearSavedFilters(moduleName);
+      updateFilterUI();
+      if (onFilterChange) onFilterChange();
+    });
+    catFooter.appendChild(clearAllBtn);
+    leftPane.appendChild(catFooter);
+
+    // Right Pane: Values
+    const rightPane = el('div', { class: 'jira-filter-values' });
+    const valuesHeader = el('div', { class: 'jira-filter-values-header' });
+    const searchIcon = el('span', {
+      class: 'jira-filter-search-icon',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    });
+    const searchInput = el('input', {
+      type: 'text',
+      class: 'jira-filter-search',
+      placeholder: `Search ${(categories[selectedCategory] ? categories[selectedCategory].label : '').toLowerCase()}`
+    });
+    searchInput.addEventListener('input', () => renderFilterValues());
+    valuesHeader.appendChild(searchIcon);
+    valuesHeader.appendChild(searchInput);
+    rightPane.appendChild(valuesHeader);
+
+    const valuesList = el('div', { class: 'jira-filter-values-list' });
+    rightPane.appendChild(valuesList);
+    const valuesFooter = el('div', { class: 'jira-filter-values-footer' });
+    rightPane.appendChild(valuesFooter);
+
+    body.appendChild(leftPane);
+    body.appendChild(rightPane);
+    filterDropdown.appendChild(body);
+
+    const globalFooter = el('div', { class: 'jira-filter-global-footer' });
+    const shortcutHint = el('div', {
+      class: 'jira-filter-shortcut-hint',
+      html: 'Press <kbd>Shift</kbd> + <kbd>F</kbd> to open and close'
+    });
+    globalFooter.appendChild(shortcutHint);
+    filterDropdown.appendChild(globalFooter);
+
+    renderFilterValues();
+  };
+
+  filterTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = filterDropdown.classList.contains('hidden');
+    if (isHidden) {
+      filterDropdown.classList.remove('hidden');
+      renderFilterDropdown();
+      const searchInput = filterDropdown.querySelector('.jira-filter-search');
+      if (searchInput) searchInput.focus();
+    } else {
+      filterDropdown.classList.add('hidden');
+    }
+  });
+
+  filterWrap.appendChild(filterTrigger);
+  filterWrap.appendChild(filterDropdown);
+
+  const clearFiltersBtn = el('button', { type: 'button', class: 'jira-clear-filters hidden', text: 'Clear filters' });
+  clearFiltersBtn.addEventListener('click', () => {
+    Object.keys(activeFilters).forEach(cat => activeFilters[cat] && activeFilters[cat].clear());
+    if (moduleName) App.clearSavedFilters(moduleName);
+    updateFilterUI();
+    if (onFilterChange) onFilterChange();
+  });
+
+  toolbar.appendChild(filterWrap);
+  toolbar.appendChild(clearFiltersBtn);
+
+  // Grouping Dropdown
+  if (groupByOptions && onGroupByChange) {
+    let activeGroupKey = currentGroupBy || 'none';
+    groupWrap = el('div', { class: 'jira-group-wrap' });
+    groupWrap.classList.toggle('hidden', !!(viewMode && activeViewMode !== 'board'));
+    const groupIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
+    const groupCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    const groupTrigger = el('button', { type: 'button', class: 'jira-group-trigger' });
+    const groupOptionsAll = [
+      { key: 'none', label: 'None' },
+      ...groupByOptions.filter(opt => opt.key !== 'none')
+    ];
+
+    const renderGroupTrigger = () => {
+      const selected = groupOptionsAll.find(opt => opt.key === activeGroupKey);
+      const label = (activeGroupKey && activeGroupKey !== 'none' && selected)
+        ? 'Group: ' + selected.label
+        : 'Group';
+      groupTrigger.classList.toggle('active', !!(activeGroupKey && activeGroupKey !== 'none'));
+      groupTrigger.innerHTML = groupIconSvg + ' <span>' + escapeHtml(label) + '</span> ' + groupCaretSvg;
+    };
+    renderGroupTrigger();
+
+    const groupDropdown = el('div', { class: 'jira-dropdown jira-group-dropdown hidden' });
+    const renderGroupDropdown = () => {
+      groupDropdown.innerHTML = '';
+      groupOptionsAll.forEach(opt => {
+        const active = activeGroupKey === opt.key;
+        const btn = el('button', {
+          type: 'button',
+          class: 'jira-group-option' + (active ? ' active' : ''),
+          html: escapeHtml(opt.label) + (active ? ' <span class="checkmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '')
+        });
+        btn.addEventListener('click', () => {
+          groupDropdown.classList.add('hidden');
+          activeGroupKey = opt.key;
+          onGroupByChange(opt.key);
+          renderGroupTrigger();
+          renderGroupDropdown();
+        });
+        groupDropdown.appendChild(btn);
+      });
+    };
+    renderGroupDropdown();
+    groupTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      filterDropdown.classList.add('hidden');
+      groupDropdown.classList.toggle('hidden');
+    });
+    groupWrap.appendChild(groupTrigger);
+    groupWrap.appendChild(groupDropdown);
+    toolbar.appendChild(groupWrap);
+  }
+
+  // Attach global Shift+F shortcut and outside-click listeners once.
+  attachJiraGlobalShortcuts();
+
+  updateFilterUI();
+  container.appendChild(toolbar);
+  return container;
+}
+
+/**
+ * Attach the global Shift+F filter shortcut and outside-click dropdown closer once.
+ * Called automatically by createJiraFilterToolbar() and can be called manually by
+ * modules that build their own Jira-style toolbar (e.g. Operations).
+ */
+function attachJiraGlobalShortcuts() {
+  if (!window._jiraGlobalShortcutListenerAttached) {
+    window._jiraGlobalShortcutListenerAttached = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag) || document.activeElement?.isContentEditable;
+        const isFilterSearch = document.activeElement?.classList?.contains('jira-filter-search');
+        if (isInput && !isFilterSearch) return;
+
+        const visibleFilterWrap = document.querySelector('.jira-filter-wrap');
+        if (visibleFilterWrap) {
+          e.preventDefault();
+          const trigger = visibleFilterWrap.querySelector('.jira-filter-trigger');
+          if (trigger) trigger.click();
+        }
+      }
+    });
+  }
+
+  if (!window._jiraGlobalClickListenerAttached) {
+    window._jiraGlobalClickListenerAttached = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target || !e.target.isConnected) return;
+      if (
+        e.target.closest('.jira-group-wrap') ||
+        e.target.closest('.jira-filter-wrap') ||
+        e.target.closest('.mdp-overlay') ||
+        e.target.closest('.mdp-dialog') ||
+        e.target.closest('.mdp-wrapper') ||
+        e.target.closest('.mdp-container')
+      ) {
+        return;
+      }
+      document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+    });
+  }
+}
+
+/**
+ * Render a Jira-style grouped (swimlane) board view.
+ * Mirrors the DOM produced by Workflow.refreshBoard() for grouped boards so
+ * any module that uses createJiraFilterToolbar() can opt into the same
+ * collapsible sticky swimlane layout without duplicating the markup.
+ *
+ * @param {Object} config
+ * @param {HTMLElement} config.container
+ * @param {Array} config.items
+ * @param {Array} config.columns - same column objects passed to KanbanBoard.render()
+ * @param {Function} [config.getColumnKey] - optional top-level column resolver
+ * @param {Function} config.renderCard - (item, column) => HTMLElement
+ * @param {Function} [config.cardMenuItems] - (item) => Array menu items
+ * @param {HTMLElement} [config.toolbarContainer] - receives grouped-board-active class
+ * @param {string} config.groupBy - active group key
+ * @param {Array} config.groupOptions - { key, label, getName(item), specialLast?, getGroupMeta(name)? }
+ * @param {string} [config.storageKey='erp_grouped_collapsed'] - sessionStorage key prefix
+ */
+function renderGroupedKanbanBoard(config = {}) {
+  const {
+    container,
+    items = [],
+    columns = [],
+    getColumnKey,
+    renderCard,
+    cardMenuItems,
+    toolbarContainer,
+    groupBy,
+    groupOptions = [],
+    storageKey = 'erp_grouped_collapsed',
+    drag = null
+  } = config;
+
+  if (!container || !columns.length) return;
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  toolbarContainer?.classList.add('grouped-board-active');
+
+  if (items.length === 0) {
+    container.appendChild(renderEmptyStateV2({
+      variant: 'zero-state',
+      icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+      title: 'No items found',
+      body: ''
+    }));
+    return;
+  }
+
+  const groupOpt = groupOptions.find(o => o.key === groupBy);
+  if (!groupOpt || typeof groupOpt.getName !== 'function') return;
+
+  const belongsToColumn = (item, column) => {
+    if (typeof getColumnKey === 'function') return getColumnKey(item) === column.key;
+    if (Array.isArray(column.statuses)) return column.statuses.includes(item.status);
+    if (typeof column.filter === 'function') return column.filter(item);
+    return item.status === (column.targetStatus || column.key);
+  };
+
+  const groupMap = new Map();
+  items.forEach(item => {
+    const name = groupOpt.getName(item);
+    if (!groupMap.has(name)) groupMap.set(name, []);
+    groupMap.get(name).push(item);
+  });
+
+  const specialLast = groupOpt.specialLast || '';
+  const groupNames = Array.from(groupMap.keys()).sort((a, b) => {
+    if (a === specialLast) return 1;
+    if (b === specialLast) return -1;
+    return a.localeCompare(b);
+  });
+
+  const fullStorageKey = `${storageKey}_${location.hash.replace(/\//g, '_') || 'default'}`;
+  const getCollapsedSet = () => {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(fullStorageKey) || '[]');
+      return new Set(Array.isArray(raw) ? raw : []);
+    } catch (e) { return new Set(); }
+  };
+  const saveCollapsedSet = (set) => {
+    try { sessionStorage.setItem(fullStorageKey, JSON.stringify([...set])); } catch (e) { /* ignore */ }
+  };
+
+  const hashString = (str) => {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+    return h;
+  };
+  const avatarPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+  const groupColor = (str) => avatarPalette[Math.abs(hashString(str)) % avatarPalette.length];
+  const getInitials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('');
+
+  const groupedBoard = el('div', { class: 'board-grouped-rows' });
+
+  groupNames.forEach(name => {
+    const groupItems = groupMap.get(name);
+    const sectionKey = `group-${groupBy}-${name}`;
+    const collapsedSet = getCollapsedSet();
+    const isCollapsed = collapsedSet.has(sectionKey);
+
+    const section = el('div', { class: 'board-group-section' + (isCollapsed ? ' collapsed' : '') });
+    section.style.setProperty('--phase-count', String(columns.length));
+
+    const titleRow = el('div', { class: 'board-group-title-row' });
+    const titleCell = el('div', { class: 'board-group-title' });
+    const chevronBtn = el('button', {
+      type: 'button',
+      class: 'board-group-collapse',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    });
+    const avatar = el('div', { class: 'board-group-avatar' });
+
+    let displayName = name;
+    if (typeof groupOpt.getGroupMeta === 'function') {
+      const meta = groupOpt.getGroupMeta(name) || {};
+      displayName = meta.displayName || name;
+      if (meta.avatarUrl) {
+        avatar.style.backgroundImage = "url('" + meta.avatarUrl + "')";
+        avatar.style.backgroundSize = 'cover';
+      } else {
+        avatar.textContent = getInitials(displayName);
+      }
+      if (meta.color) avatar.style.backgroundColor = meta.color;
+    } else {
+      avatar.textContent = getInitials(displayName);
+    }
+    if (!avatar.style.backgroundColor) {
+      avatar.style.backgroundColor = groupColor(displayName);
+      avatar.style.color = '#fff';
+    }
+
+    const nameWrap = el('div', { class: 'board-group-name-wrap' });
+    const nameLine = el('div', { class: 'board-group-name' });
+    nameLine.appendChild(document.createTextNode(displayName + ' '));
+    nameLine.appendChild(el('span', {
+      class: 'board-group-count',
+      text: '(' + groupItems.length + ' item' + (groupItems.length === 1 ? '' : 's') + ')'
+    }));
+    nameWrap.appendChild(nameLine);
+
+    titleCell.appendChild(chevronBtn);
+    titleCell.appendChild(avatar);
+    titleCell.appendChild(nameWrap);
+    titleRow.appendChild(titleCell);
+
+    const toggleSection = () => {
+      const set = getCollapsedSet();
+      const currently = set.has(sectionKey);
+      if (currently) set.delete(sectionKey);
+      else set.add(sectionKey);
+      saveCollapsedSet(set);
+      section.classList.toggle('collapsed', !currently);
+    };
+    titleCell.addEventListener('click', toggleSection);
+    chevronBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSection(); });
+
+    const phaseRow = el('div', { class: 'board-group-phase-row' });
+    phaseRow.style.setProperty('--phase-count', String(columns.length));
+    columns.forEach(column => {
+      const count = groupItems.filter(item => belongsToColumn(item, column)).length;
+      const cell = el('div', { class: 'board-group-phase-header' });
+      cell.style.setProperty('--phase-color', column.color);
+      cell.appendChild(el('div', { class: 'phase-header-top' }));
+      const headerBody = el('div', { class: 'phase-header-body' });
+      headerBody.appendChild(el('span', { class: 'board-column-dot', html: buildColumnStatusIcon({ key: column.key, color: column.color, icon: column.icon || 'phase' }) }));
+      headerBody.appendChild(el('span', { class: 'phase-header-label', text: column.label.toUpperCase() }));
+      headerBody.appendChild(el('span', { class: 'phase-header-count', text: count + ' OF ' + groupItems.length }));
+      cell.appendChild(headerBody);
+      phaseRow.appendChild(cell);
+    });
+
+    const stickyWrap = el('div', { class: 'board-group-sticky-wrap' });
+    stickyWrap.appendChild(titleRow);
+    stickyWrap.appendChild(phaseRow);
+    section.appendChild(stickyWrap);
+
+    const body = el('div', { class: 'board-group-body' });
+    body.style.setProperty('--phase-count', String(columns.length));
+    columns.forEach(column => {
+      const col = el('div', { class: 'board-group-column', 'data-target-status': column.targetStatus || column.key });
+      col.style.setProperty('--column-phase-color', column.color);
+      const colItems = groupItems.filter(item => belongsToColumn(item, column));
+      if (colItems.length === 0) {
+        col.appendChild(renderEmptyStateV2({ variant: 'compact', title: 'No ' + column.label.toLowerCase(), body: '' }));
+      } else {
+        colItems.forEach(item => {
+          const card = renderCard(item, column);
+          if (card && item?.id) card.dataset.itemId = item.id;
+          const items = cardMenuItems ? cardMenuItems(item) : [];
+          if (items.length > 0 && typeof KanbanBoard !== 'undefined') {
+            KanbanBoard.attachCardMenu(card, items);
+          }
+          col.appendChild(card);
+        });
+      }
+      body.appendChild(col);
+    });
+    section.appendChild(body);
+    groupedBoard.appendChild(section);
+  });
+
+  container.appendChild(groupedBoard);
+
+  // Attach the same drag-and-drop mechanics available on ungrouped KanbanBoard.render()
+  // so grouped swimlanes can reorder within a column and move across columns/groups.
+  if (drag && typeof KanbanBoard !== 'undefined' && typeof KanbanBoard.attachDrag === 'function') {
+    KanbanBoard.attachDrag({
+      root: groupedBoard,
+      items,
+      drag,
+      columnSelector: '.board-group-column',
+      cardContainerSelector: '.board-group-column',
+      cardSelector: '.board-card-v2.compact'
+    });
+  }
+}
+
+/**
+ * Shared archive page layout (pill-filtered categories with hover actions).
+ * Modeled on the Admin Pending Approvals page.
+ */
+const ArchivePage = {
+  icons: {
+    accomplished: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    cancelled: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    rejected: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+    client: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    status: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/></svg>',
+    date: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    amount: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    view: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+    archive: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
+    unarchive: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><path d="M12 12v6"/><path d="M8 14l4-4 4 4"/></svg>',
+    restore: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+    delete: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
+  },
+
+  /**
+   * Render a full archive page.
+   * @param {string} opts.module - unique module key (e.g. 'workflow', 'billing').
+   * @param {Array} opts.categories - category definitions with { key, label, items, renderItem }.
+   * @param {string} [opts.emptyText] - message shown when archive is empty.
+   * @returns {HTMLElement}
+   */
+  render({ module, categoryLabels = {}, categories, emptyText = 'Archive is empty.', bulkActions }) {
+    const wrapper = el('div');
+    const storageKey = 'erp_archive_category_' + (typeof module === 'string' ? module : (module?.constructor?.name || 'module'));
+    let selected = sessionStorage.getItem(storageKey) || 'all';
+
+    const categoryList = Array.isArray(categories)
+      ? categories
+      : Object.entries(categories || {}).map(([key, items]) => ({
+          key,
+          label: categoryLabels[key] || key,
+          items: items || [],
+          renderItem: (item, idx, selectable) => ArchivePage.renderSimpleItem(item, idx, selectable)
+        }));
+
+    const total = categoryList.reduce((sum, cat) => sum + (cat.items || []).length, 0);
+    if (total === 0) {
+      wrapper.appendChild(renderEmptyState(emptyText, null, { variant: 'zero-state' }));
+      return wrapper;
+    }
+
+    const hasBulkActions = Array.isArray(bulkActions) || typeof bulkActions === 'function';
+    const selectedIds = new Set();
+    const rowCheckboxes = [];
+    let bulkBar = null, bulkCount = null, bulkActionsContainer = null, bulkClose = null;
+
+    if (hasBulkActions) {
+      bulkBar = el('div', { class: 'jira-backlog-bulk-bar archive-page-bulk-bar hidden' });
+      bulkCount = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
+      bulkBar.appendChild(bulkCount);
+      bulkBar.appendChild(el('span', { class: 'jira-backlog-bulk-divider', text: '|' }));
+      bulkActionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
+      bulkBar.appendChild(bulkActionsContainer);
+      bulkBar.appendChild(el('span', { class: 'jira-backlog-bulk-divider', text: '|' }));
+      bulkClose = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
+      bulkBar.appendChild(bulkClose);
+      wrapper.appendChild(bulkBar);
+    }
+
+    const updateBulkBar = () => {
+      if (!bulkBar) return;
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0) {
+        bulkBar.classList.add('hidden');
+        return;
+      }
+      bulkCount.textContent = `${ids.length} selected`;
+      bulkActionsContainer.innerHTML = '';
+      const actionsList = typeof bulkActions === 'function' ? bulkActions(ids) : bulkActions;
+      (actionsList || []).forEach(act => {
+        const btn = el('button', {
+          class: act.className || 'btn btn-secondary btn-sm',
+          text: act.text
+        });
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          act.onClick(ids);
+        });
+        bulkActionsContainer.appendChild(btn);
+      });
+      bulkBar.classList.remove('hidden');
+    };
+
+    if (bulkClose) {
+      bulkClose.addEventListener('click', () => {
+        selectedIds.clear();
+        rowCheckboxes.forEach(cb => { cb.checked = false; });
+        updateBulkBar();
+      });
+    }
+
+    const selectCategory = (key) => {
+      sessionStorage.setItem(storageKey, key);
+      selected = key;
+      App.handleRoute();
+    };
+
+    wrapper.appendChild(this.renderPills(categoryList, total, selected, selectCategory));
+
+    categoryList.forEach(cat => {
+      const items = cat.items || [];
+      if (items.length === 0) return;
+      if (selected !== 'all' && selected !== cat.key) return;
+      wrapper.appendChild(this.renderCategoryCard(cat, hasBulkActions, selectedIds, rowCheckboxes, updateBulkBar));
+    });
+
+    return wrapper;
+  },
+
+  renderSimpleItem(item, idx, selectable) {
+    const iconKey = item.icon || (item.category === 'cancelled' ? 'cancelled' : item.category === 'rejected' ? 'rejected' : 'accomplished');
+    const metaNodes = (item.meta || []).map(m => ArchivePage.metaNode(m.icon || '', m.text, m.className || ''));
+    const actionButtons = (item.actions || []).map(a => ({
+      label: a.label,
+      iconHtml: a.icon || a.iconHtml || '',
+      className: a.className || '',
+      onClick: a.onClick
+    }));
+    return ArchivePage.renderItemRow({
+      id: item.id,
+      iconHtml: item.iconHtml || ArchivePage.icons[iconKey],
+      keyText: item.keyText,
+      title: item.title,
+      description: item.description,
+      metaNodes,
+      actions: actionButtons,
+      selectable
+    });
+  },
+
+  renderPills(categories, total, selected, onSelect) {
+    const wrap = el('div', { class: 'approval-filter-pills' });
+
+    const add = (key, label, count, isActive, disabled) => {
+      const btn = el('button', {
+        class: 'approval-filter-pill' + (isActive ? ' active' : '') + (disabled ? ' disabled' : ''),
+        title: label,
+        disabled: disabled ? true : false
+      });
+      btn.appendChild(document.createTextNode(label));
+      if (count !== undefined) {
+        btn.appendChild(document.createTextNode(' '));
+        btn.appendChild(el('span', { class: 'approval-filter-pill-count', text: String(count) }));
+      }
+      if (!disabled) {
+        btn.addEventListener('click', () => onSelect(key));
+      }
+      wrap.appendChild(btn);
+    };
+
+    add('all', 'All', total, selected === 'all', false);
+    categories.forEach(cat => {
+      const count = (cat.items || []).length;
+      if (count === 0) return;
+      add(cat.key, cat.label, count, selected === cat.key, false);
+    });
+
+    return wrap;
+  },
+
+  renderCategoryCard(category, hasBulkActions, selectedIds, rowCheckboxes, updateBulkBar) {
+    const card = el('div', { class: 'approval-category-card' });
+
+    const header = el('div', { class: 'approval-category-header' });
+    const title = el('div', { class: 'approval-category-title' });
+    title.appendChild(el('span', { text: category.label }));
+    const countText = category.items.length + (category.items.length === 1 ? ' item' : ' items');
+    title.appendChild(el('span', { class: 'count', text: countText }));
+    header.appendChild(title);
+
+    let selectAllCheckbox = null;
+    if (hasBulkActions) {
+      selectAllCheckbox = el('input', {
+        type: 'checkbox',
+        class: 'archive-category-select-all',
+        title: 'Select all'
+      });
+      header.appendChild(selectAllCheckbox);
+    }
+
+    card.appendChild(header);
+
+    const list = el('div', { class: 'approval-items-list' });
+    const categoryCheckboxes = [];
+
+    category.items.forEach((item, idx) => {
+      const row = category.renderItem(item, idx, hasBulkActions);
+      if (hasBulkActions && row.dataset && row.dataset.id) {
+        const chk = row.querySelector('.archive-row-checkbox');
+        if (chk) {
+          categoryCheckboxes.push(chk);
+          rowCheckboxes.push(chk);
+          chk.addEventListener('change', () => {
+            if (chk.checked) selectedIds.add(chk.dataset.id);
+            else selectedIds.delete(chk.dataset.id);
+            updateBulkBar();
+          });
+        }
+      }
+      list.appendChild(row);
+    });
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', () => {
+        categoryCheckboxes.forEach(chk => {
+          chk.checked = selectAllCheckbox.checked;
+          if (chk.checked) selectedIds.add(chk.dataset.id);
+          else selectedIds.delete(chk.dataset.id);
+        });
+        updateBulkBar();
+      });
+    }
+
+    card.appendChild(list);
+
+    return card;
+  },
+
+  /**
+   * Build a single archive row with hover-reveal actions.
+   * @param {Object} opts
+   * @param {string} opts.iconHtml - SVG string for the status icon.
+   * @param {string} [opts.keyText] - small key label.
+   * @param {string} opts.title - primary row title.
+   * @param {string} [opts.description] - secondary text.
+   * @param {Array<HTMLElement>} [opts.metaNodes] - nodes appended to the meta row.
+   * @param {Array<{label, onClick, className, iconHtml}>} [opts.actions] - action buttons.
+   * @returns {HTMLElement}
+   */
+  renderItemRow({ id, iconHtml, keyText, title, description, metaNodes = [], actions = [], selectable }) {
+    const row = el('div', { class: 'approval-item' });
+    if (id) row.dataset.id = id;
+
+    if (selectable && id) {
+      const checkbox = el('input', {
+        type: 'checkbox',
+        class: 'archive-row-checkbox',
+        'data-id': id,
+        title: 'Select'
+      });
+      const checkboxWrap = el('div', { class: 'archive-row-checkbox-wrap' });
+      checkboxWrap.appendChild(checkbox);
+      row.appendChild(checkboxWrap);
+    }
+
+    const icon = el('div', { class: 'approval-item-icon' });
+    icon.innerHTML = iconHtml || '';
+    row.appendChild(icon);
+
+    const body = el('div', { class: 'approval-item-body' });
+    if (keyText) body.appendChild(el('div', { class: 'approval-item-key', text: keyText }));
+    body.appendChild(el('div', { class: 'approval-item-title', text: title }));
+    if (description) body.appendChild(el('div', { class: 'approval-item-desc', text: description }));
+
+    const meta = el('div', { class: 'approval-item-meta' });
+    metaNodes.forEach(n => meta.appendChild(n));
+    if (meta.children.length) body.appendChild(meta);
+
+    row.appendChild(body);
+
+    if (actions.length) {
+      const act = el('div', { class: 'approval-item-actions' });
+      actions.forEach(a => {
+        const btn = el('button', {
+          class: 'btn btn-sm ' + (a.className || 'btn-secondary'),
+          title: a.label,
+          type: 'button'
+        });
+        btn.innerHTML = (a.iconHtml || '') + ' ' + escapeHtml(a.label);
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          a.onClick();
+        });
+        act.appendChild(btn);
+      });
+      row.appendChild(act);
+    }
+
+    return row;
+  },
+
+  metaNode(html, text, className = '') {
+    const span = el('span', { class: className });
+    span.innerHTML = (html || '') + '<span>' + escapeHtml(text) + '</span>';
+    return span;
+  },
+
+  dateNode(date) {
+    const node = this.metaNode(BoardCardIcons.calendar, formatDate(date), 'approval-item-date');
+    return node;
+  },
+
+  amountNode(amount) {
+    return el('span', { class: 'approval-item-amount', text: formatPHP(amount) });
+  },
+
+  badgeNode(text, opts = {}) {
+    return el('span', { class: 'submitter-badge ' + (opts.className || ''), text });
+  }
+};
+
+const JiraBacklogList = {
+  render(options = {}) {
+    const {
+      title,
+      subtitle,
+      items = [],
+      emptyText = 'No templates found',
+      headerActions = [],
+      rowActions = () => [],
+      rowIdPrefix = 'TPL',
+      bulkActions,
+      countLabel = 'template',
+      columns,
+      selectable = true
+    } = options;
+
+    const hasColumns = Array.isArray(columns) && columns.length > 0;
+    const showCheckboxes = selectable !== false;
+    const hasRowActions = items.some(item => {
+      const acts = rowActions(item);
+      return Array.isArray(acts) && acts.length > 0;
+    });
+
+    const container = el('div', { class: 'jira-backlog-container' + (hasColumns ? ' jira-backlog-container--columns' : '') });
+
+    // Header
+    const header = el('div', { class: 'jira-backlog-header' });
+
+    // Left side info (Select All checkbox replaces chevron)
+    const headerLeft = el('div', { class: 'jira-backlog-header-left', style: 'cursor: default;' });
+
+    const selectAllCheckbox = showCheckboxes
+      ? el('input', {
+          type: 'checkbox',
+          class: 'jira-backlog-header-checkbox',
+          style: 'margin-right: 8px; cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
+        })
+      : null;
+    if (selectAllCheckbox) headerLeft.appendChild(selectAllCheckbox);
+
+    const titleText = el('div', { class: 'jira-backlog-title-text' });
+    titleText.appendChild(el('span', { class: 'jira-backlog-title', text: title }));
+    if (subtitle) {
+      titleText.appendChild(el('span', { class: 'jira-backlog-subtitle', text: subtitle }));
+    }
+    headerLeft.appendChild(titleText);
+
+    const countText = `${items.length} ${items.length === 1 ? countLabel : countLabel + 's'}`;
+    const countBadge = el('span', { class: 'jira-backlog-count-badge', text: countText });
+    headerLeft.appendChild(countBadge);
+    header.appendChild(headerLeft);
+
+    // Right side actions
+    const headerRight = el('div', { class: 'jira-backlog-header-right' });
+    headerActions.forEach(act => {
+      const btn = el('button', {
+        class: act.className || 'btn btn-secondary btn-sm',
+        text: act.text
+      });
+      if (act.onClick) btn.addEventListener('click', act.onClick);
+      headerRight.appendChild(btn);
+    });
+    header.appendChild(headerRight);
+
+    container.appendChild(header);
+
+    // Optional inline toolbar (filters, etc.) placed between header and list
+    if (options.toolbar) {
+      const toolbarWrap = el('div', { class: 'jira-backlog-toolbar' });
+      toolbarWrap.appendChild(options.toolbar);
+      container.appendChild(toolbarWrap);
+    }
+
+    // Optional column header (table-like alignment).
+    // The lead spacers line up with the checkbox/icon/key/title area so the
+    // first data column header sits directly above the first row data column.
+    if (hasColumns) {
+      const colHeader = el('div', { class: 'jira-backlog-columns-header' });
+      // Fixed lead widths so the header and body columns line up exactly.
+      const titleColWidth = options.titleColumnWidth || '1fr';
+      const actionsCol = hasRowActions ? 'minmax(120px, max-content)' : '';
+      const leadCols = `28px 24px 75px ${titleColWidth}`;
+      const metaCols = columns.map(c => c.width || '1fr').join(' ');
+      colHeader.style.gridTemplateColumns = `${leadCols} ${metaCols}${actionsCol ? ' ' + actionsCol : ''}`;
+
+      // Lead-column placeholders: checkbox, icon, key, title.
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
+      colHeader.appendChild(el('div', { class: 'jira-backlog-col-header jira-backlog-col-header--spacer' }));
+
+      columns.forEach(col => {
+        const h = el('div', { class: 'jira-backlog-col-header', text: col.label || '' });
+        if (col.align) h.style.textAlign = col.align;
+        colHeader.appendChild(h);
+      });
+
+      // Actions column header placed at the rightmost edge.
+      if (hasRowActions) {
+        colHeader.appendChild(el('div', { class: 'jira-backlog-col-header', text: 'Actions' }));
+      }
+
+      container.appendChild(colHeader);
+    }
+
+    // Body (Permanent, not collapsible)
+    const body = el('div', { class: 'jira-backlog-body' });
+
+    if (items.length === 0) {
+      body.appendChild(renderEmptyState(emptyText, null, { variant: 'compact' }));
+      container.appendChild(body);
+      return container;
+    }
+
+    // Floating Bulk Action Bar (Jira backlog style)
+    let bulkBar = null, countInfo = null, actionsContainer = null, closeBtn = null;
+    if (showCheckboxes) {
+      bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
+      
+      countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
+      bulkBar.appendChild(countInfo);
+      
+      const divider1 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider1);
+      
+      actionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
+      bulkBar.appendChild(actionsContainer);
+      
+      const divider2 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider2);
+      
+      closeBtn = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
+      bulkBar.appendChild(closeBtn);
+      container.appendChild(bulkBar);
+    }
+
+    const list = el('div', { class: 'jira-backlog-list' });
+
+    const rows = [];
+    const checkBoxes = [];
+
+    const defaultBulkActions = (ids) => [
+      {
+        text: 'Delete',
+        className: 'btn btn-danger btn-sm',
+        onClick: (selectedIds) => {
+          const label = selectedIds.length === 1 ? 'template' : 'templates';
+          Workflow.showConfirm('Delete Templates', `Are you sure you want to delete these ${selectedIds.length} ${label}?`, () => {
+            selectedIds.forEach(id => {
+              if (rowIdPrefix === 'RT') DB.delete('retainerTemplates', id);
+              else if (rowIdPrefix === 'BL') DB.delete('billingTemplates', id);
+              else if (rowIdPrefix === 'DT') DB.delete('disbursementTemplates', id);
+            });
+            App.handleRoute();
+          }, 'danger');
+        }
+      }
+    ];
+
+    const currentBulkActions = bulkActions || defaultBulkActions;
+
+    const updateSelection = () => {
+      const selectedIds = [];
+      checkBoxes.forEach((chk, idx) => {
+        if (chk.checked) {
+          selectedIds.push(chk.dataset.id);
+          rows[idx].classList.add('selected');
+        } else {
+          rows[idx].classList.remove('selected');
+        }
+      });
+
+      if (bulkBar) {
+        if (selectedIds.length > 0) {
+          countInfo.textContent = `${selectedIds.length} selected`;
+          
+          actionsContainer.innerHTML = '';
+          const actionsList = typeof currentBulkActions === 'function' ? currentBulkActions(selectedIds) : currentBulkActions;
+          actionsList.forEach(act => {
+            const btn = el('button', {
+              class: act.className || 'btn btn-secondary btn-sm',
+              text: act.text
+            });
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              act.onClick(selectedIds);
+            });
+            actionsContainer.appendChild(btn);
+          });
+          
+          bulkBar.classList.remove('hidden');
+        } else {
+          bulkBar.classList.add('hidden');
+        }
+      }
+
+      if (selectAllCheckbox) {
+        const allChecked = checkBoxes.length > 0 && checkBoxes.every(c => c.checked);
+        const someChecked = checkBoxes.some(c => c.checked);
+        selectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = someChecked && !allChecked;
+      }
+    };
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', () => {
+        checkBoxes.forEach(c => {
+          c.checked = selectAllCheckbox.checked;
+        });
+        updateSelection();
+      });
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        checkBoxes.forEach(c => {
+          c.checked = false;
+        });
+        updateSelection();
+      });
+    }
+
+    items.forEach((item, index) => {
+      const rowClasses = ['jira-backlog-row'];
+      if (hasColumns) rowClasses.push('jira-backlog-row--columns');
+      if (hasColumns && options.titleColumnWidth) rowClasses.push('jira-backlog-row--fixed-title');
+      const row = el('div', { class: rowClasses.join(' '), 'data-item-id': item.id });
+      rows.push(row);
+
+      // Checkbox container (shows on hover, stays visible when checked)
+      if (showCheckboxes) {
+        const checkboxWrap = el('div', { class: 'jira-backlog-row-checkbox-wrap' });
+        const chk = el('input', {
+          type: 'checkbox',
+          class: 'jira-backlog-row-checkbox',
+          'data-id': item.id
+        });
+        checkBoxes.push(chk);
+
+        chk.addEventListener('change', () => {
+          updateSelection();
+        });
+        checkboxWrap.addEventListener('click', (e) => {
+          if (e.target !== chk) {
+            e.stopPropagation();
+            chk.checked = !chk.checked;
+            chk.dispatchEvent(new Event('change'));
+          }
+        });
+        checkboxWrap.appendChild(chk);
+        row.appendChild(checkboxWrap);
+      } else {
+        // Keep alignment by reserving the checkbox lead column when hidden.
+        const checkboxSpacer = el('div', { class: 'jira-backlog-row-checkbox-wrap jira-backlog-row-checkbox-wrap--spacer' });
+        row.appendChild(checkboxSpacer);
+      }
+
+      // Icon (Jira backlog icon)
+      const iconWrap = el('div', { class: 'jira-backlog-row-icon', html: item.iconHtml || `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` });
+      row.appendChild(iconWrap);
+
+      // Unique Key/ID
+      const keyIndex = String(index + 1).padStart(2, '0');
+      const keyVal = item.keyText || `${rowIdPrefix}-${keyIndex}`;
+      const keyNode = el('div', { class: 'jira-backlog-row-key', text: keyVal });
+      row.appendChild(keyNode);
+
+      // Primary Title
+      const titleNode = el('div', { class: 'jira-backlog-row-title', text: item.name });
+      row.appendChild(titleNode);
+
+      // Column-mode grid sizing (lead columns + metadata columns)
+      if (hasColumns) {
+        const titleColWidth = options.titleColumnWidth || '1fr';
+        const actionsCol = hasRowActions ? 'minmax(120px, max-content)' : '';
+        const leadCols = `28px 24px 75px ${titleColWidth}`;
+        const metaCols = columns.map(c => c.width || '1fr').join(' ');
+        row.style.gridTemplateColumns = `${leadCols} ${metaCols}${actionsCol ? ' ' + actionsCol : ''}`;
+      }
+
+      // Metadata / Tags
+      const tagsNode = el('div', { class: 'jira-backlog-row-tags' + (hasColumns ? ' jira-backlog-row-tags--columns' : '') });
+      if (hasColumns) {
+        tagsNode.style.gridTemplateColumns = columns.map(c => c.width || '1fr').join(' ');
+        tagsNode.style.gridColumn = `5 / span ${columns.length}`;
+      }
+      const tagList = item.tags || [];
+      tagList.forEach(tag => {
+        const typeCls = tag.type ? ` jira-backlog-tag-${tag.type}` : '';
+        let valCls = '';
+        if (tag.type === 'schedule' && tag.value) {
+          valCls = ` jira-backlog-tag-schedule-${tag.value.toLowerCase()}`;
+        } else if (tag.type === 'fund' && tag.value) {
+          valCls = ` jira-backlog-tag-fund-${tag.value.toLowerCase().replace(/\s+/g, '')}`;
+        }
+
+        const tNode = el('div', { class: 'jira-backlog-tag' + typeCls + valCls + (tag.className ? ' ' + tag.className : '') });
+
+        let iconHtml = '';
+        if (tag.type === 'client') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+        } else if (tag.type === 'schedule') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+        } else if (tag.type === 'category') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+        } else if (tag.type === 'fund') {
+          iconHtml = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px; vertical-align: middle;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
+        } else if (tag.type === 'amount') {
+          iconHtml = '<span style="font-weight:700; margin-right:2px; font-size:0.75rem;">₱</span>';
+        }
+
+        let textVal = tag.text;
+        if (tag.type === 'amount' && textVal.startsWith('₱')) {
+          textVal = textVal.substring(1).trim();
+        }
+
+        if (tag.isHtml) {
+          tNode.innerHTML = textVal;
+        } else if (iconHtml) {
+          tNode.innerHTML = iconHtml + '<span>' + escapeHtml(textVal) + '</span>';
+        } else {
+          tNode.textContent = textVal;
+        }
+
+        if (tag.style) tNode.setAttribute('style', tag.style);
+        tagsNode.appendChild(tNode);
+      });
+      if (hasColumns) {
+        for (let i = tagList.length; i < columns.length; i++) {
+          tagsNode.appendChild(el('div', { class: 'jira-backlog-tag-placeholder' }));
+        }
+      }
+
+      row.appendChild(tagsNode);
+
+      // Actions column pinned to the rightmost edge of the row.
+      if (hasColumns && hasRowActions) {
+        const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
+        actionsNode.style.gridColumn = `-1 / -1`;
+        const rowActionsList = rowActions(item);
+        if (Array.isArray(rowActionsList) && rowActionsList.length > 0) {
+          rowActionsList.forEach(act => {
+            const btn = el('button', {
+              class: act.className || 'btn btn-secondary btn-xs',
+              html: act.html || act.text
+            });
+            if (act.title) btn.setAttribute('title', act.title);
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              act.onClick(item);
+            });
+            actionsNode.appendChild(btn);
+          });
+        }
+        row.appendChild(actionsNode);
+      }
+
+      // Optional secondary line (for dense pages like Active Clients)
+      if (item.secondary) {
+        const secondaryNode = el('div', { class: 'jira-backlog-row-secondary', text: item.secondary });
+        if (hasColumns) secondaryNode.style.gridColumn = '1 / -1';
+        row.appendChild(secondaryNode);
+      }
+
+      // Actions on the far right (only if NOT in columns mode)
+      if (!hasColumns) {
+        const rowActionsList = rowActions(item);
+        if (rowActionsList && rowActionsList.length > 0) {
+          const actionsNode = el('div', { class: 'jira-backlog-row-actions' });
+          rowActionsList.forEach(act => {
+            const btn = el('button', {
+              class: act.className || 'btn btn-secondary btn-xs',
+              html: act.html || act.text
+            });
+            if (act.title) btn.setAttribute('title', act.title);
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              act.onClick(item);
+            });
+            actionsNode.appendChild(btn);
+          });
+          row.appendChild(actionsNode);
+        }
+      }
+
+      list.appendChild(row);
+    });
+
+    body.appendChild(list);
+    container.appendChild(body);
+    return container;
+  }
+};
 

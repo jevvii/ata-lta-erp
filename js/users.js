@@ -11,27 +11,35 @@ const Users = {
     status: '',
     date: ''
   },
+  pendingCategory: sessionStorage.getItem('admin_pending_category') || 'all',
 
   render() {
-    const container = el('div', { class: 'page' });
+    const container = el('div', { class: 'page admin-tab-page' });
 
+    // Keep the main "Admin" page header but drop the nested breadcrumb
     const titleBar = el('div', { class: 'page-title-bar-v2' });
-    const h1 = el('h1', { id: 'admin-breadcrumb-h1', class: 'breadcrumb-h1' });
+    const h1 = el('h1', { class: 'page-title-h1', text: 'Admin' });
     titleBar.appendChild(h1);
     container.appendChild(titleBar);
-    this.updateBreadcrumb(h1);
 
-    const isStaffOrManager = Auth.user.role !== 'Admin';
+    const canManageUsers = Auth.can('users:view');
 
-    if (isStaffOrManager) {
-      // Initialize view state dynamically to prevent view state bleed-through
-      if (this.lastUserId !== Auth.user.id) {
-        this.lastUserId = Auth.user.id;
+    // Initialize view state dynamically to prevent view state bleed-through
+    if (this.lastUserId !== Auth.user.id) {
+      this.lastUserId = Auth.user.id;
+      if (canManageUsers) {
+        this.view = 'users';
+      } else {
         const defaultToRequests = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
         this.view = defaultToRequests ? 'myRequests' : 'myPending';
-        this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
       }
+      this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
+    }
 
+    if (canManageUsers) {
+      const validAdminViews = ['users', 'audit', 'pending'];
+      if (!validAdminViews.includes(this.view)) this.view = 'users';
+    } else {
       const showRequestsTab = (Auth.user.role === 'Operations' || Auth.user.role === 'Manager');
       if (this.view === 'myRequests' && !showRequestsTab) {
         this.view = 'myPending';
@@ -39,90 +47,12 @@ const Users = {
       if (!['myPending', 'myRequests'].includes(this.view)) {
         this.view = showRequestsTab ? 'myRequests' : 'myPending';
       }
+    }
 
-      // Redesigned staff tab bar: text-link style tab bar
-      const tabs = el('div', { class: 'module-tab-nav' });
-      tabs.style.marginBottom = '12px'; // align layout nicely below breadcrumb
+    // Internal Admin tabs use the same module-tab-link style as other pages
+    container.appendChild(this.renderTabNav());
 
-      // Calculate counts for badges (pre-filtering) - only display unresolved/pending items
-      const pendingItems = PendingChanges.getPendingForUser(Auth.user.id);
-      const totalPending = pendingItems.length;
-
-      const requestsItems = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id && r.status === 'pending');
-      const totalRequests = requestsItems.length;
-
-      // 1. Pending submissions tab
-      const isPendingActive = this.view === 'myPending';
-      const myPendingTab = el('button', {
-        class: 'module-tab-link' + (isPendingActive ? ' active' : ''),
-        type: 'button'
-      });
-      // Inline document icon
-      const docIcon = el('span', {
-        class: 'tab-icon',
-        style: 'display: inline-flex; align-items: center;',
-        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'
-      });
-      myPendingTab.appendChild(docIcon);
-      myPendingTab.appendChild(document.createTextNode(' My Pending Submissions'));
-      
-      // Count badge
-      const pendingBadge = el('span', {
-        class: 'circular-count-badge',
-        text: String(totalPending)
-      });
-      myPendingTab.appendChild(pendingBadge);
-      
-      myPendingTab.addEventListener('click', () => {
-        this.view = 'myPending';
-        this.editingId = null;
-        this.pendingDetailId = null;
-        this.filters.category = '';
-        this.filters.status = '';
-        this.filters.dateFrom = '';
-        this.filters.dateTo = '';
-        App.handleRoute();
-      });
-      tabs.appendChild(myPendingTab);
-
-      // 2. Requests tab (only for Operations and Manager)
-      if (showRequestsTab) {
-        const isRequestsActive = this.view === 'myRequests';
-        const myRequestsTab = el('button', {
-          class: 'module-tab-link' + (isRequestsActive ? ' active' : ''),
-          type: 'button'
-        });
-        // Inline paper plane icon
-        const planeIcon = el('span', {
-          class: 'tab-icon',
-          style: 'display: inline-flex; align-items: center;',
-          html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>'
-        });
-        myRequestsTab.appendChild(planeIcon);
-        myRequestsTab.appendChild(document.createTextNode(' My Requests'));
-        
-        // Count badge
-        const requestsBadge = el('span', {
-          class: 'circular-count-badge',
-          text: String(totalRequests)
-        });
-        myRequestsTab.appendChild(requestsBadge);
-
-        myRequestsTab.addEventListener('click', () => {
-          this.view = 'myRequests';
-          this.editingId = null;
-          this.pendingDetailId = null;
-          this.filters.category = '';
-          this.filters.status = '';
-          this.filters.dateFrom = '';
-          this.filters.dateTo = '';
-          App.handleRoute();
-        });
-        tabs.appendChild(myRequestsTab);
-      }
-
-      container.appendChild(tabs);
-
+    if (!canManageUsers) {
       // --- Filters Bar (matches other module filters) ---
       const filters = el('div', { class: 'filters-bar' });
 
@@ -210,101 +140,98 @@ const Users = {
       dateTo.addEventListener('change', refreshFilters);
 
       container.appendChild(filters);
+    }
 
-      // Render content
+    if (this.view === 'users' && canManageUsers) {
+      container.appendChild(this.renderUsersSection());
+    } else if (this.view === 'audit' && canManageUsers) {
+      container.appendChild(this.renderAuditSection());
+    } else if (this.view === 'pending' && canManageUsers) {
+      container.appendChild(this.renderPendingSection());
+    } else if (this.view === 'myPending' && !canManageUsers) {
+      container.appendChild(this.renderMyPendingSection());
+    } else if (this.view === 'myRequests' && !canManageUsers) {
+      container.appendChild(this.renderMyRequestsSection());
+    } else if (!canManageUsers) {
       if (this.view === 'myRequests') {
         container.appendChild(this.renderMyRequestsSection());
       } else {
         container.appendChild(this.renderMyPendingSection());
-      }
-
-    } else {
-      // Admin user
-      if (this.lastUserId !== Auth.user.id) {
-        this.lastUserId = Auth.user.id;
-        this.view = 'users';
-      }
-      if (!['users', 'audit', 'pending'].includes(this.view)) {
-        this.view = 'users';
-      }
-
-      const tabs = el('div', { class: 'admin-tabs' });
-      tabs.style.marginBottom = '20px';
-
-      const usersTab = el('button', {
-        class: 'btn ' + (this.view === 'users' ? 'btn-primary' : 'btn-secondary'),
-        text: 'Users'
-      });
-      usersTab.addEventListener('click', () => { this.view = 'users'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(usersTab);
-
-      const auditTab = el('button', {
-        class: 'btn ' + (this.view === 'audit' ? 'btn-primary' : 'btn-secondary'),
-        text: 'Audit Log'
-      });
-      auditTab.addEventListener('click', () => { this.view = 'audit'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(auditTab);
-
-      const entity = Auth.activeEntity;
-      const pendingDisbursements = DB.getWhere('disbursements', d => d.entity === entity && (d.status === 'Submitted' || d.status === 'Under Review'));
-      let pendingChanges = PendingChanges.getAllPending();
-      pendingChanges = pendingChanges.filter(pc => PendingChanges.canApproveChange(pc));
-      const totalPending = pendingDisbursements.length + pendingChanges.length;
-
-      const pendingTab = el('button', {
-        class: 'btn ' + (this.view === 'pending' ? 'btn-primary' : 'btn-secondary'),
-        text: 'Pending Approvals'
-      });
-      if (totalPending > 0) {
-        const tabBadge = el('span', { class: 'nav-badge', style: 'margin-left:6px;', text: totalPending > 99 ? '99+' : String(totalPending) });
-        pendingTab.appendChild(tabBadge);
-      }
-      pendingTab.addEventListener('click', () => { this.view = 'pending'; this.editingId = null; this.pendingDetailId = null; App.handleRoute(); });
-      tabs.appendChild(pendingTab);
-
-      container.appendChild(tabs);
-
-      if (this.view === 'audit') {
-        container.appendChild(this.renderAuditSection());
-      } else if (this.view === 'pending') {
-        container.appendChild(this.renderPendingSection());
-      } else {
-        container.appendChild(this.renderUsersSection());
       }
     }
 
     return container;
   },
 
+  renderTabNav() {
+    const canManageUsers = Auth.can('users:view');
+
+    const changeTab = (key) => {
+      this.view = key;
+      this.editingId = null;
+      this.pendingDetailId = null;
+      App.handleRoute();
+    };
+
+    if (canManageUsers) {
+      const userCount = (DB.getAll('users') || []).length;
+      const auditCount = (DB.getAll('auditLog') || []).length;
+      const pendingCount = (() => {
+        if (typeof this.getPendingCategories !== 'function') return 0;
+        const categories = this.getPendingCategories();
+        return Object.values(categories).reduce((sum, arr) => sum + arr.length, 0);
+      })();
+
+      const tabs = [
+        { key: 'users', label: 'Users', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', count: userCount },
+        { key: 'audit', label: 'Audit Log', icon: BoardCardIcons.document, count: auditCount },
+        { key: 'pending', label: 'Pending Approvals', icon: BoardCardIcons.checkCircle, count: pendingCount }
+      ];
+      return renderModuleTabNav(tabs, this.view, changeTab);
+    }
+
+    const myPendingCount = (PendingChanges.getPendingForUser(Auth.user.id) || []).length;
+    const myRequestsCount = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id).length;
+    const tabs = [
+      { key: 'myPending', label: 'My Pending Submissions', icon: BoardCardIcons.checklist, count: myPendingCount },
+      { key: 'myRequests', label: 'My Requests', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>', count: myRequestsCount }
+    ];
+    return renderModuleTabNav(tabs, this.view, changeTab);
+  },
+
   updateBreadcrumb(h1, subpage) {
     if (!h1) h1 = document.getElementById('admin-breadcrumb-h1');
     if (!h1) return;
     this.clearNode(h1);
-    
     const isAdmin = Auth.user.role === 'Admin';
-    
-    if (this.pendingDetailId || subpage) {
+    const sectionLabel = (() => {
+      if (this.pendingDetailId) return 'Review Pending Change';
+      if (subpage) return subpage;
+      switch (this.view) {
+        case 'audit': return 'Audit Log';
+        case 'pending': return 'Pending Approvals';
+        case 'myPending': return 'My Pending Submissions';
+        case 'myRequests': return 'My Requests';
+        default: return isAdmin ? 'Admin' : 'My Submissions';
+      }
+    })();
+
+    if (this.view !== 'users' || this.pendingDetailId || subpage) {
       const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: isAdmin ? 'Admin' : 'My Submissions' });
       baseLink.addEventListener('click', () => {
         this.pendingDetailId = null;
         this.editingId = null;
         if (isAdmin) {
+          this.view = 'users';
           this.showUserList();
         }
         App.handleRoute();
       });
       h1.appendChild(baseLink);
       h1.appendChild(el('span', { class: 'breadcrumb-sep', text: ' / ' }));
-      
-      let label = 'Detail';
-      if (this.pendingDetailId) {
-        label = 'Review Pending Change';
-      } else if (subpage) {
-        label = subpage;
-      }
-      h1.appendChild(document.createTextNode(label));
+      h1.appendChild(document.createTextNode(sectionLabel));
     } else {
-      h1.appendChild(document.createTextNode(isAdmin ? 'Admin' : 'My Submissions'));
+      h1.appendChild(document.createTextNode(sectionLabel));
     }
   },
 
@@ -314,23 +241,7 @@ const Users = {
   // Users Section
   // ============================================================
   renderUsersSection() {
-    const wrapper = el('div');
-
-    // Reset Demo Data section
-    const resetSection = el('div', { class: 'reset-section' });
-    resetSection.appendChild(el('h3', { text: 'Reset Demo Data' }));
-    resetSection.appendChild(el('p', { text: 'This will reset all data to the original demo state. This action cannot be undone.' }));
-    const resetBtn = el('button', { class: 'btn btn-danger', text: 'Reset Demo Data' });
-    resetBtn.addEventListener('click', () => this.handleReset(resetSection));
-    resetSection.appendChild(resetBtn);
-    wrapper.appendChild(resetSection);
-
-    // Actions bar
-    const actions = el('div', { class: 'actions-bar' });
-    const addBtn = el('button', { class: 'btn btn-primary', text: 'Add User' });
-    addBtn.addEventListener('click', () => this.showUserForm());
-    actions.appendChild(addBtn);
-    wrapper.appendChild(actions);
+    const wrapper = el('div', { class: 'page-content-section' });
 
     // List container
     const listContainer = el('div', { class: 'list-container' });
@@ -340,6 +251,16 @@ const Users = {
     // Form container
     const formContainer = el('div', { class: 'form-container hidden' });
     wrapper.appendChild(formContainer);
+
+    // Reset Demo Data section (kept subtle at the bottom of the page)
+    const resetSection = el('div', { class: 'reset-section reset-section--subtle' });
+    const resetTitle = el('h3', { text: 'Reset Demo Data' });
+    resetSection.appendChild(resetTitle);
+    resetSection.appendChild(el('p', { text: 'This will reset all data to the original demo state. This action cannot be undone.' }));
+    const resetBtn = el('button', { class: 'btn btn-outline-danger btn-sm', text: 'Reset Demo Data' });
+    resetBtn.addEventListener('click', () => this.handleReset(resetSection));
+    resetSection.appendChild(resetBtn);
+    wrapper.appendChild(resetSection);
 
     return wrapper;
   },
@@ -362,29 +283,61 @@ const Users = {
       return;
     }
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Name', 'Email', 'Role', 'Entities', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
+    const roleClassMap = {
+      'Admin': 'jira-backlog-tag-role-admin',
+      'Manager': 'jira-backlog-tag-role-manager',
+      'Accounting': 'jira-backlog-tag-role-accounting',
+      'Operations': 'jira-backlog-tag-role-operations',
+      'Documentation': 'jira-backlog-tag-role-documentation',
+      'HR': 'jira-backlog-tag-role-hr'
+    };
 
-    const tbody = el('tbody');
-    users.forEach(u => {
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: u.name }));
-      tr.appendChild(el('td', { text: u.email }));
-      tr.appendChild(el('td')).appendChild(this.roleBadge(u.role));
-      tr.appendChild(el('td', { text: (u.entities || []).join(', ') }));
-      const tdAct = el('td');
-      const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-      editBtn.addEventListener('click', () => this.showUserForm(u.id));
-      tdAct.appendChild(editBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+    const items = users.map((u, idx) => ({
+      id: u.id,
+      keyText: 'USR-' + String(idx + 1).padStart(2, '0'),
+      name: u.name,
+      iconHtml: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+      tags: [
+        { text: u.role, type: 'role', className: roleClassMap[u.role] || '' },
+        { text: u.email, type: 'category' },
+        { text: (u.entities || []).join(', ') || 'No entities', type: 'client' }
+      ]
+    }));
+
+    const backlog = JiraBacklogList.render({
+      title: 'Team Members',
+      subtitle: 'users, roles, and entity access',
+      items,
+      emptyText: 'No users found',
+      rowIdPrefix: 'USR',
+      countLabel: 'user',
+      bulkActions: [],
+      columns: [
+        { label: 'Role', width: '110px' },
+        { label: 'Email', width: '220px' },
+        { label: 'Entities', width: '180px' }
+      ],
+      headerActions: [
+        {
+          text: '+ Add User',
+          className: 'btn btn-primary btn-sm',
+          onClick: () => this.showUserForm()
+        }
+      ],
+      rowActions: (item) => {
+        const user = users.find(u => u.id === item.id);
+        if (!user) return [];
+        return [
+          {
+            text: 'Edit',
+            className: 'btn btn-secondary btn-xs',
+            onClick: () => this.showUserForm(user.id)
+          }
+        ];
+      }
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(backlog);
   },
 
   roleBadge(role) {
@@ -590,146 +543,702 @@ const Users = {
     const wrapper = el('div');
     const canViewAllAudit = Auth.can('audit:view_all');
 
-    // Filters
-    const filters = el('div', { class: 'audit-filters' });
-
-    const userFilter = el('select', { class: 'form-select' });
-    userFilter.appendChild(el('option', { value: '', text: 'All Users' }));
-    const users = DB.getAll('users');
-    users.forEach(u => {
-      const opt = el('option', { value: u.id, text: u.name });
-      userFilter.appendChild(opt);
-    });
-    if (!canViewAllAudit) {
-      userFilter.value = Auth.user.id;
-      userFilter.disabled = true;
-    }
-    filters.appendChild(wrapFilterFieldWithClear(userFilter));
-
-    // Client Filter
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getAll('clients').forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions });
-    filters.appendChild(clientFilter);
-
-    filters.appendChild(el('span', { text: 'From:', style: 'font-size: 0.875rem; color: var(--color-text-muted);' }));
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-
-    filters.appendChild(el('span', { text: 'To:', style: 'font-size: 0.875rem; color: var(--color-text-muted);' }));
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const clearBtn = el('button', { class: 'btn btn-secondary', text: 'Clear' });
-    clearBtn.addEventListener('click', () => {
-      if (canViewAllAudit) userFilter.value = '';
-      clientFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      this.refreshAuditLog(tableContainer, canViewAllAudit ? '' : Auth.user.id, '', '', '', '');
-    });
-    filters.appendChild(clearBtn);
-
-    wrapper.appendChild(filters);
-
-    const tableContainer = el('div');
-    wrapper.appendChild(tableContainer);
-
-    const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, userFilter.value, clientFilter.value, clientFilter.searchText, dateFrom.value, dateTo.value);
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      user: new Set(),
+      client: new Set(),
+      date: new Set()
     };
 
-    userFilter.addEventListener('change', triggerRefresh);
-    clientFilter.addEventListener('change', triggerRefresh);
-    clientFilter.addEventListener('input', triggerRefresh);
-    dateFrom.addEventListener('change', triggerRefresh);
-    dateTo.addEventListener('change', triggerRefresh);
+    if (!canViewAllAudit) {
+      const u = Auth.user?.name;
+      if (u) activeFilters.user.add(u);
+    }
 
-    this.refreshAuditLog(tableContainer, canViewAllAudit ? '' : Auth.user.id, '', '', '', '');
+    const savedFilters = App.restoreFilters('audit');
+    if (savedFilters && canViewAllAudit) {
+      if (Array.isArray(savedFilters.user)) savedFilters.user.forEach(v => activeFilters.user.add(v));
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
+    }
 
+    const saveCurrentFilters = () => {
+      App.saveFilters('audit', {
+        user: Array.from(activeFilters.user),
+        client: Array.from(activeFilters.client),
+        date: Array.from(activeFilters.date)
+      });
+    };
+
+    const getUserOptions = () => DB.getAll('users').map(u => ({ value: u.name, label: u.name }));
+    const getClientOptions = () => DB.getAll('clients').map(c => ({ value: c.name, label: c.name }));
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      user: { label: 'User', getOptions: getUserOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'audit',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        triggerRefresh();
+      }
+    });
+
+    const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
+    stickyContainer.appendChild(toolbarContainer);
+    wrapper.appendChild(stickyContainer);
+
+    const content = el('div', { class: 'page-content-section' });
+    const tableContainer = el('div');
+    content.appendChild(tableContainer);
+    wrapper.appendChild(content);
+
+    const triggerRefresh = () => {
+      this.refreshAuditLog(tableContainer, activeFilters);
+    };
+
+    triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, userId, clientId, clientSearchText, dateFrom, dateTo) {
+  refreshAuditLog(container, activeFilters) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
+    const hasLogs = logs.length > 0;
 
-    if (userId) {
-      logs = logs.filter(l => l.userId === userId);
+    if (activeFilters && activeFilters.user && activeFilters.user.size > 0) {
+      logs = logs.filter(l => activeFilters.user.has(l.userName || (DB.getById('users', l.userId)?.name)));
     }
-
-    if (clientId || (clientSearchText && clientSearchText.trim() !== '')) {
-      const selectedClient = clientId ? DB.getById('clients', clientId) : null;
-      if (selectedClient && selectedClient.name === clientSearchText) {
-        logs = logs.filter(l => {
-          if (!l.details) return false;
-          const detailsLower = l.details.toLowerCase();
-          return detailsLower.includes(clientId.toLowerCase()) ||
-                 detailsLower.includes(selectedClient.name.toLowerCase());
-        });
-      } else if (clientSearchText && clientSearchText.trim() !== '') {
-        const query = clientSearchText.trim().toLowerCase();
-        const matchingClients = DB.getAll('clients').filter(c =>
-          c.id.toLowerCase().includes(query) || c.name.toLowerCase().includes(query)
-        );
-        logs = logs.filter(l => {
-          if (!l.details) return false;
-          const detailsLower = l.details.toLowerCase();
-          if (detailsLower.includes(query)) return true;
-          return matchingClients.some(c =>
-            detailsLower.includes(c.id.toLowerCase()) || detailsLower.includes(c.name.toLowerCase())
-          );
-        });
-      }
+    if (activeFilters && activeFilters.client && activeFilters.client.size > 0) {
+      logs = logs.filter(l => {
+        if (!l.details) return false;
+        const detailsLower = l.details.toLowerCase();
+        return Array.from(activeFilters.client).some(clientName => detailsLower.includes(clientName.toLowerCase()));
+      });
     }
+    if (activeFilters && activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
 
-    if (dateFrom) {
-      const from = new Date(dateFrom + 'T00:00:00');
-      logs = logs.filter(l => new Date(l.timestamp) >= from);
-    }
-
-    if (dateTo) {
-      const to = new Date(dateTo + 'T23:59:59');
-      logs = logs.filter(l => new Date(l.timestamp) <= to);
+      logs = logs.filter(l => {
+        const dStr = (l.timestamp || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
     }
 
     // Sort newest first
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+    const hasActiveFilters = activeFilters && Object.values(activeFilters).some(s => s && s.size > 0);
+
     if (logs.length === 0) {
-      container.appendChild(el('p', { text: 'No audit log entries found.', class: 'empty-state' }));
+      if (hasActiveFilters && hasLogs) {
+        container.appendChild(renderFilterEmptyState(
+          'No audit log entries match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('audit'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No audit log entries found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Timestamp', 'User', 'Action', 'Entity', 'Details'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
+    const actionClassMap = {
+      // Specific audit action phrases first so they win over generic partials.
+      login: 'jira-backlog-tag-action-login',
+      logout: 'jira-backlog-tag-action-logout',
+      'work request created': 'jira-backlog-tag-action-create',
+      'task completed': 'jira-backlog-tag-action-approve',
+      'invoice sent': 'jira-backlog-tag-action-info',
+      'disbursement released': 'jira-backlog-tag-action-release',
+      'document stored': 'jira-backlog-tag-action-info',
+      'disbursement submitted': 'jira-backlog-tag-action-warning',
+      // Generic partials
+      create: 'jira-backlog-tag-action-create',
+      add: 'jira-backlog-tag-action-create',
+      update: 'jira-backlog-tag-action-update',
+      edit: 'jira-backlog-tag-action-update',
+      delete: 'jira-backlog-tag-action-delete',
+      remove: 'jira-backlog-tag-action-delete',
+      archive: 'jira-backlog-tag-action-archive',
+      approve: 'jira-backlog-tag-action-approve',
+      complete: 'jira-backlog-tag-action-approve',
+      reject: 'jira-backlog-tag-action-reject',
+      submit: 'jira-backlog-tag-action-warning',
+      release: 'jira-backlog-tag-action-release',
+      sent: 'jira-backlog-tag-action-info',
+      stored: 'jira-backlog-tag-action-info'
+    };
 
-    const tbody = el('tbody');
-    logs.forEach(l => {
+    const getActionClass = (action) => {
+      if (!action) return '';
+      // Normalize underscores to spaces so phrase mappings like
+      // 'work request created' match 'WORK_REQUEST_CREATED'.
+      const normalized = action.toLowerCase().replace(/_/g, ' ');
+      const key = Object.keys(actionClassMap).find(k => normalized.includes(k));
+      return key ? actionClassMap[key] : '';
+    };
+
+    const items = logs.map((l, idx) => {
       const user = DB.getById('users', l.userId);
-      const tr = el('tr');
+      const userName = user ? user.name : (l.userName || l.userId);
+      const initials = userName.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
+      const avatarStyle = user?.avatarUrl ? `background-image:url('${escapeHtml(user.avatarUrl)}'); background-size:cover; background-position:center;` : '';
+      const avatarContent = user?.avatarUrl ? '' : escapeHtml(initials);
+      const avatarIcon = `<div class="backlog-avatar${user?.avatarUrl ? ' backlog-avatar--image' : ''}" style="${avatarStyle}">${avatarContent}</div>`;
       const ts = new Date(l.timestamp);
-      tr.appendChild(el('td', { text: formatDate(l.timestamp) + ' ' + ts.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) }));
-      tr.appendChild(el('td', { text: user ? user.name : l.userId }));
-      tr.appendChild(el('td', { text: l.action }));
-      tr.appendChild(el('td')).appendChild(el('span', { class: 'badge badge-' + (l.entity === 'ATA' ? 'ata' : 'lta'), text: l.entity }));
-      tr.appendChild(el('td', { text: l.details || '—' }));
-      tbody.appendChild(tr);
+
+      return {
+        id: l.id || idx,
+        keyText: 'AUD-' + String(idx + 1).padStart(2, '0'),
+        name: l.details || '—',
+        iconHtml: avatarIcon,
+        tags: [
+          { text: l.action || 'Activity', type: 'action', className: 'jira-backlog-tag-action ' + getActionClass(l.action) },
+          { text: l.entity, type: 'entity', className: 'badge badge-' + (l.entity === 'ATA' ? 'ata' : 'lta') },
+          { text: userName, type: 'client' },
+          { text: formatDate(l.timestamp) + ' ' + ts.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }), type: 'schedule' }
+        ]
+      };
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    const backlog = JiraBacklogList.render({
+      title: 'Audit Log',
+      subtitle: 'system activity and changes',
+      items,
+      emptyText: 'No audit log entries found',
+      rowIdPrefix: 'AUD',
+      countLabel: 'entry',
+      bulkActions: [],
+      selectable: false,
+      columns: [
+        { label: 'Action', width: '220px' },
+        { label: 'Entity', width: '60px' },
+        { label: 'User', width: '140px' },
+        { label: 'Timestamp', width: '160px' }
+      ]
+    });
+
+    container.appendChild(backlog);
   },
 
   // ============================================================
-  // Pending Approvals Section (merged: PendingChanges + Disbursement Submissions)
+  // Pending Approvals Section (reference-image category layout)
   // ============================================================
+
+  getPendingCategories() {
+    const entity = Auth.activeEntity;
+    const allPendingChanges = PendingChanges.getAllPending().filter(pc => PendingChanges.canApproveChange(pc));
+
+    const workRequestCreation = [];
+    const wrPhaseRouting = [];
+    const billingToRelease = [];
+    const disbursementToRelease = [];
+    const transmittalSent = [];
+
+    allPendingChanges.forEach(pc => {
+      const isNew = !pc.parentRecordId;
+      const data = pc.proposedData || {};
+      const submitter = DB.getById('users', pc.submittedBy);
+
+      if (pc.table === 'workRequests') {
+        workRequestCreation.push({
+          type: 'change',
+          kind: 'workRequestCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: data.title || 'Work Request',
+          description: data.description || (isNew ? 'New work request awaiting approval' : 'Work request edit awaiting approval'),
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'workRequestPhaseRouting') {
+        const wr = DB.getById('workRequests', pc.parentRecordId);
+        wrPhaseRouting.push({
+          type: 'change',
+          kind: 'wrPhaseRouting',
+          id: pc.id,
+          recordId: pc.parentRecordId,
+          title: wr ? wr.title : 'Work Request',
+          description: `Request to route to ${data.status || 'next phase'}`,
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: wr?.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'invoices') {
+        billingToRelease.push({
+          type: 'change',
+          kind: 'billingInvoiceCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Invoice: ${data.invoiceNumber || data.id || '—'}`,
+          description: isNew ? 'New invoice awaiting approval' : 'Invoice edit awaiting approval',
+          amount: data.total || null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'disbursements') {
+        disbursementToRelease.push({
+          type: 'change',
+          kind: 'disbursementCreation',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Expense: ${data.category || '—'}`,
+          description: isNew ? 'New expense awaiting approval' : 'Expense edit awaiting approval',
+          amount: data.amount || null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      } else if (pc.table === 'transmittals') {
+        transmittalSent.push({
+          type: 'change',
+          kind: 'transmittalSent',
+          id: pc.id,
+          recordId: data.id || pc.parentRecordId,
+          title: `Transmittal: ${data.trackingNumber || data.transmittalNumber || data.id || '—'}`,
+          description: isNew ? 'New transmittal awaiting approval' : 'Transmittal edit awaiting approval',
+          amount: null,
+          submittedBy: pc.submittedBy,
+          submitter,
+          submittedAt: pc.submittedAt,
+          entity: data.entity || entity,
+          raw: pc
+        });
+      }
+    });
+
+    // Disbursement submissions awaiting approval
+    DB.getWhere('disbursements', d => d.entity === entity && ['Submitted', 'Under Review'].includes(d.status)).forEach(d => {
+      const submitter = DB.getById('users', d.requestedBy);
+      disbursementToRelease.push({
+        type: 'record',
+        kind: 'disbursementCreation',
+        id: d.id,
+        recordId: d.id,
+        title: `Expense: ${d.category || '—'}`,
+        description: d.description || 'Expense submission awaiting approval',
+        amount: d.amount || null,
+        submittedBy: d.requestedBy,
+        submitter,
+        submittedAt: d.submittedAt || d.createdAt,
+        entity: d.entity,
+        raw: d
+      });
+    });
+
+    // Release-pending disbursements
+    DB.getWhere('disbursements', d => d.entity === entity && d.status === 'Release Pending Approval').forEach(d => {
+      const submitter = DB.getById('users', d.releaseRequestedBy || d.requestedBy);
+      disbursementToRelease.push({
+        type: 'record',
+        kind: 'disbursementRelease',
+        id: d.id,
+        recordId: d.id,
+        title: `Expense: ${d.category || '—'}`,
+        description: 'Disbursement release pending approval',
+        amount: d.amount || null,
+        submittedBy: d.releaseRequestedBy || d.requestedBy,
+        submitter,
+        submittedAt: d.releaseRequestedAt || d.submittedAt || d.createdAt,
+        entity: d.entity,
+        raw: d
+      });
+    });
+
+    // Release-pending invoices (billing release)
+    DB.getWhere('invoices', inv => inv.entity === entity && inv.status === 'Release Pending Approval').forEach(inv => {
+      const submitter = DB.getById('users', inv.releaseRequestedBy || inv.createdBy);
+      billingToRelease.push({
+        type: 'record',
+        kind: 'billingRelease',
+        id: inv.id,
+        recordId: inv.id,
+        title: `Invoice: ${inv.invoiceNumber || inv.id || '—'}`,
+        description: 'Invoice release (mark as sent) pending approval',
+        amount: inv.total || null,
+        submittedBy: inv.releaseRequestedBy || inv.createdBy,
+        submitter,
+        submittedAt: inv.releaseRequestedAt || inv.createdAt,
+        entity: inv.entity,
+        raw: inv
+      });
+    });
+
+    // Release-pending transmittals
+    DB.getWhere('transmittals', t => t.entity === entity && t.status === 'Release Pending Approval').forEach(t => {
+      const submitter = DB.getById('users', t.releaseRequestedBy || t.createdBy);
+      transmittalSent.push({
+        type: 'record',
+        kind: 'transmittalRelease',
+        id: t.id,
+        recordId: t.id,
+        title: `Transmittal: ${t.trackingNumber || t.transmittalNumber || t.id || '—'}`,
+        description: 'Transmittal mark-as-sent pending approval',
+        amount: null,
+        submittedBy: t.releaseRequestedBy || t.createdBy,
+        submitter,
+        submittedAt: t.releaseRequestedAt || t.createdAt,
+        entity: t.entity,
+        raw: t
+      });
+    });
+
+    return {
+      workRequestCreation,
+      wrPhaseRouting,
+      billingToRelease,
+      disbursementToRelease,
+      transmittalSent
+    };
+  },
+
   renderPendingSection() {
+    const wrapper = el('div');
+
+    if (this.pendingDetailId) {
+      wrapper.appendChild(this.renderPendingDetail(this.pendingDetailId));
+      return wrapper;
+    }
+
+    const categories = this.getPendingCategories();
+    const totalPending = Object.values(categories).reduce((sum, arr) => sum + arr.length, 0);
+
+    const categoryDefs = {
+      workRequestCreation: { label: 'Work Request Creation', keyPrefix: 'WR' },
+      wrPhaseRouting: { label: 'WR Phase Routing', keyPrefix: 'ROUTE' },
+      billingToRelease: { label: 'Billing to Release', keyPrefix: 'BIL' },
+      disbursementToRelease: { label: 'Disbursement to Release', keyPrefix: 'EXP' },
+      transmittalSent: { label: 'Mark Transmittal as Sent', keyPrefix: 'TX' }
+    };
+
+    if (totalPending === 0) {
+      wrapper.appendChild(renderEmptyState('No pending approvals', null, { variant: 'zero-state' }));
+      return wrapper;
+    }
+
+    const self = this;
+
+    // Category filter pills (reference-image layout)
+    wrapper.appendChild(this.renderPendingPills(categories, categoryDefs, totalPending));
+
+    // Render each non-empty category as its own card
+    Object.keys(categoryDefs).forEach(key => {
+      if (self.pendingCategory !== 'all' && self.pendingCategory !== key) return;
+      const items = categories[key];
+      if (!items || items.length === 0) return;
+      const def = categoryDefs[key];
+
+      const card = el('div', { class: 'approval-category-card' });
+
+      // Category header with Approve All
+      const header = el('div', { class: 'approval-category-header' });
+      const title = el('div', { class: 'approval-category-title' });
+      title.appendChild(el('span', { text: def.label }));
+      title.appendChild(el('span', { class: 'count', text: items.length + ' pending' }));
+      header.appendChild(title);
+
+      const approveAllBtn = el('button', { class: 'approve-all-btn' });
+      approveAllBtn.innerHTML = BoardCardIcons.checkCircle + ' Approve All';
+      approveAllBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Approve All', `Approve all ${items.length} items in ${def.label}?`, () => {
+          self.approveAll(key);
+        }, 'success');
+      });
+      header.appendChild(approveAllBtn);
+      card.appendChild(header);
+
+      // Items list
+      const list = el('div', { class: 'approval-items-list' });
+      items.forEach((item, idx) => {
+        list.appendChild(self.renderPendingApprovalItem(item, idx + 1, def.keyPrefix));
+      });
+      card.appendChild(list);
+
+      wrapper.appendChild(card);
+    });
+
+    return wrapper;
+  },
+
+  renderPendingPills(categories, categoryDefs, totalPending) {
+    const pillsWrap = el('div', { class: 'approval-filter-pills' });
+
+    const addPill = (key, label, count, isActive, disabled) => {
+      const btn = el('button', {
+        class: 'approval-filter-pill' + (isActive ? ' active' : '') + (disabled ? ' disabled' : ''),
+        title: label,
+        disabled: disabled ? true : false
+      });
+      btn.appendChild(document.createTextNode(label));
+      if (count !== undefined) {
+        const badge = el('span', { class: 'approval-filter-pill-count', text: String(count) });
+        btn.appendChild(document.createTextNode(' '));
+        btn.appendChild(badge);
+      }
+      if (!disabled) {
+        btn.addEventListener('click', () => {
+          this.pendingCategory = key;
+          sessionStorage.setItem('admin_pending_category', key);
+          this.pendingDetailId = null;
+          App.handleRoute();
+        });
+      }
+      pillsWrap.appendChild(btn);
+    };
+
+    addPill('all', 'All', totalPending, this.pendingCategory === 'all', false);
+
+    Object.keys(categoryDefs).forEach(key => {
+      const items = categories[key] || [];
+      if (items.length === 0) return;
+      addPill(key, categoryDefs[key].label, items.length, this.pendingCategory === key, false);
+    });
+
+    return pillsWrap;
+  },
+
+  renderPendingApprovalItem(item, index, keyPrefix) {
+    const submitter = item.submitter;
+    const initials = submitter ? getInitials(submitter.name) : getInitials('System');
+    const roleLabel = submitter ? `${submitter.role} ${item.entity || Auth.activeEntity || ''}` : 'System';
+    const avatarColor = submitter ? groupColor(submitter.name) : '#94a3b8';
+
+    const key = keyPrefix + '-' + String(index).padStart(3, '0');
+
+    const row = el('div', { class: 'approval-item' });
+
+    // Status icon
+    const icon = el('div', { class: 'approval-item-icon' });
+    icon.innerHTML = BoardCardIcons.clock;
+    row.appendChild(icon);
+
+    // Body
+    const body = el('div', { class: 'approval-item-body' });
+    body.appendChild(el('div', { class: 'approval-item-key', text: key }));
+    body.appendChild(el('div', { class: 'approval-item-title', text: item.title }));
+    if (item.description) {
+      body.appendChild(el('div', { class: 'approval-item-desc', text: item.description }));
+    }
+
+    const meta = el('div', { class: 'approval-item-meta' });
+    if (submitter) {
+      const badge = el('span', { class: 'submitter-badge' });
+      const avatar = el('span', { class: 'submitter-avatar', title: submitter.name });
+      avatar.textContent = initials;
+      avatar.style.backgroundColor = avatarColor;
+      if (submitter.avatarUrl) {
+        avatar.style.backgroundImage = `url('${submitter.avatarUrl}')`;
+        avatar.textContent = '';
+      }
+      badge.appendChild(avatar);
+      badge.appendChild(el('span', { class: 'submitter-role', text: roleLabel }));
+      meta.appendChild(badge);
+    }
+
+    const dateEl = el('span', { class: 'approval-item-date' });
+    dateEl.innerHTML = BoardCardIcons.calendar + '<span>' + formatDate(item.submittedAt) + '</span>';
+    meta.appendChild(dateEl);
+
+    if (item.amount !== null && item.amount !== undefined) {
+      meta.appendChild(el('span', { class: 'approval-item-amount', text: formatPHP(item.amount) }));
+    }
+    body.appendChild(meta);
+    row.appendChild(body);
+
+    // Actions reveal on hover
+    const actions = el('div', { class: 'approval-item-actions' });
+    const rejectBtn = el('button', { class: 'btn btn-sm btn-reject', title: 'Reject' });
+    rejectBtn.innerHTML = BoardCardIcons.reject + ' Reject';
+    rejectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.rejectPendingItem(item);
+    });
+
+    const approveBtn = el('button', { class: 'btn btn-sm btn-approve', title: 'Approve' });
+    approveBtn.innerHTML = BoardCardIcons.checkCircle + ' Approve';
+    approveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.approvePendingItem(item);
+    });
+
+    actions.appendChild(rejectBtn);
+    actions.appendChild(approveBtn);
+    row.appendChild(actions);
+
+    return row;
+  },
+
+  approvePendingItem(item) {
+    if (item.kind === 'wrPhaseRouting') {
+      Workflow.showConfirm('Confirm Routing', `Approve routing for ${item.title} to ${item.raw?.proposedData?.status || 'next phase'}?`, () => {
+        const nextPhase = item.raw?.proposedData?.status;
+        if (nextPhase) {
+          DB.update('workRequests', item.recordId, {
+            status: nextPhase,
+            updatedAt: new Date().toISOString()
+          });
+        }
+        PendingChanges.delete(item.id);
+        App.handleRoute();
+      }, 'success');
+      return;
+    }
+    if (item.type === 'change') {
+      Workflow.showConfirm('Confirm Approval', `Approve ${item.title}?`, () => {
+        PendingChanges.approve(item.id);
+        App.handleRoute();
+      }, 'success');
+    } else if (item.kind === 'disbursementCreation') {
+      location.hash = '#disbursement/detail/' + item.id;
+    } else if (item.kind === 'disbursementRelease') {
+      Workflow.showConfirm('Confirm Release', `Approve and release ${item.title}?`, () => {
+        DB.update('disbursements', item.id, {
+          status: 'Released',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+    } else if (item.kind === 'billingRelease') {
+      Workflow.showConfirm('Confirm Release', `Approve and mark ${item.title} as sent?`, () => {
+        DB.update('invoices', item.id, {
+          status: 'Sent',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+    } else if (item.kind === 'transmittalRelease') {
+      Workflow.showConfirm('Confirm Sent', `Approve and mark ${item.title} as sent?`, () => {
+        DB.update('transmittals', item.id, {
+          status: 'Sent',
+          sentBy: Auth.user.id,
+          sentAt: new Date().toISOString()
+        });
+        App.handleRoute();
+      }, 'success');
+    }
+  },
+
+  rejectPendingItem(item) {
+    const reason = prompt('Enter rejection reason:');
+    if (reason === null) return;
+
+    if (item.type === 'change') {
+      PendingChanges.reject(item.id, reason);
+      App.handleRoute();
+    } else if (item.kind === 'disbursementCreation') {
+      DB.update('disbursements', item.id, {
+        status: 'Rejected',
+        rejectedBy: Auth.user.id,
+        rejectionReason: reason
+      });
+      App.handleRoute();
+    } else if (item.kind === 'disbursementRelease') {
+      DB.update('disbursements', item.id, {
+        status: 'Approved',
+        releaseRejectedBy: Auth.user.id,
+        releaseRejectionReason: reason
+      });
+      App.handleRoute();
+    } else if (item.kind === 'billingRelease') {
+      DB.update('invoices', item.id, {
+        status: 'Approved',
+        releaseRejectedBy: Auth.user.id,
+        releaseRejectionReason: reason
+      });
+      App.handleRoute();
+    } else if (item.kind === 'transmittalRelease') {
+      DB.update('transmittals', item.id, {
+        status: 'Draft',
+        releaseRejectedBy: Auth.user.id,
+        releaseRejectionReason: reason
+      });
+      App.handleRoute();
+    }
+  },
+
+  approveAll(categoryKey) {
+    const categories = this.getPendingCategories();
+    const items = categories[categoryKey] || [];
+    if (items.length === 0) return;
+
+    let processed = 0;
+    items.forEach(item => {
+      if (item.type === 'change') {
+        PendingChanges.approve(item.id);
+        processed++;
+      } else if (item.kind === 'disbursementRelease') {
+        DB.update('disbursements', item.id, {
+          status: 'Released',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        processed++;
+      } else if (item.kind === 'billingRelease') {
+        DB.update('invoices', item.id, {
+          status: 'Sent',
+          releasedBy: Auth.user.id,
+          releasedAt: new Date().toISOString()
+        });
+        processed++;
+      } else if (item.kind === 'transmittalRelease') {
+        DB.update('transmittals', item.id, {
+          status: 'Sent',
+          sentBy: Auth.user.id,
+          sentAt: new Date().toISOString()
+        });
+        processed++;
+      }
+    });
+
+    if (processed > 0) {
+      App.handleRoute();
+    } else {
+      Workflow.showMessage('Approve All', 'Some items require individual review and cannot be bulk-approved.', 'warning');
+    }
+  },
+
+  // Legacy board/table/list views kept for possible future toggles / backwards compatibility
+  renderPendingSectionLegacy() {
     const wrapper = el('div');
 
     if (this.pendingDetailId) {
@@ -743,7 +1252,7 @@ const Users = {
     const pendingDisbursements = DB.getWhere('disbursements', d => d.entity === entity && (d.status === 'Submitted' || d.status === 'Under Review'));
 
     if (pendingChanges.length === 0 && pendingDisbursements.length === 0) {
-      wrapper.appendChild(el('p', { text: 'No pending approvals.', class: 'empty-state' }));
+      wrapper.appendChild(renderEmptyState('No pending approvals', null, { variant: 'zero-state' }));
       return wrapper;
     }
 

@@ -260,7 +260,7 @@ const PendingChanges = {
       el('div', { class: 'diff-current' }, [
         el('h4', { text: isNew ? '(New Record)' : 'Current (Approved)' }),
         isNew && !current
-          ? el('p', { class: 'empty-state', text: 'This is a new record.' })
+          ? renderEmptyState('This is a new record', null, { variant: 'compact' })
           : this._renderRecordTable(current)
       ]),
       el('div', { class: 'diff-proposed' }, [
@@ -296,7 +296,7 @@ const PendingChanges = {
   },
 
   _renderRecordTable(record) {
-    if (!record) return el('p', { class: 'empty-state', text: 'No data' });
+    if (!record) return renderEmptyState('No data', null, { variant: 'compact' });
     const rows = Object.entries(record)
       .filter(([k]) => !['id', 'createdAt', 'updatedAt'].includes(k))
       .map(([k, v]) => {
