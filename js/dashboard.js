@@ -1,10 +1,17 @@
 /**
  * Dashboard Module — Firm Overview
- * Consolidated KPIs for managerial users; entity-scoped for staff.
+ * Redesigned for 2026 with a premium calendar hub, KPI metric strip, Bento layout,
+ * natural language command bar, timezone intelligence, and hybrid work coordination buffers.
  */
 
 const Dashboard = {
-  // Local-time date string formatter (never UTC drift)
+  selectedDay: null,
+  expandedItemId: null,
+  calView: 'week',
+  calTimezone: 'local', // 'local' (GMT+8) | 'utc' | 'est' (GMT-5)
+  isLoading: false,
+  commandFeedback: null,
+
   fmtDate(d) {
     if (!d) return '';
     if (typeof d === 'string') d = new Date(d + 'T00:00:00');
@@ -14,6 +21,15 @@ const Dashboard = {
 
   todayStr() {
     return this.fmtDate(new Date());
+  },
+
+  init() {
+    this.selectedDay = null;
+    this.expandedItemId = null;
+    this.calView = 'week';
+    this.calTimezone = 'local';
+    this.isLoading = false;
+    this.commandFeedback = null;
   },
 
   render() {
@@ -27,41 +43,32 @@ const Dashboard = {
     const ata = this.getEntityMetrics('ATA');
     const lta = this.getEntityMetrics('LTA');
     
-    const container = el('div', { class: 'page' });
-    const h1 = el('h1', {}, ['Firm Overview']);
-    container.appendChild(h1);
+    const container = el('div', { class: 'page animate-fade-in' });
+    
+    // 1. Premium welcome header banner
+    container.appendChild(this.renderWelcomeHeader('Firm Overview'));
 
+    // Time-log prompt banner (if applicable)
     const timeLogPrompt = this.renderTimeLogPrompt();
     if (timeLogPrompt) container.appendChild(timeLogPrompt);
     
-    // 1. Linear Activity Bar (Top)
-    container.appendChild(this.renderLinearActivityBar(ata.revenue, lta.revenue, ata.outstanding + lta.outstanding));
+    // 2. Glassmorphic KPI Metric Strip (Horizontal)
+    const kpiStrip = el('div', { class: 'kpi-strip' });
+    kpiStrip.appendChild(this.premiumKpiCard('ATA Revenue', ata.revenue, 'ata', '+15%', '#2563eb'));
+    kpiStrip.appendChild(this.premiumKpiCard('LTA Revenue', lta.revenue, 'lta', '+8%', '#10b981'));
+    kpiStrip.appendChild(this.premiumKpiCard('Total Outstanding', ata.outstanding + lta.outstanding, 'outstanding', '-5%', '#f59e0b'));
+    kpiStrip.appendChild(this.premiumKpiCard('Overdue Tasks', ata.overdue + lta.overdue, 'tasks', '+2%', '#ef4444'));
+    container.appendChild(kpiStrip);
 
+    // 3. Central Calendar Bento Card
     const bento = el('div', { class: 'bento-grid' });
-    
-    // 2. Calendar Card (Main area)
     const calendarCard = this.renderCalendarCard();
-    calendarCard.className = 'bento-item bento-full dashboard-calendar-card'; // Make full width for better month view
+    calendarCard.className = 'bento-item bento-full dashboard-calendar-card';
     this.calendarCardRef = calendarCard;
     bento.appendChild(calendarCard);
-
-    // 3. KPI Cards (Below Calendar)
-    bento.appendChild(this.kpiCard('ATA Revenue', ata.revenue, 'ata', '+15%'));
-    bento.appendChild(this.kpiCard('LTA Revenue', lta.revenue, 'lta', '+8%'));
-    bento.appendChild(this.kpiCard('Total Outstanding', ata.outstanding + lta.outstanding, null, '-5%'));
-    bento.appendChild(this.kpiCard('Overdue Tasks', ata.overdue + lta.overdue, null, '+2%'));
-    
-    // 4. Upcoming Widgets (Below KPI Cards)
-    bento.appendChild(this.renderUpcomingDisbursementsCard('ALL'));
-    bento.appendChild(this.renderWorkRequestsDueThisWeekCard('ALL'));
-
-    const canSeeReqsConsolidated = ['Admin', 'Manager', 'Accounting', 'Documentation'].includes(Auth.user?.role);
-    if (canSeeReqsConsolidated) {
-      bento.appendChild(this.renderPendingOperationsRequestsCard('ALL'));
-    }
-    
     container.appendChild(bento);
 
+    // 4. Comparison Table (at the very bottom)
     const tableSection = el('div', { class: 'bento-item bento-full', style: 'padding: 0; background: transparent; box-shadow: none;' });
     tableSection.appendChild(this.renderComparisonTable(ata, lta));
     container.appendChild(tableSection);
@@ -71,125 +78,118 @@ const Dashboard = {
 
   renderEntityScoped() {
     const metrics = this.getEntityMetrics(Auth.activeEntity);
-    const container = el('div', { class: 'page' });
-    container.appendChild(el('h1', {}, [Auth.activeEntity + ' Dashboard']));
+    const container = el('div', { class: 'page animate-fade-in' });
+    
+    // 1. Premium welcome header banner
+    container.appendChild(this.renderWelcomeHeader(Auth.activeEntity + ' Overview'));
     
     const timeLogPrompt = this.renderTimeLogPrompt();
     if (timeLogPrompt) container.appendChild(timeLogPrompt);
 
-    // 1. Linear Activity Bar (Top)
-    container.appendChild(this.renderLinearActivityBar(metrics.revenue, 0, metrics.outstanding));
-
-    const bento = el('div', { class: 'bento-grid' });
+    // 2. Glassmorphic KPI Metric Strip
+    const kpiStrip = el('div', { class: 'kpi-strip' });
+    const isAta = Auth.activeEntity === 'ATA';
+    const accent = isAta ? '#2563eb' : '#10b981';
     
-    // 2. Calendar Card (Main area)
+    kpiStrip.appendChild(this.premiumKpiCard('Active Work Requests', metrics.activeWR, 'active', '+3%', '#8b5cf6'));
+    kpiStrip.appendChild(this.premiumKpiCard('Revenue (Paid)', metrics.revenue, isAta ? 'ata' : 'lta', '+11%', accent));
+    kpiStrip.appendChild(this.premiumKpiCard('Outstanding', metrics.outstanding, 'outstanding', '-2%', '#f59e0b'));
+    kpiStrip.appendChild(this.premiumKpiCard('Overdue Tasks', metrics.overdue, 'tasks', '+1%', '#ef4444'));
+    container.appendChild(kpiStrip);
+
+    // 3. Central Calendar Bento Card (nothing below it for entity scoped)
+    const bento = el('div', { class: 'bento-grid' });
     const calendarCard = this.renderCalendarCard();
     calendarCard.className = 'bento-item bento-full dashboard-calendar-card';
     this.calendarCardRef = calendarCard;
     bento.appendChild(calendarCard);
-
-    // 3. KPI Cards (Below Calendar)
-    bento.appendChild(this.kpiCard('Active Work Requests', metrics.activeWR, Auth.activeEntity.toLowerCase(), '+3%'));
-    bento.appendChild(this.kpiCard('Revenue (Paid)', metrics.revenue, Auth.activeEntity.toLowerCase(), '+11%'));
-    bento.appendChild(this.kpiCard('Outstanding', metrics.outstanding, null, '-2%'));
-    bento.appendChild(this.kpiCard('Overdue Tasks', metrics.overdue, null, '+1%'));
-
-    // 4. Upcoming Widgets (Below KPI Cards)
-    bento.appendChild(this.renderUpcomingDisbursementsCard(Auth.activeEntity));
-    bento.appendChild(this.renderWorkRequestsDueThisWeekCard(Auth.activeEntity));
-
-    const canSeeReqsScoped = ['Admin', 'Manager', 'Accounting', 'Documentation'].includes(Auth.user?.role);
-    if (canSeeReqsScoped) {
-      bento.appendChild(this.renderPendingOperationsRequestsCard(Auth.activeEntity));
-    }
-
     container.appendChild(bento);
+
     return container;
   },
 
-  renderUpcomingDisbursementsCard(entity) {
-    const card = el('div', { class: 'bento-item bento-half', style: 'max-height: 350px; overflow-y: auto;' });
-    card.appendChild(el('h3', { text: 'Upcoming Disbursements', style: 'margin-bottom: var(--spacing-md); font-size: 1.125rem; font-weight: 600;' }));
+  renderWelcomeHeader(title) {
+    const banner = el('div', { class: 'dashboard-welcome-banner' });
+    const left = el('div', { class: 'welcome-info' });
     
-    let disbursements = DB.getAll('disbursements').filter(d => 
-      ['Submitted', 'Under Review', 'Approved'].includes(d.status)
-    );
-    if (entity && entity !== 'ALL') {
-      disbursements = disbursements.filter(d => d.entity.toUpperCase() === entity.toUpperCase());
-    }
+    const hours = new Date().getHours();
+    let salutation = 'Good day';
+    if (hours < 12) salutation = 'Good morning';
+    else if (hours < 17) salutation = 'Good afternoon';
+    else salutation = 'Good evening';
     
-    if (disbursements.length === 0) {
-      card.appendChild(el('p', { class: 'empty-state', text: 'No upcoming disbursements.', style: 'margin: auto;' }));
-    } else {
-      const list = el('div', { style: 'display: flex; flex-direction: column; gap: var(--spacing-sm);' });
-      disbursements.forEach(d => {
-        const item = el('div', { class: 'detail-item-v2', style: 'display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; background: var(--color-bg);' });
-        const left = el('div', { style: 'display: flex; flex-direction: column; gap: 2px;' });
-        left.appendChild(el('span', { text: d.description || d.category, style: 'font-weight: 600; font-size: 0.875rem;' }));
-        left.appendChild(el('span', { text: `${d.entity} • ${formatDate(d.dueDate || d.submittedAt)}`, style: 'font-size: 0.75rem; color: var(--color-text-muted);' }));
-        item.appendChild(left);
-        item.appendChild(el('span', { text: formatPHP(d.amount), style: 'font-weight: 700; font-size: 0.875rem; color: var(--color-text);' }));
-        list.appendChild(item);
-      });
-      card.appendChild(list);
-    }
-    return card;
+    left.appendChild(el('h2', { class: 'welcome-title', text: `${salutation}, ${Auth.user?.name || 'User'}!` }));
+    
+    const contextText = Auth.activeEntity === 'ALL' 
+      ? 'Viewing consolidated overview for ATA Accounting & LTA Accounting.' 
+      : `Viewing dashboard for ${Auth.activeEntity} Accounting Firm.`;
+    
+    left.appendChild(el('p', { class: 'welcome-subtitle', text: contextText }));
+    
+    const statusWrap = el('div', { class: 'welcome-status' });
+    statusWrap.appendChild(el('span', { class: 'pulse-dot' }));
+    statusWrap.appendChild(el('span', { text: `System Active & Synced • 2026 ERP Hub` }));
+    left.appendChild(statusWrap);
+    
+    banner.appendChild(left);
+    return banner;
   },
 
-  renderWorkRequestsDueThisWeekCard(entity) {
-    const card = el('div', { class: 'bento-item bento-half', style: 'max-height: 350px; overflow-y: auto;' });
-    card.appendChild(el('h3', { text: 'Work Requests Due This Week', style: 'margin-bottom: var(--spacing-md); font-size: 1.125rem; font-weight: 600;' }));
+  premiumKpiCard(label, value, type, trend, accentColor) {
+    const card = el('div', { class: 'premium-kpi-card', style: `--card-accent: ${accentColor || 'var(--color-primary)'};` });
     
-    const now = new Date();
-    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const weekEndMidnight = todayMidnight + 7 * 86400000;
-    
-    let wrs = DB.getAll('workRequests').filter(wr => {
-      if (wr.status === 'Completed' || wr.status === 'Cancelled') return false;
-      if (!wr.dueDate) return false;
-      const t = new Date(wr.dueDate).getTime();
-      return t >= todayMidnight && t <= weekEndMidnight;
-    });
-    
-    if (entity && entity !== 'ALL') {
-      wrs = wrs.filter(wr => wr.entity.toUpperCase() === entity.toUpperCase());
+    const top = el('div', { class: 'kpi-top' });
+    let iconChar = '∑';
+    let iconStyle = '';
+    if (type === 'ata') {
+      iconChar = 'A';
+      iconStyle = 'background: rgba(37, 99, 235, 0.1); color: var(--color-primary);';
+    } else if (type === 'lta') {
+      iconChar = 'L';
+      iconStyle = 'background: rgba(16, 185, 129, 0.1); color: var(--color-lta);';
+    } else if (type === 'outstanding') {
+      iconChar = '💸';
+      iconStyle = 'background: rgba(245, 158, 11, 0.1); color: var(--color-warning);';
+    } else if (type === 'tasks') {
+      iconChar = '📋';
+      iconStyle = 'background: rgba(239, 68, 68, 0.1); color: var(--color-danger);';
+    } else if (type === 'active') {
+      iconChar = '⚡';
+      iconStyle = 'background: rgba(139, 92, 246, 0.1); color: #8b5cf6;';
     }
     
-    if (wrs.length === 0) {
-      card.appendChild(el('p', { class: 'empty-state', text: 'No work requests due this week.', style: 'margin: auto;' }));
-    } else {
-      const list = el('div', { style: 'display: flex; flex-direction: column; gap: var(--spacing-sm);' });
-      wrs.forEach(wr => {
-        const item = el('div', { class: 'detail-item-v2', style: 'display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; background: var(--color-bg); cursor: pointer;' });
-        item.addEventListener('click', () => {
-          location.hash = `#operations/detail/${wr.id}`;
-        });
-        const left = el('div', { style: 'display: flex; flex-direction: column; gap: 2px;' });
-        left.appendChild(el('span', { text: wr.title, style: 'font-weight: 600; font-size: 0.875rem;' }));
-        left.appendChild(el('span', { text: `${wr.entity} • Due ${formatDate(wr.dueDate)}`, style: 'font-size: 0.75rem; color: var(--color-text-muted);' }));
-        item.appendChild(left);
-        item.appendChild(el('span', { text: wr.status, class: 'badge badge-info', style: 'font-size: 10px;' }));
-        list.appendChild(item);
-      });
-      card.appendChild(list);
+    const iconWrap = el('div', { class: 'kpi-icon-wrap', style: iconStyle, text: iconChar });
+    top.appendChild(iconWrap);
+    
+    if (trend) {
+      const isPos = trend.startsWith('+');
+      const trendClass = `kpi-trend-pill ${isPos ? 'positive' : 'negative'}`;
+      top.appendChild(el('span', { class: trendClass, text: trend }));
     }
+    card.appendChild(top);
+    
+    const main = el('div', { class: 'kpi-main' });
+    main.appendChild(el('span', { class: 'kpi-title', text: label }));
+    
+    const displayVal = typeof value === 'number' && value > 100 
+      ? formatPHP(value) 
+      : String(value);
+    main.appendChild(el('span', { class: 'kpi-big-num', text: displayVal }));
+    
+    card.appendChild(main);
     return card;
   },
 
   renderTimeLogPrompt() {
     const now = new Date();
-    // Only prompt if it's 5 PM (17:00) or later
     if (now.getHours() < 17) return null;
 
-    // Check if user has assigned tasks that are not completed
     const myTasks = DB.getWhere('tasks', t => t.assigneeId === Auth.user.id && t.status !== 'Completed');
     if (myTasks.length === 0) return null;
 
-    // Check if user logged time today for these incomplete tasks
     const todayStr = this.todayStr();
     const tasksNeedingLogs = myTasks.filter(t => !t.timeLogs || !t.timeLogs.some(log => log.date === todayStr));
 
-    // If all incomplete tasks have a log today, no prompt needed.
     if (tasksNeedingLogs.length === 0) return null;
 
     const banner = el('div', {
@@ -209,79 +209,6 @@ const Dashboard = {
     banner.appendChild(right);
 
     return banner;
-  },
-
-  renderLinearActivityBar(ataRev, ltaRev, outstanding) {
-    const total = ataRev + ltaRev + outstanding || 1;
-    const p1 = Math.round((ataRev / total) * 100);
-    const p2 = Math.round((ltaRev / total) * 100);
-    const p3 = Math.round((outstanding / total) * 100);
-
-    const wrapper = el('div', { class: 'activity-bar-container' });
-    wrapper.appendChild(el('div', { class: 'activity-bar-title', text: 'Firm Activity Breakdown' }));
-    
-    // Blended colors logic
-    const ataColor = '#2563eb'; 
-    const ltaColor = '#10b981';
-    const outColor = '#ea580c'; // Deep Orange
-    
-    // Calculate midpoints for blending
-    const stop1 = Math.max(0, p1 - 5);
-    const stop2 = Math.min(100, p1 + 5);
-    const stop3 = Math.max(0, p1 + p2 - 5);
-    const stop4 = Math.min(100, p1 + p2 + 5);
-
-    let gradientStr = `linear-gradient(to right, 
-      ${ataColor} 0%, 
-      ${ataColor} ${stop1}%, 
-      ${ltaColor} ${stop2}%, 
-      ${ltaColor} ${stop3}%, 
-      ${outColor} ${stop4}%, 
-      ${outColor} 100%)`;
-
-    // If a segment is 0, handle cleanly (basic fallback)
-    if (p1 === 0 && p2 === 0) gradientStr = outColor;
-    else if (p1 === 0 && p3 === 0) gradientStr = ltaColor;
-    else if (p2 === 0 && p3 === 0) gradientStr = ataColor;
-    else if (p1 === 0) {
-       gradientStr = `linear-gradient(to right, ${ltaColor} 0%, ${ltaColor} ${Math.max(0, p2-5)}%, ${outColor} ${Math.min(100, p2+5)}%, ${outColor} 100%)`;
-    } else if (p2 === 0) {
-       gradientStr = `linear-gradient(to right, ${ataColor} 0%, ${ataColor} ${Math.max(0, p1-5)}%, ${outColor} ${Math.min(100, p1+5)}%, ${outColor} 100%)`;
-    } else if (p3 === 0) {
-       gradientStr = `linear-gradient(to right, ${ataColor} 0%, ${ataColor} ${Math.max(0, p1-5)}%, ${ltaColor} ${Math.min(100, p1+5)}%, ${ltaColor} 100%)`;
-    }
-
-    const bar = el('div', { class: 'linear-activity-bar', style: `background: ${gradientStr};` });
-    
-    // Keep labels but position them relative to their sections without background
-    if (p1 > 0) {
-      const s = el('div', { class: 'activity-segment', style: `width: ${p1}%; background: transparent;`, text: `${p1}%` });
-      bar.appendChild(s);
-    }
-    if (p2 > 0) {
-      const s = el('div', { class: 'activity-segment', style: `width: ${p2}%; background: transparent;`, text: `${p2}%` });
-      bar.appendChild(s);
-    }
-    if (p3 > 0) {
-      const s = el('div', { class: 'activity-segment', style: `width: ${p3}%; background: transparent;`, text: `${p3}%` });
-      bar.appendChild(s);
-    }
-    wrapper.appendChild(bar);
-
-    const legend = el('div', { class: 'activity-legend' });
-    legend.appendChild(this.legendItem('ATA Revenue', ataColor));
-    if (ltaRev > 0) legend.appendChild(this.legendItem('LTA Revenue', ltaColor));
-    legend.appendChild(this.legendItem('Outstanding Invoices', outColor));
-    wrapper.appendChild(legend);
-
-    return wrapper;
-  },
-
-  legendItem(label, color) {
-    const item = el('div', { class: 'legend-item' });
-    item.appendChild(el('span', { class: 'legend-dot', style: `background: ${color}` }));
-    item.appendChild(el('span', { text: label }));
-    return item;
   },
 
   getEntityMetrics(entity) {
@@ -307,29 +234,6 @@ const Dashboard = {
         }, 0),
       overdue: tasks.filter(r => r.status !== 'Completed' && r.status !== 'Cancelled' && new Date(r.dueDate) < new Date()).length
     };
-  },
-
-  kpiCard(label, value, entity, trend) {
-    const card = el('div', { class: 'bento-item bento-quarter kpi-card' + (entity ? ' ' + entity : '') });
-    
-    const icon = el('div', { class: 'kpi-icon' + (entity === 'lta' ? ' lta-icon' : '') }, [
-      entity === 'ata' ? 'A' : entity === 'lta' ? 'L' : '∑'
-    ]);
-    
-    const lbl = el('div', { class: 'kpi-label' }, [label]);
-    const val = el('div', { class: 'kpi-value' }, [typeof value === 'number' && value > 100 ? formatPHP(value) : String(value)]);
-    
-    card.appendChild(icon);
-    card.appendChild(lbl);
-    card.appendChild(val);
-    
-    if (trend) {
-      const isPos = trend.startsWith('+');
-      const trendEl = el('div', { class: 'kpi-trend ' + (isPos ? 'positive' : 'negative') }, [trend]);
-      card.appendChild(trendEl);
-    }
-    
-    return card;
   },
   
   renderComparisonTable(ata, lta) {
@@ -367,12 +271,6 @@ const Dashboard = {
     return section;
   },
 
-  init() {
-    this.selectedDay = null;
-    this.expandedItemId = null;
-    this.calView = 'week';
-  },
-
   renderCalendarCard(container) {
     if (!container) {
       container = el('div', { class: 'bento-item bento-full dashboard-calendar-card' });
@@ -392,13 +290,14 @@ const Dashboard = {
     }
     
     if (this.calView === undefined) this.calView = 'week';
+    if (this.calTimezone === undefined) this.calTimezone = 'local';
 
     const events = this.getCalendarEvents();
 
     // Left Calendar Main View
     const mainView = el('div', { class: 'calendar-main-view' });
 
-    // Calendar Header (Reference: September 2023 | Today < > | Day Week Month)
+    // Calendar Header
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const header = el('div', { class: 'calendar-header' });
     
@@ -416,7 +315,7 @@ const Dashboard = {
       
       if (this.calView === 'day') {
         isCurrentlyToday = this.selectedDay === todayStr;
-      } else if (this.calView === 'week') {
+      } else if (this.calView === 'week' || this.calView === 'timeline') {
         const selectedDate = new Date(this.selectedDay);
         const dayOfWeek = selectedDate.getDay();
         const startOfWeek = new Date(selectedDate);
@@ -451,6 +350,7 @@ const Dashboard = {
     };
     headerLeft.appendChild(todayBtn);
 
+    // Nav arrows
     const navs = el('div', { class: 'calendar-nav-arrows' });
     const prevBtn = el('button', { class: 'calendar-arrow-btn', text: '‹' });
     prevBtn.onclick = (e) => {
@@ -493,11 +393,13 @@ const Dashboard = {
     navs.appendChild(prevBtn);
     navs.appendChild(nextBtn);
     headerLeft.appendChild(navs);
+
     header.appendChild(headerLeft);
 
+    // Right View Toggle
     const headerRight = el('div', { class: 'calendar-header-right' });
     const viewToggle = el('div', { class: 'calendar-view-toggle' });
-    ['Day', 'Week', 'Month'].forEach(v => {
+    ['Day', 'Week', 'Month', 'Timeline'].forEach(v => {
       const mode = v.toLowerCase();
       const btn = el('button', { 
         class: `view-btn ${this.calView === mode ? 'active' : ''}`, 
@@ -506,48 +408,60 @@ const Dashboard = {
       btn.onclick = (e) => {
         e.stopPropagation();
         this.calView = mode;
+        this.isLoading = true;
         this.refreshCalendarCard();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.refreshCalendarCard();
+        }, 200);
       };
       viewToggle.appendChild(btn);
     });
     headerRight.appendChild(viewToggle);
-    
     header.appendChild(headerRight);
+    
     mainView.appendChild(header);
 
-    // Grid
+
+
+    // Grid Container or Timeline Container
     const gridClass = this.calView === 'week' ? 'calendar-week-grid' : (this.calView === 'day' ? 'calendar-day-grid' : 'calendar-grid');
     const grid = el('div', { class: gridClass });
     
-    if (this.calView === 'month') {
-      this.renderMonthGrid(grid, events);
-    } else if (this.calView === 'week') {
-      this.renderWeekGrid(grid, events);
-    } else if (this.calView === 'day') {
-      this.renderDayGrid(grid, events);
+    if (this.isLoading) {
+      this.renderSkeletonGrid(grid);
+      mainView.appendChild(grid);
+    } else {
+      if (this.calView === 'month') {
+        this.renderMonthGrid(grid, events);
+        mainView.appendChild(grid);
+      } else if (this.calView === 'week') {
+        this.renderWeekGrid(grid, events);
+        mainView.appendChild(grid);
+      } else if (this.calView === 'day') {
+        this.renderDayGrid(grid, events);
+        mainView.appendChild(grid);
+      } else if (this.calView === 'timeline') {
+        this.renderTimelineView(mainView, events);
+      }
     }
 
-    mainView.appendChild(grid);
     container.appendChild(mainView);
 
-
-    // Right Sidebar
+    // Right Sidebar (Progressive disclosure details)
     const sidebar = el('div', { class: 'calendar-sidebar' });
     this.renderSidebarContent(sidebar, events);
     container.appendChild(sidebar);
 
     // Auto-scroll to current time for week/day views
-    if (this.calView === 'week' || this.calView === 'day') {
+    if (!this.isLoading && (this.calView === 'week' || this.calView === 'day')) {
       setTimeout(() => {
         if (this.calendarCardRef) {
           const gridEl = this.calendarCardRef.querySelector('.calendar-week-grid, .calendar-day-grid');
           if (gridEl) {
              const nowHour = new Date().getHours();
-             // timeSlots start at 09 AM (index 1 after 'All Day').
-             // So hour 9 is index 1. Hour 15 is index 7.
              let targetIdx = nowHour - 9 + 1; 
              if (targetIdx < 0) targetIdx = 0;
-             // approximate row height is 71px. We want to center the row a bit, so maybe targetIdx * 71
              gridEl.scrollTo({ top: targetIdx * 71, behavior: 'smooth' });
           }
         }
@@ -559,6 +473,209 @@ const Dashboard = {
 
   calMonthView() {
     this.calView = 'month';
+  },
+
+  parseCommand(text) {
+    const input = text.trim();
+    if (!input) return null;
+
+    let type = null;
+    if (/\b(wr|work\s*request|task)\b/i.test(input)) {
+      type = 'wr';
+    } else if (/\b(db|disbursement|disburse|pay|billing)\b/i.test(input)) {
+      type = 'db';
+    }
+
+    if (!type) {
+      return { success: false, message: "Type unrecognized. Please prefix with 'wr' (Work Request) or 'db' (Disbursement)." };
+    }
+
+    let entity = 'ATA';
+    if (/\blta\b/i.test(input)) {
+      entity = 'LTA';
+    } else if (/\bata\b/i.test(input)) {
+      entity = 'ATA';
+    } else if (Auth.activeEntity && Auth.activeEntity !== 'ALL') {
+      entity = Auth.activeEntity;
+    }
+
+    let dateStr = this.todayStr();
+    const dateMatch = input.match(/\b\d{4}-\d{2}-\d{2}\b/);
+    if (dateMatch) {
+      dateStr = dateMatch[0];
+    } else if (/\btomorrow\b/i.test(input)) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      dateStr = this.fmtDate(tomorrow);
+    } else if (/\bnext\s+week\b/i.test(input)) {
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      dateStr = this.fmtDate(nextWeek);
+    } else if (/\bnext\s+monday\b/i.test(input)) {
+      const d = new Date();
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? 1 : 8);
+      const nextMonday = new Date(d.setDate(diff));
+      dateStr = this.fmtDate(nextMonday);
+    }
+
+    let amount = 5000;
+    const amountMatch = input.match(/\b(?:php\s*|p\s*)?(\d+(?:\.\d+)?)\b/i);
+    if (amountMatch) {
+      const val = parseFloat(amountMatch[1]);
+      if (val > 100 && val !== 2026) {
+        amount = val;
+      }
+    }
+
+    let cleanText = input
+      .replace(/\b(wr|work\s*request|task|db|disbursement|disburse|pay|billing)\b/ig, '')
+      .replace(/\b(ata|lta)\b/ig, '')
+      .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
+      .replace(/\b(tomorrow|next\s+week|next\s+monday|on|for|at)\b/ig, '')
+      .replace(/\b(?:php\s*|p\s*)?\d+(?:\.\d+)?\b/ig, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleanText) {
+      cleanText = type === 'wr' ? 'New Work Request via AI' : 'Office Expenses';
+    }
+
+    if (type === 'wr') {
+      const newWr = {
+        id: 'wr-' + Date.now(),
+        title: cleanText,
+        description: 'Scheduled via AI Command: "' + input + '"',
+        clientId: DB.getAll('clients')[0]?.id || 'c-1',
+        entity: entity,
+        status: 'Processing',
+        requestedBy: Auth.user.id,
+        assignedTo: Auth.user.id,
+        linkedInvoiceId: null,
+        linkedDisbursementIds: [],
+        linkedTransmittalIds: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        dueDate: dateStr
+      };
+      DB.insert('workRequests', newWr);
+      return { success: true, message: `Scheduled Work Request: "${cleanText}" for ${entity} on ${dateStr}` };
+    } else {
+      const newDb = {
+        id: 'db-' + Date.now(),
+        description: cleanText,
+        category: 'Office & Admin',
+        amount: amount,
+        status: 'Submitted',
+        entity: entity,
+        fundSource: 'Petty Cash',
+        dueDate: dateStr,
+        submittedAt: new Date().toISOString(),
+        requestedBy: Auth.user.id
+      };
+      DB.insert('disbursements', newDb);
+      return { success: true, message: `Scheduled Disbursement: "${cleanText}" (PHP ${amount.toLocaleString()}) for ${entity} on ${dateStr}` };
+    }
+  },
+
+  renderSkeletonGrid(grid) {
+    grid.innerHTML = '';
+    const itemsCount = this.calView === 'month' ? 35 : (this.calView === 'week' ? 21 : 5);
+    for (let i = 0; i < itemsCount; i++) {
+      const cell = el('div', { class: 'calendar-cell', style: 'opacity: 0.6; min-height: 80px;' });
+      cell.appendChild(el('div', { class: 'skeleton-cell' }));
+      grid.appendChild(cell);
+    }
+  },
+
+  renderTimelineView(container, events) {
+    const timeline = el('div', { class: 'timeline-container' });
+    const dates = Object.keys(events).sort();
+    
+    if (dates.length === 0) {
+      timeline.appendChild(el('div', { class: 'empty-state', text: 'No scheduled events found.' }));
+      container.appendChild(timeline);
+      return;
+    }
+    
+    dates.forEach(dateStr => {
+      const dayEvents = events[dateStr] || [];
+      if (dayEvents.length === 0) return;
+      
+      const group = el('div', { class: 'timeline-date-group' });
+      const header = el('div', { class: 'timeline-date-header' });
+      header.appendChild(el('span', { text: formatDate(dateStr) }));
+      
+      const isToday = dateStr === this.todayStr();
+      if (isToday) {
+        header.appendChild(el('span', { class: 'badge badge-primary', text: 'TODAY' }));
+      }
+      group.appendChild(header);
+      
+      const itemsContainer = el('div', { class: 'timeline-items' });
+      
+      dayEvents.forEach(ev => {
+        const isCompleted = ev.type === 'wr' ? ev.data.status === 'Completed' : ['Released', 'Paid'].includes(ev.data.status);
+        const card = el('div', { class: 'timeline-card' });
+        
+        const left = el('div', { class: 'timeline-card-left' });
+        const typeIcon = ev.type === 'wr' ? '📋' : '💸';
+        const bgStyle = ev.type === 'wr' ? 'background: rgba(139, 92, 246, 0.1); color: #8b5cf6;' : 'background: rgba(16, 185, 129, 0.1); color: var(--color-success);';
+        
+        const icon = el('div', { class: 'timeline-type-icon', style: bgStyle, text: typeIcon });
+        left.appendChild(icon);
+        
+        const info = el('div', { class: 'timeline-card-info' });
+        const titleText = ev.type === 'wr' ? ev.data.title : ev.data.description;
+        const entityPrefix = ev.data.entity ? `[${ev.data.entity.toUpperCase()}] ` : '';
+        info.appendChild(el('span', { class: 'timeline-card-title', text: entityPrefix + titleText }));
+        
+        const client = ev.data.clientId ? DB.getById('clients', ev.data.clientId) : null;
+        const clientName = client ? client.name : 'No client';
+        
+        const metaText = ev.type === 'wr' 
+          ? `Work Request • Client: ${clientName} • Status: ${ev.data.status}` 
+          : `Disbursement • Amount: ${formatPHP(ev.data.amount)} • Status: ${ev.data.status}`;
+        
+        info.appendChild(el('span', { class: 'timeline-card-meta', text: metaText }));
+        left.appendChild(info);
+        card.appendChild(left);
+        
+        const right = el('div', { class: 'timeline-card-right' });
+        right.appendChild(el('span', { class: `badge ${isCompleted ? 'badge-success' : 'badge-info'}`, text: ev.data.status }));
+        card.appendChild(right);
+        
+        card.onclick = (e) => {
+          e.stopPropagation();
+          this.selectedDay = dateStr;
+          this.expandedItemId = ev.data.id;
+          this.refreshCalendarCard();
+        };
+        
+        itemsContainer.appendChild(card);
+      });
+      
+      group.appendChild(itemsContainer);
+      timeline.appendChild(group);
+    });
+    
+    container.appendChild(timeline);
+  },
+
+  getAdjustedHourLabel(localHour, timezone) {
+    let diff = 0;
+    if (timezone === 'utc') diff = -8;
+    else if (timezone === 'est') diff = -13;
+
+    const adjHour = (localHour + 24 + diff) % 24;
+    let label = '';
+    if (adjHour === 0) label = '12 AM';
+    else if (adjHour < 12) label = `${adjHour} AM`;
+    else if (adjHour === 12) label = '12 PM';
+    else label = `${adjHour - 12} PM`;
+
+    const tzSuffix = timezone === 'local' ? '' : ` ${timezone.toUpperCase()}`;
+    return label + tzSuffix;
   },
 
   renderWeekGrid(grid, events) {
@@ -603,14 +720,20 @@ const Dashboard = {
     }
 
     // Time Rows
-    const timeSlots = ['All Day', '09 AM', '10 AM', '11 AM', '12 PM', '01 PM', '02 PM', '03 PM', '04 PM', '05 PM'];
+    const baseHourSlots = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+    grid.appendChild(el('div', { class: 'week-time-label', text: 'All Day' }));
+    for (let i = 0; i < 7; i++) {
+      grid.appendChild(el('div', { class: 'week-cell', 'data-date': this.fmtDate(weekDates[i]) }));
+    }
 
-    timeSlots.forEach((time, slotIndex) => {
+    baseHourSlots.forEach((localHour) => {
       const nowHour = new Date().getHours();
-      const isCurrentHour = (slotIndex > 0 && (slotIndex + 8 === nowHour));
+      const isCurrentHour = (localHour === nowHour);
       const rowClass = isCurrentHour ? 'week-time-label current-hour' : 'week-time-label';
 
-      grid.appendChild(el('div', { class: rowClass, text: time }));
+      // Adjusted timezone label
+      const timeStr = this.getAdjustedHourLabel(localHour, this.calTimezone);
+      grid.appendChild(el('div', { class: rowClass, text: timeStr }));
 
       for (let i = 0; i < 7; i++) {
         const d = weekDates[i];
@@ -638,9 +761,7 @@ const Dashboard = {
     const getEventSlot = (ev, totalDayEvents) => {
       let hash = 0;
       for(let k=0; k<ev.data.id.length; k++) hash += ev.data.id.charCodeAt(k);
-      let evSlot = (hash % 9) + 1;
-      if (totalDayEvents > 5) evSlot = 0;
-      else if (totalDayEvents <= 5 && evSlot > 9) evSlot = 0;
+      let evSlot = (hash % 8) + 1;
       return evSlot;
     };
 
@@ -683,7 +804,6 @@ const Dashboard = {
       if (eventsInSlot.length === 0) return;
 
       eventsInSlot.sort((a, b) => a.dayIdx - b.dayIdx);
-
       const dayOccupancy = [0, 0, 0, 0, 0, 0, 0];
 
       eventsInSlot.forEach(({ ev, dayIdx, spanDays, dateStr }) => {
@@ -747,7 +867,9 @@ const Dashboard = {
       const isCurrentHour = (slotIndex > 0 && (slotIndex + 8 === nowHour));
       const rowClass = isCurrentHour ? 'week-time-label current-hour' : 'week-time-label';
 
-      grid.appendChild(el('div', { class: rowClass, text: time }));
+      // Time zone adjusted label
+      const timeStr = slotIndex === 0 ? 'All Day' : this.getAdjustedHourLabel(slotIndex + 8, this.calTimezone);
+      grid.appendChild(el('div', { class: rowClass, text: timeStr }));
 
       const cellClass = `week-cell ${isCurrentHour && isToday ? 'current-hour-cell' : ''}`;
       const cell = el('div', { class: cellClass, 'data-date': dateStr, 'data-slot': String(slotIndex) });
@@ -762,7 +884,7 @@ const Dashboard = {
       grid.appendChild(cell);
     });
 
-    // --- Day View: render events inside cells (no floating overlays) ---
+    // Render events inside cells
     const dayEvents = events[dateStr] || [];
 
     timeSlots.forEach((time, slotIndex) => {
@@ -857,7 +979,6 @@ const Dashboard = {
       grid.appendChild(el('div', { class: 'calendar-day-name', text: d }));
     });
 
-    // Calendar Cells (42 cells)
     const firstDayIndex = new Date(this.calYear, this.calMonth, 1).getDay();
     const daysInMonth = new Date(this.calYear, this.calMonth + 1, 0).getDate();
     const prevMonthDays = new Date(this.calYear, this.calMonth, 0).getDate();
@@ -865,7 +986,7 @@ const Dashboard = {
     const todayDate = new Date();
     const todayStr = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
 
-    // Previous month padding cells
+    // Previous month cells
     for (let i = firstDayIndex - 1; i >= 0; i--) {
       const day = prevMonthDays - i;
       const m = this.calMonth === 0 ? 11 : this.calMonth - 1;
@@ -880,7 +1001,7 @@ const Dashboard = {
       grid.appendChild(this.renderDayCell(i, dateStr, false, events[dateStr], todayStr, events));
     }
 
-    // Next month padding cells
+    // Next month cells
     const totalRendered = firstDayIndex + daysInMonth;
     const remaining = 42 - totalRendered;
     for (let i = 1; i <= remaining; i++) {
@@ -890,7 +1011,7 @@ const Dashboard = {
       grid.appendChild(this.renderDayCell(i, dateStr, true, events[dateStr], todayStr, events));
     }
 
-    // --- Month View Event Overlay Layer (Spanning Bars) ---
+    // Month Event Overlays
     const overlayContainer = el('div', { class: 'month-events-overlay' });
     grid.appendChild(overlayContainer);
 
@@ -973,7 +1094,6 @@ const Dashboard = {
       });
     }
 
-    // Auto-scroll cells with overflowing event badges
     setTimeout(() => this.setupAutoScroll(grid), 50);
   },
 
@@ -991,7 +1111,6 @@ const Dashboard = {
 
     const eventsContainer = el('div', { class: 'calendar-cell-events' });
     if (dayEvents && dayEvents.length > 0) {
-      // Only show single-day events as cell badges; multi-day events get overlay bars
       const isSingleDay = (ev) => {
         const span = this.getEventSpanClasses(ev, dateStr, events);
         return !span.includes('span-left') && !span.includes('span-right');
@@ -1004,7 +1123,6 @@ const Dashboard = {
         const isCompleted = ev.type === 'wr' ? ev.data.status === 'Completed' : ['Released', 'Paid'].includes(ev.data.status);
         
         let colorClass = 'bg-cyan-500';
-        
         if (ev.type === 'wr') {
             const wrTasks = DB.getWhere('tasks', t => t.workRequestId === ev.data.id);
             const total = wrTasks.length;
@@ -1035,7 +1153,6 @@ const Dashboard = {
         
         const pill = el('div', { class: `week-event-pill ${colorClass}`, style: 'margin-bottom:0; width:100%;' });
 
-        // Status dot inside badge
         const status = (ev.data.status || 'Draft').toLowerCase();
         const dot = el('span', { class: `status-dot status-${status.replace(/\s+/g, '-')}`, style: 'background:#fff; margin-right:4px;' });
         pill.appendChild(dot);
@@ -1103,13 +1220,11 @@ const Dashboard = {
       if (!dateStr) return;
       const key = dateStr.slice(0, 10);
       if (!eventsByDate[key]) eventsByDate[key] = [];
-      // Prevent duplicate entries for the same item on the same day
       if (!eventsByDate[key].some(e => e.type === type && e.data.id === item.id)) {
         eventsByDate[key].push({ type, data: item });
       }
     };
 
-    // Build date range helper: emit every YYYY-MM-DD from start -> end inclusive
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -1129,7 +1244,6 @@ const Dashboard = {
       if (wr.dueDate && wr.status !== 'Cancelled') {
         const due = wr.dueDate.slice(0, 10);
         if (due >= todayStr) {
-          // Span from today through deadline so the bar visually covers the active duration
           getDatesInRange(todayStr, due).forEach(date => addToEvents(date, 'wr', wr));
         } else {
           addToEvents(wr.dueDate, 'wr', wr);
@@ -1320,13 +1434,12 @@ const Dashboard = {
       const badges = eventsContainer.querySelectorAll('.calendar-event-badge');
       if (badges.length <= 2) return;
 
-      // Enable scrollability
       eventsContainer.classList.add('auto-scroll');
 
       let scrollPos = 0;
-      let direction = 1; // 1 = down, -1 = up
-      const speed = 0.5; // px per tick
-      const pauseTicks = 60; // frames to pause at each end
+      let direction = 1;
+      const speed = 0.5;
+      const pauseTicks = 60;
       let pauseCounter = 0;
 
       const tick = () => {
@@ -1474,7 +1587,6 @@ const Dashboard = {
         details.appendChild(this.renderDetailRow('Status', item.status));
         details.appendChild(this.renderDetailRow('Assigned', assigned ? assigned.name : '—'));
         
-        // Show remaining incomplete tasks for logged in staff
         const myTasks = DB.getWhere('tasks', t => t.workRequestId === item.id && t.assigneeId === Auth.user.id && t.status !== 'Completed');
         if (myTasks.length > 0) {
           const taskWrap = el('div', { class: 'detail-desc', style: 'border-left-color: var(--color-warning);' });
@@ -1527,67 +1639,6 @@ const Dashboard = {
     row.appendChild(el('span', { class: 'detail-lbl', text: label }));
     row.appendChild(el('span', { class: 'detail-val', text: value }));
     return row;
-  },
-
-  renderPendingOperationsRequestsCard(entity) {
-    const card = el('div', { class: 'bento-item bento-half', style: 'max-height: 350px; overflow-y: auto;' });
-    card.appendChild(el('h3', { text: 'Pending Operations Requests', style: 'margin-bottom: var(--spacing-md); font-size: 1.125rem; font-weight: 600;' }));
-
-    let requests = DB.getWhere('operationsRequests', r => r.status === 'pending');
-    
-    if (entity && entity !== 'ALL') {
-      requests = requests.filter(r => {
-        const wr = DB.getById('workRequests', r.workRequestId);
-        return wr && wr.entity.toUpperCase() === entity.toUpperCase();
-      });
-    }
-
-    const role = Auth.user?.role;
-    if (role === 'Accounting') {
-      requests = requests.filter(r => r.type === 'billing' || r.type === 'disbursement');
-    } else if (role === 'Documentation') {
-      requests = requests.filter(r => r.type === 'transmittal');
-    } else if (role !== 'Admin' && role !== 'Manager') {
-      requests = [];
-    }
-
-    if (requests.length === 0) {
-      card.appendChild(el('p', { class: 'empty-state', text: 'No pending operations requests.', style: 'margin: auto;' }));
-    } else {
-      const list = el('div', { style: 'display: flex; flex-direction: column; gap: var(--spacing-sm);' });
-      requests.forEach(r => {
-        const wr = DB.getById('workRequests', r.workRequestId);
-        const wrTitle = wr ? wr.title : 'Unknown Work Request';
-        const client = DB.getById('clients', r.clientId);
-        const clientName = client ? client.name : 'Unknown Client';
-        
-        const typeLabel = r.type === 'billing' ? 'Billing' : r.type === 'disbursement' ? 'Disbursement' : 'Transmittal';
-        const typeIcon = r.type === 'billing' ? '📄' : r.type === 'disbursement' ? '💸' : '📦';
-
-        const item = el('div', { class: 'detail-item-v2', style: 'display: flex; justify-content: space-between; align-items: center; padding: 10px; border-radius: 8px; background: var(--color-bg);' });
-        const left = el('div', { style: 'display: flex; flex-direction: column; gap: 2px;' });
-        left.appendChild(el('span', { text: `${typeIcon} Request for ${typeLabel}`, style: 'font-weight: 600; font-size: 0.875rem;' }));
-        left.appendChild(el('span', { text: `WR: ${wrTitle} • Client: ${clientName}`, style: 'font-size: 0.75rem; color: var(--color-text-muted);' }));
-        if (r.notes) {
-          left.appendChild(el('span', { text: `Note: "${r.notes}"`, style: 'font-size: 0.75rem; font-style: italic; color: var(--color-text-muted); margin-top: 2px;' }));
-        }
-        item.appendChild(left);
-
-        const right = el('div', { style: 'display: flex; gap: 8px; align-items: center;' });
-        const fulfillBtn = el('button', { class: 'btn btn-primary btn-xs', text: 'Fulfill' });
-        fulfillBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.fulfillOperationsRequest(r);
-        });
-        right.appendChild(fulfillBtn);
-        item.appendChild(right);
-
-        list.appendChild(item);
-      });
-      card.appendChild(list);
-    }
-
-    return card;
   },
 
   fulfillOperationsRequest(req) {

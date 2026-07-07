@@ -65,9 +65,9 @@ async function runTests() {
   // ─── TEST 3: Dashboard widgets in consolidated view ──────────────
   await page.goto(BASE + '/#dashboard');
   await page.waitForTimeout(800);
-  const hasUpcoming = await page.isVisible('text=Upcoming Disbursements');
-  const hasDue = await page.isVisible('text=Work Requests Due This Week');
-  await log('Dashboard Widgets (#1)', hasUpcoming && hasDue, `upcoming=${hasUpcoming}, due=${hasDue}`);
+  const hasActiveWR = await page.isVisible('text=Active Work Requests');
+  const hasRevPaid = await page.isVisible('text=Revenue (Paid)');
+  await log('Dashboard Widgets (#1)', hasActiveWR && hasRevPaid, `activeWR=${hasActiveWR}, revPaid=${hasRevPaid}`);
 
   // ─── TEST 4: Clients table columns ───────────────────────────────
   await page.goto(BASE + '/#clients');
