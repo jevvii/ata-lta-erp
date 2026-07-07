@@ -6,6 +6,8 @@ const Users = {
   view: 'users', // 'users' | 'audit' | 'pending'
   editingId: null,
   pendingDetailId: null,
+  myPendingViewMode: 'table',
+  myRequestsViewMode: 'table',
   filters: {
     category: '',
     status: '',
@@ -53,95 +55,7 @@ const Users = {
     // Internal Admin tabs use the same module-tab-link style as other pages
     container.appendChild(this.renderTabNav());
 
-    if (!canManageUsers) {
-      // --- Filters Bar (matches other module filters) ---
-      const filters = el('div', { class: 'filters-bar' });
 
-      // 1. Categories select
-      const catFilter = el('select', { class: 'form-select' });
-      catFilter.appendChild(el('option', { value: '', text: 'All Categories' }));
-
-      const categoriesList = this.view === 'myPending'
-        ? [
-            { value: 'invoices', text: 'Invoices' },
-            { value: 'disbursements', text: 'Disbursements' },
-            { value: 'transmittals', text: 'Transmittals' },
-            { value: 'clients', text: 'Clients' },
-            { value: 'tasks', text: 'Tasks' }
-          ]
-        : [
-            { value: 'billing', text: 'Billing' },
-            { value: 'disbursement', text: 'Disbursement' },
-            { value: 'transmittal', text: 'Transmittal' }
-          ];
-
-      categoriesList.forEach(c => {
-        catFilter.appendChild(el('option', { value: c.value, text: c.text }));
-      });
-      if (this.filters.category) catFilter.value = this.filters.category;
-      filters.appendChild(wrapFilterFieldWithClear(catFilter));
-
-      // 2. Statuses select
-      const statusFilter = el('select', { class: 'form-select' });
-      statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-
-      const statusList = this.view === 'myPending'
-        ? [
-            { value: 'pending', text: 'Pending' },
-            { value: 'rejected', text: 'Rejected' }
-          ]
-        : [
-            { value: 'pending', text: 'Pending' },
-            { value: 'fulfilled', text: 'Fulfilled' },
-            { value: 'rejected', text: 'Rejected' }
-          ];
-
-      statusList.forEach(s => {
-        statusFilter.appendChild(el('option', { value: s.value, text: s.text }));
-      });
-      if (this.filters.status) statusFilter.value = this.filters.status;
-      filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-      // 3. Date From/To inputs
-      const dateFrom = el('input', { type: 'date', class: 'form-select' });
-      const dateTo = el('input', { type: 'date', class: 'form-select' });
-      if (this.filters.dateFrom) dateFrom.value = this.filters.dateFrom;
-      if (this.filters.dateTo) dateTo.value = this.filters.dateTo;
-      filters.appendChild(el('span', { text: 'From', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
-      filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-      filters.appendChild(el('span', { text: 'To', style: 'font-size:0.8125rem;color:var(--color-text-muted);' }));
-      filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-      // 4. Clear All button
-      const clearBtn = el('button', {
-        class: 'btn btn-secondary btn-sm',
-        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-      });
-      clearBtn.addEventListener('click', () => {
-        catFilter.value = '';
-        statusFilter.value = '';
-        dateFrom.value = '';
-        dateTo.value = '';
-        this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
-        App.handleRoute();
-      });
-      filters.appendChild(clearBtn);
-
-      // Wire change events
-      const refreshFilters = () => {
-        this.filters.category = catFilter.value;
-        this.filters.status = statusFilter.value;
-        this.filters.dateFrom = dateFrom.value;
-        this.filters.dateTo = dateTo.value;
-        App.handleRoute();
-      };
-      catFilter.addEventListener('change', refreshFilters);
-      statusFilter.addEventListener('change', refreshFilters);
-      dateFrom.addEventListener('change', refreshFilters);
-      dateTo.addEventListener('change', refreshFilters);
-
-      container.appendChild(filters);
-    }
 
     if (this.view === 'users' && canManageUsers) {
       container.appendChild(this.renderUsersSection());
@@ -1555,73 +1469,226 @@ const Users = {
 
   renderMyPendingSection() {
     const wrapper = el('div');
+    const self = this;
 
     if (this.pendingDetailId) {
       wrapper.appendChild(this.renderPendingDetail(this.pendingDetailId));
       return wrapper;
     }
 
+    // Initialize view mode from localStorage
+    this.myPendingViewMode = App.getPreferredViewMode('myPending');
+    if (!this.myPendingViewMode || this.myPendingViewMode === 'list') this.myPendingViewMode = 'table';
+
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      category: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
+
+    const savedFilters = App.restoreFilters('myPending');
+    if (savedFilters) {
+      if (Array.isArray(savedFilters.category)) savedFilters.category.forEach(v => activeFilters.category.add(v));
+      else if (savedFilters.category) activeFilters.category.add(savedFilters.category);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
+    }
+
+    const saveCurrentFilters = () => {
+      App.saveFilters('myPending', {
+        category: Array.from(activeFilters.category),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
+      });
+    };
+
+    const getCategoryOptions = () => [
+      { value: 'invoices', label: 'Invoices' },
+      { value: 'disbursements', label: 'Disbursements' },
+      { value: 'transmittals', label: 'Transmittals' },
+      { value: 'clients', label: 'Clients' },
+      { value: 'tasks', label: 'Tasks' }
+    ];
+
+    const getStatusOptions = () => [
+      { value: 'pending', label: 'Pending' },
+      { value: 'rejected', label: 'Rejected' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      category: { label: 'Category', getOptions: getCategoryOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'myPending',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        updateFilters();
+      },
+      viewMode: this.myPendingViewMode || 'table',
+      onViewModeChange: (newMode) => {
+        self.myPendingViewMode = newMode;
+        App.setPreferredViewMode('myPending', newMode);
+        saveCurrentFilters();
+        updateFilters();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
+    wrapper.appendChild(stickyContainer);
+
+    const listContainer = el('div');
+    wrapper.appendChild(listContainer);
+
+    const updateFilters = () => self.refreshMyPendingList(listContainer, activeFilters, self.myPendingViewMode || 'table');
+    updateFilters();
+
+    return wrapper;
+  },
+
+  refreshMyPendingList(container, activeFilters, viewMode) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+    const self = this;
+
     let pending = PendingChanges.getPendingForUser(Auth.user.id);
     let rejected = PendingChanges.getRejectedForUser(Auth.user.id);
 
+    // Combine all items into a unified list
+    let allItems = [
+      ...pending.map(pc => ({ ...pc, _displayStatus: 'pending' })),
+      ...rejected.map(pc => ({ ...pc, _displayStatus: 'rejected' }))
+    ];
+    const hasItems = allItems.length > 0;
+
     // Apply category filter
-    if (this.filters.category) {
-      pending = pending.filter(pc => pc.table === this.filters.category);
-      rejected = rejected.filter(pc => pc.table === this.filters.category);
+    if (activeFilters.category && activeFilters.category.size > 0) {
+      allItems = allItems.filter(pc => activeFilters.category.has(pc.table));
     }
 
     // Apply status filter
-    if (this.filters.status) {
-      pending = pending.filter(pc => pc.status === this.filters.status);
-      rejected = rejected.filter(pc => pc.status === this.filters.status);
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      allItems = allItems.filter(pc => activeFilters.status.has(pc.status));
     }
 
-    // Apply date range filter
-    if (this.filters.dateFrom || this.filters.dateTo) {
-      const filterFn = (pc) => {
-        if (!pc.submittedAt) return false;
-        const itemDate = new Date(pc.submittedAt);
-        const itemISO = itemDate.getFullYear() + '-' + String(itemDate.getMonth() + 1).padStart(2, '0') + '-' + String(itemDate.getDate()).padStart(2, '0');
-        if (this.filters.dateFrom && itemISO < this.filters.dateFrom) return false;
-        if (this.filters.dateTo && itemISO > this.filters.dateTo) return false;
-        return true;
-      };
-      pending = pending.filter(filterFn);
-      rejected = rejected.filter(filterFn);
+    // Apply date filter (bucket-based + custom date)
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
+      allItems = allItems.filter(pc => {
+        const dStr = (pc.submittedAt || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
     }
 
-    if (pending.length === 0 && rejected.length === 0) {
-      const isFiltered = this.filters.category || this.filters.status || this.filters.dateFrom || this.filters.dateTo;
-      wrapper.appendChild(renderEmptyStateV2({
-        variant: isFiltered ? 'filtered-empty' : 'zero-state',
-        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
-        title: isFiltered ? 'No matching submissions' : 'No pending submissions',
-        body: isFiltered ? 'Try clearing or modifying your filter criteria.' : 'Your pending change requests will appear here once submitted.'
-      }));
-      return wrapper;
+    // Sort newest first
+    allItems.sort((a, b) => new Date(b.submittedAt || '') - new Date(a.submittedAt || ''));
+
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
+    if (allItems.length === 0) {
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No submissions match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('myPending'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyStateV2({
+          variant: 'zero-state',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
+          title: 'No pending submissions',
+          body: 'Your pending change requests will appear here once submitted.'
+        }));
+      }
+      return;
     }
+
+    if (viewMode === 'table') {
+      this.renderMyPendingTableView(container, allItems);
+    } else if (viewMode === 'board') {
+      this.renderMyPendingBoardView(container, allItems);
+    } else {
+      this.renderMyPendingCompactListView(container, allItems);
+    }
+  },
+
+  _pendingStatusBadge(status) {
+    const map = {
+      'pending': 'badge badge-warning',
+      'rejected': 'badge badge-danger'
+    };
+    return el('span', { class: map[status] || 'badge', text: status.charAt(0).toUpperCase() + status.slice(1) });
+  },
+
+  _pendingCategoryLabel(table) {
+    const map = {
+      invoices: 'Invoices',
+      disbursements: 'Disbursements',
+      transmittals: 'Transmittals',
+      clients: 'Clients',
+      tasks: 'Tasks',
+      workRequests: 'Work Requests'
+    };
+    return map[table] || table;
+  },
+
+  renderMyPendingTableView(container, items) {
+    const self = this;
+    // Separate pending and rejected for display
+    const pending = items.filter(pc => pc._displayStatus === 'pending');
+    const rejected = items.filter(pc => pc._displayStatus === 'rejected');
 
     if (pending.length > 0) {
       const table = el('table', { class: 'data-table' });
       const thead = el('thead');
       const thr = el('tr');
-      ['Table', 'Date', 'Type', 'Status', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+      ['Category', 'Date', 'Type', 'Status', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
       thead.appendChild(thr);
       table.appendChild(thead);
 
       const tbody = el('tbody');
       pending.forEach(pc => {
         const tr = el('tr');
-        tr.appendChild(el('td', { text: pc.table }));
+        tr.appendChild(el('td', { text: self._pendingCategoryLabel(pc.table) }));
         tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
         tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
-        tr.appendChild(el('td', { text: pc.status }));
+        const tdStatus = el('td');
+        tdStatus.appendChild(self._pendingStatusBadge(pc.status));
+        tr.appendChild(tdStatus);
 
         const tdAct = el('td');
-        
         const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
         reviewBtn.addEventListener('click', () => {
-          this.pendingDetailId = pc.id;
+          self.pendingDetailId = pc.id;
           App.handleRoute();
         });
         tdAct.appendChild(reviewBtn);
@@ -1641,32 +1708,30 @@ const Users = {
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
-      wrapper.appendChild(table);
+      container.appendChild(table);
     }
 
     if (rejected.length > 0) {
-      wrapper.appendChild(el('h3', { text: 'Rejected Submissions', style: 'margin-top:var(--spacing-lg);' }));
+      container.appendChild(el('h3', { text: 'Rejected Submissions', style: 'margin-top:var(--spacing-lg);' }));
       const table = el('table', { class: 'data-table' });
       const thead = el('thead');
       const thr = el('tr');
-      ['Table', 'Date', 'Type', 'Rejection Reason', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+      ['Category', 'Date', 'Type', 'Rejection Reason', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
       thead.appendChild(thr);
       table.appendChild(thead);
 
       const tbody = el('tbody');
       rejected.forEach(pc => {
         const tr = el('tr');
-        tr.appendChild(el('td', { text: pc.table }));
+        tr.appendChild(el('td', { text: self._pendingCategoryLabel(pc.table) }));
         tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
         tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
         tr.appendChild(el('td', { text: pc.rejectionReason || '—', style: 'color:var(--color-danger);font-weight:600;word-break:break-word;' }));
 
         const tdAct = el('td');
-        
-        // Keep only Review (blue) and Dismiss (red) buttons inline in the table
         const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
         reviewBtn.addEventListener('click', () => {
-          this.pendingDetailId = pc.id;
+          self.pendingDetailId = pc.id;
           App.handleRoute();
         });
         tdAct.appendChild(reviewBtn);
@@ -1684,11 +1749,125 @@ const Users = {
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
-      wrapper.appendChild(table);
+      container.appendChild(table);
     }
-
-    return wrapper;
   },
+
+  renderMyPendingBoardView(container, items) {
+    const self = this;
+    const statusColors = {
+      'pending': '#f59e0b',
+      'rejected': '#ef4444'
+    };
+
+    const columns = [
+      { key: 'pending', label: 'Pending', targetStatus: 'pending', statuses: ['pending'], color: statusColors['pending'], emptyState: { variant: 'compact', title: 'No pending submissions', body: '' } },
+      { key: 'rejected', label: 'Rejected', targetStatus: 'rejected', statuses: ['rejected'], color: statusColors['rejected'], emptyState: { variant: 'compact', title: 'No rejected submissions', body: '' } }
+    ];
+
+    let cardNumber = 1;
+    const renderCard = (pc) => {
+      const statusPriorityClass = pc.status === 'pending' ? 'card-v2-priority-medium' : 'card-v2-priority-critical';
+      const progress = pc.status === 'pending' ? 50 : 0;
+      return buildCompactBoardCard({
+        key: 'SUB-' + cardNumber++,
+        progress,
+        statusColor: statusColors[pc.status] || '#cbd5e1',
+        title: self._pendingCategoryLabel(pc.table),
+        description: pc.parentRecordId ? 'Edit existing record' : 'New record submission',
+        detail: (pc.status === 'rejected' && pc.rejectionReason) ? pc.rejectionReason : '',
+        date: pc.submittedAt ? formatDate(pc.submittedAt) : '',
+        priority: pc.status.charAt(0).toUpperCase() + pc.status.slice(1),
+        priorityClass: statusPriorityClass,
+        onClick: () => {
+          self.pendingDetailId = pc.id;
+          App.handleRoute();
+        }
+      });
+    };
+
+    const cardMenuItems = (pc) => {
+      const menu = [{
+        label: 'Review',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { self.pendingDetailId = pc.id; App.handleRoute(); }
+      }];
+      if (pc.status === 'pending') {
+        menu.push({
+          label: 'Withdraw',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+          onClick: () => Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger')
+        });
+      }
+      if (pc.status === 'rejected') {
+        menu.push({
+          label: 'Dismiss',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          onClick: () => Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger')
+        });
+      }
+      return menu;
+    };
+
+    KanbanBoard.render({
+      container,
+      items,
+      columns: columns.map(col => ({
+        key: col.key,
+        label: col.label,
+        targetStatus: col.targetStatus,
+        color: col.color,
+        emptyState: col.emptyState
+      })),
+      renderCard,
+      cardMenuItems,
+      drag: { enabled: false }
+    });
+  },
+
+  renderMyPendingCompactListView(container, items) {
+    const self = this;
+    const list = el('div', { class: 'list-view' });
+    items.forEach(pc => {
+      const item = el('div', { class: 'list-item' });
+      const left = el('div');
+      left.appendChild(el('div', { class: 'list-item-title', text: self._pendingCategoryLabel(pc.table) }));
+      const metaParts = [
+        pc.parentRecordId ? 'Edit' : 'New',
+        pc.status.charAt(0).toUpperCase() + pc.status.slice(1),
+        pc.submittedAt ? formatDate(pc.submittedAt) : ''
+      ].filter(Boolean);
+      left.appendChild(el('div', { class: 'list-item-meta', text: metaParts.join(' • ') }));
+      if (pc.status === 'rejected' && pc.rejectionReason) {
+        left.appendChild(el('div', { class: 'list-item-meta', text: 'Reason: ' + pc.rejectionReason, style: 'color:var(--color-danger);' }));
+      }
+      item.appendChild(left);
+      const rightActions = el('div', { style: 'display:flex;gap:4px;align-items:center;' });
+      const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review' });
+      reviewBtn.addEventListener('click', () => { self.pendingDetailId = pc.id; App.handleRoute(); });
+      rightActions.appendChild(reviewBtn);
+      if (pc.status === 'pending') {
+        const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
+        withdrawBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger');
+        });
+        rightActions.appendChild(withdrawBtn);
+      }
+      if (pc.status === 'rejected') {
+        const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
+        dismissBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => { PendingChanges.delete(pc.id); App.handleRoute(); }, 'danger');
+        });
+        rightActions.appendChild(dismissBtn);
+      }
+      item.appendChild(rightActions);
+      list.appendChild(item);
+    });
+    container.appendChild(list);
+  },
+
 
   renderPendingDetail(pendingId) {
     const pc = PendingChanges.getById(pendingId);
@@ -2132,49 +2311,185 @@ const Users = {
 
   renderMyRequestsSection() {
     const wrapper = el('div');
+    const self = this;
+
+    // Initialize view mode from localStorage
+    this.myRequestsViewMode = App.getPreferredViewMode('myRequests');
+    if (!this.myRequestsViewMode || this.myRequestsViewMode === 'list') this.myRequestsViewMode = 'table';
+
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      category: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
+
+    const savedFilters = App.restoreFilters('myRequests');
+    if (savedFilters) {
+      if (Array.isArray(savedFilters.category)) savedFilters.category.forEach(v => activeFilters.category.add(v));
+      else if (savedFilters.category) activeFilters.category.add(savedFilters.category);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
+    }
+
+    const saveCurrentFilters = () => {
+      App.saveFilters('myRequests', {
+        category: Array.from(activeFilters.category),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
+      });
+    };
+
+    const getCategoryOptions = () => [
+      { value: 'billing', label: 'Billing' },
+      { value: 'disbursement', label: 'Disbursement' },
+      { value: 'transmittal', label: 'Transmittal' }
+    ];
+
+    const getStatusOptions = () => [
+      { value: 'pending', label: 'Pending' },
+      { value: 'fulfilled', label: 'Fulfilled' },
+      { value: 'rejected', label: 'Rejected' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      category: { label: 'Category', getOptions: getCategoryOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'myRequests',
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        updateFilters();
+      },
+      viewMode: this.myRequestsViewMode || 'table',
+      onViewModeChange: (newMode) => {
+        self.myRequestsViewMode = newMode;
+        App.setPreferredViewMode('myRequests', newMode);
+        saveCurrentFilters();
+        updateFilters();
+      }
+    });
+
+    stickyContainer.appendChild(toolbarContainer);
+    wrapper.appendChild(stickyContainer);
+
+    const listContainer = el('div');
+    wrapper.appendChild(listContainer);
+
+    const updateFilters = () => self.refreshMyRequestsList(listContainer, activeFilters, self.myRequestsViewMode || 'table');
+    updateFilters();
+
+    return wrapper;
+  },
+
+  _requestStatusBadge(status) {
+    const map = {
+      'pending': 'badge badge-warning',
+      'fulfilled': 'badge badge-success',
+      'rejected': 'badge badge-danger'
+    };
+    return el('span', { class: map[status] || 'badge', text: status.charAt(0).toUpperCase() + status.slice(1) });
+  },
+
+  _requestTypeLabel(type) {
+    const map = { billing: 'Billing', disbursement: 'Disbursement', transmittal: 'Transmittal' };
+    return map[type] || type;
+  },
+
+  refreshMyRequestsList(container, activeFilters, viewMode) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+
     let requests = DB.getWhere('operationsRequests', r => r.requestedBy === Auth.user.id);
+    const hasItems = requests.length > 0;
 
     // Apply category filter
-    if (this.filters.category) {
-      requests = requests.filter(r => r.type === this.filters.category);
+    if (activeFilters.category && activeFilters.category.size > 0) {
+      requests = requests.filter(r => activeFilters.category.has(r.type));
     }
 
     // Apply status filter
-    if (this.filters.status) {
-      requests = requests.filter(r => r.status === this.filters.status);
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      requests = requests.filter(r => activeFilters.status.has(r.status));
     }
 
-    // Apply date range filter
-    if (this.filters.dateFrom || this.filters.dateTo) {
+    // Apply date filter (bucket-based + custom date)
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
       requests = requests.filter(r => {
-        if (!r.requestedAt) return false;
-        const itemDate = new Date(r.requestedAt);
-        const itemISO = itemDate.getFullYear() + '-' + String(itemDate.getMonth() + 1).padStart(2, '0') + '-' + String(itemDate.getDate()).padStart(2, '0');
-        if (this.filters.dateFrom && itemISO < this.filters.dateFrom) return false;
-        if (this.filters.dateTo && itemISO > this.filters.dateTo) return false;
-        return true;
+        const dStr = (r.requestedAt || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
       });
     }
 
+    // Sort newest first
+    requests.sort((a, b) => new Date(b.requestedAt || '') - new Date(a.requestedAt || ''));
+
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
     if (requests.length === 0) {
-      const isFiltered = this.filters.category || this.filters.status || this.filters.dateFrom || this.filters.dateTo;
-      wrapper.appendChild(renderEmptyStateV2({
-        variant: isFiltered ? 'filtered-empty' : 'zero-state',
-        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
-        title: isFiltered ? 'No matching requests' : 'No requests submitted yet',
-        body: isFiltered ? 'Try clearing or modifying your filter criteria.' : 'Submit a departmental request in the Operations section.',
-        actions: isFiltered ? [] : [
-          {
-            text: 'Go to Operations',
-            onClick: () => {
-              location.hash = '#operations';
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No requests match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('myRequests'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyStateV2({
+          variant: 'zero-state',
+          icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
+          title: 'No requests submitted yet',
+          body: 'Submit a departmental request in the Operations section.',
+          actions: [
+            {
+              text: 'Go to Operations',
+              onClick: () => { location.hash = '#operations'; }
             }
-          }
-        ]
-      }));
-      return wrapper;
+          ]
+        }));
+      }
+      return;
     }
 
+    if (viewMode === 'table') {
+      this.renderMyRequestsTableView(container, requests);
+    } else if (viewMode === 'board') {
+      this.renderMyRequestsBoardView(container, requests);
+    } else {
+      this.renderMyRequestsCompactListView(container, requests);
+    }
+  },
+
+  renderMyRequestsTableView(container, requests) {
     const table = el('table', { class: 'data-table' });
     const thead = el('thead');
     const thr = el('tr');
@@ -2185,30 +2500,23 @@ const Users = {
     const tbody = el('tbody');
     requests.forEach(r => {
       const tr = el('tr');
-      
-      const typeLabel = r.type === 'billing' ? 'Billing' : r.type === 'disbursement' ? 'Disbursement' : 'Transmittal';
-      tr.appendChild(el('td', { text: typeLabel }));
-      
+
+      tr.appendChild(el('td', { text: this._requestTypeLabel(r.type) }));
+
       const wr = DB.getById('workRequests', r.workRequestId);
       tr.appendChild(el('td', { text: wr ? wr.title : '—' }));
-      
+
       const client = DB.getById('clients', r.clientId);
       tr.appendChild(el('td', { text: client ? client.name : '—' }));
-      
+
       tr.appendChild(el('td', { text: formatDate(r.requestedAt) }));
-      
-      const st = r.status;
-      const badge = el('span', { 
-        class: 'badge', 
-        text: st,
-        style: `font-size: 11px; padding: 2px 6px; border-radius: var(--radius-sm); background: ${st === 'fulfilled' ? 'color-mix(in oklab, var(--success), transparent 88%)' : st === 'rejected' ? 'color-mix(in oklab, var(--danger), transparent 88%)' : 'color-mix(in oklab, var(--warn), transparent 88%)'}; color: ${st === 'fulfilled' ? 'var(--success)' : st === 'rejected' ? 'var(--danger)' : 'color-mix(in oklab, var(--warn), black 30%)'};`
-      });
+
       const tdSt = el('td');
-      tdSt.appendChild(badge);
+      tdSt.appendChild(this._requestStatusBadge(r.status));
       tr.appendChild(tdSt);
 
       const tdAct = el('td');
-      if (st === 'pending') {
+      if (r.status === 'pending') {
         const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel Request' });
         cancelBtn.addEventListener('click', () => {
           Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => {
@@ -2217,19 +2525,139 @@ const Users = {
           }, 'danger');
         });
         tdAct.appendChild(cancelBtn);
-      } else if (st === 'fulfilled') {
+      } else if (r.status === 'fulfilled') {
         const fulfiller = DB.getById('users', r.fulfilledBy);
         tdAct.textContent = `Fulfilled by ${fulfiller ? fulfiller.name : 'System'} on ${formatDate(r.fulfilledAt)}`;
-      } else if (st === 'rejected') {
+      } else if (r.status === 'rejected') {
         tdAct.textContent = r.rejectionReason ? `Reason: ${r.rejectionReason}` : 'No reason provided';
       }
       tr.appendChild(tdAct);
-      
+
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    wrapper.appendChild(table);
+    container.appendChild(table);
+  },
 
-    return wrapper;
+  renderMyRequestsBoardView(container, requests) {
+    const self = this;
+    const statusColors = {
+      'pending': '#f59e0b',
+      'fulfilled': '#10b981',
+      'rejected': '#ef4444'
+    };
+
+    const columns = [
+      { key: 'pending', label: 'Pending', targetStatus: 'pending', color: statusColors['pending'], emptyState: { variant: 'compact', title: 'No pending requests', body: '' } },
+      { key: 'fulfilled', label: 'Fulfilled', targetStatus: 'fulfilled', color: statusColors['fulfilled'], emptyState: { variant: 'compact', title: 'No fulfilled requests', body: '' } },
+      { key: 'rejected', label: 'Rejected', targetStatus: 'rejected', color: statusColors['rejected'], emptyState: { variant: 'compact', title: 'No rejected requests', body: '' } }
+    ];
+
+    let cardNumber = 1;
+    const renderCard = (r) => {
+      const wr = DB.getById('workRequests', r.workRequestId);
+      const client = DB.getById('clients', r.clientId);
+      const statusPriorityMap = {
+        'pending': 'card-v2-priority-medium',
+        'fulfilled': 'card-v2-priority-low',
+        'rejected': 'card-v2-priority-critical'
+      };
+      const progressMap = { 'pending': 33, 'fulfilled': 100, 'rejected': 0 };
+
+      let detail = '';
+      if (r.status === 'fulfilled') {
+        const fulfiller = DB.getById('users', r.fulfilledBy);
+        detail = `Fulfilled by ${fulfiller ? fulfiller.name : 'System'}`;
+      } else if (r.status === 'rejected' && r.rejectionReason) {
+        detail = r.rejectionReason;
+      }
+
+      return buildCompactBoardCard({
+        key: 'REQ-' + cardNumber++,
+        progress: progressMap[r.status] || 0,
+        statusColor: statusColors[r.status] || '#cbd5e1',
+        title: self._requestTypeLabel(r.type),
+        description: client ? client.name : '—',
+        detail: (wr ? wr.title : '') + (detail ? ' • ' + detail : ''),
+        date: r.requestedAt ? formatDate(r.requestedAt) : '',
+        priority: r.status.charAt(0).toUpperCase() + r.status.slice(1),
+        priorityClass: statusPriorityMap[r.status] || 'card-v2-priority-normal',
+        onClick: () => {}
+      });
+    };
+
+    const cardMenuItems = (r) => {
+      const menu = [];
+      if (r.status === 'pending') {
+        menu.push({
+          label: 'Cancel Request',
+          className: 'danger',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+          onClick: () => Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => { DB.delete('operationsRequests', r.id); App.handleRoute(); }, 'danger')
+        });
+      }
+      if (r.status === 'fulfilled') {
+        const fulfiller = DB.getById('users', r.fulfilledBy);
+        menu.push({ label: `Fulfilled by ${fulfiller ? fulfiller.name : 'System'}`, icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>', onClick: () => {} });
+      }
+      if (r.status === 'rejected') {
+        menu.push({ label: r.rejectionReason || 'No reason provided', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>', onClick: () => {} });
+      }
+      return menu;
+    };
+
+    KanbanBoard.render({
+      container,
+      items: requests,
+      columns: columns.map(col => ({
+        key: col.key,
+        label: col.label,
+        targetStatus: col.targetStatus,
+        color: col.color,
+        emptyState: col.emptyState
+      })),
+      renderCard,
+      cardMenuItems,
+      drag: { enabled: false }
+    });
+  },
+
+  renderMyRequestsCompactListView(container, requests) {
+    const self = this;
+    const list = el('div', { class: 'list-view' });
+    requests.forEach(r => {
+      const item = el('div', { class: 'list-item' });
+      const left = el('div');
+      left.appendChild(el('div', { class: 'list-item-title', text: self._requestTypeLabel(r.type) }));
+      const wr = DB.getById('workRequests', r.workRequestId);
+      const client = DB.getById('clients', r.clientId);
+      const metaParts = [
+        client ? client.name : '',
+        wr ? wr.title : '',
+        r.status.charAt(0).toUpperCase() + r.status.slice(1),
+        r.requestedAt ? formatDate(r.requestedAt) : ''
+      ].filter(Boolean);
+      left.appendChild(el('div', { class: 'list-item-meta', text: metaParts.join(' • ') }));
+      if (r.status === 'fulfilled') {
+        const fulfiller = DB.getById('users', r.fulfilledBy);
+        left.appendChild(el('div', { class: 'list-item-meta', text: `Fulfilled by ${fulfiller ? fulfiller.name : 'System'} on ${formatDate(r.fulfilledAt)}`, style: 'color:var(--color-success);' }));
+      }
+      if (r.status === 'rejected' && r.rejectionReason) {
+        left.appendChild(el('div', { class: 'list-item-meta', text: 'Reason: ' + r.rejectionReason, style: 'color:var(--color-danger);' }));
+      }
+      item.appendChild(left);
+      const rightActions = el('div', { style: 'display:flex;gap:4px;align-items:center;' });
+      if (r.status === 'pending') {
+        const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel' });
+        cancelBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => { DB.delete('operationsRequests', r.id); App.handleRoute(); }, 'danger');
+        });
+        rightActions.appendChild(cancelBtn);
+      }
+      rightActions.appendChild(self._requestStatusBadge(r.status));
+      item.appendChild(rightActions);
+      list.appendChild(item);
+    });
+    container.appendChild(list);
   }
 };

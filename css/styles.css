@@ -1655,6 +1655,25 @@ tbody tr:hover {
   padding: 0;
 }
 
+.admin-tab-page .board-v2 {
+  overflow: visible;
+  min-height: calc(100vh - var(--admin-title-bar-height, 48px) - var(--admin-tab-nav-height, 45px) - var(--admin-toolbar-height, 40px) - 80px);
+}
+
+.admin-tab-page .board-column-v2 {
+  max-height: none;
+}
+
+.admin-tab-page .board-cards-scroll {
+  overflow-y: visible;
+}
+
+.admin-tab-page .board-column-header-v2 {
+  position: sticky;
+  top: calc(var(--admin-title-bar-height, 48px) + var(--admin-tab-nav-height, 45px) + var(--admin-toolbar-height, 0px));
+  z-index: 20;
+}
+
 .module-tab-link {
   display: inline-flex;
   align-items: center;
