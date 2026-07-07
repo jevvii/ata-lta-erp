@@ -1663,79 +1663,48 @@ const Users = {
 
   renderMyPendingTableView(container, items) {
     const self = this;
-    // Separate pending and rejected for display
-    const pending = items.filter(pc => pc._displayStatus === 'pending');
-    const rejected = items.filter(pc => pc._displayStatus === 'rejected');
+    const table = el('table', { class: 'data-table' });
+    const thead = el('thead');
+    const thr = el('tr');
+    ['Category', 'Date', 'Type', 'Status', 'Rejection Reason', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
+    thead.appendChild(thr);
+    table.appendChild(thead);
 
-    if (pending.length > 0) {
-      const table = el('table', { class: 'data-table' });
-      const thead = el('thead');
-      const thr = el('tr');
-      ['Category', 'Date', 'Type', 'Status', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-      thead.appendChild(thr);
-      table.appendChild(thead);
+    const tbody = el('tbody');
+    items.forEach(pc => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: self._pendingCategoryLabel(pc.table) }));
+      tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
+      tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
 
-      const tbody = el('tbody');
-      pending.forEach(pc => {
-        const tr = el('tr');
-        tr.appendChild(el('td', { text: self._pendingCategoryLabel(pc.table) }));
-        tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
-        tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
-        const tdStatus = el('td');
-        tdStatus.appendChild(self._pendingStatusBadge(pc.status));
-        tr.appendChild(tdStatus);
+      const tdStatus = el('td');
+      tdStatus.appendChild(self._pendingStatusBadge(pc.status));
+      tr.appendChild(tdStatus);
 
-        const tdAct = el('td');
-        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
-        reviewBtn.addEventListener('click', () => {
-          self.pendingDetailId = pc.id;
-          App.handleRoute();
-        });
-        tdAct.appendChild(reviewBtn);
-
-        if (pc.status === 'pending') {
-          const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
-          withdrawBtn.addEventListener('click', () => {
-            Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => {
-              PendingChanges.delete(pc.id);
-              App.handleRoute();
-            }, 'danger');
-          });
-          tdAct.appendChild(withdrawBtn);
-        }
-
-        tr.appendChild(tdAct);
-        tbody.appendChild(tr);
+      const tdReason = el('td', { 
+        text: pc.status === 'rejected' ? (pc.rejectionReason || '—') : '—', 
+        style: pc.status === 'rejected' ? 'color:var(--color-danger);font-weight:600;word-break:break-word;' : '' 
       });
-      table.appendChild(tbody);
-      container.appendChild(table);
-    }
+      tr.appendChild(tdReason);
 
-    if (rejected.length > 0) {
-      container.appendChild(el('h3', { text: 'Rejected Submissions', style: 'margin-top:var(--spacing-lg);' }));
-      const table = el('table', { class: 'data-table' });
-      const thead = el('thead');
-      const thr = el('tr');
-      ['Category', 'Date', 'Type', 'Rejection Reason', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-      thead.appendChild(thr);
-      table.appendChild(thead);
+      const tdAct = el('td');
+      const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
+      reviewBtn.addEventListener('click', () => {
+        self.pendingDetailId = pc.id;
+        App.handleRoute();
+      });
+      tdAct.appendChild(reviewBtn);
 
-      const tbody = el('tbody');
-      rejected.forEach(pc => {
-        const tr = el('tr');
-        tr.appendChild(el('td', { text: self._pendingCategoryLabel(pc.table) }));
-        tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
-        tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
-        tr.appendChild(el('td', { text: pc.rejectionReason || '—', style: 'color:var(--color-danger);font-weight:600;word-break:break-word;' }));
-
-        const tdAct = el('td');
-        const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
-        reviewBtn.addEventListener('click', () => {
-          self.pendingDetailId = pc.id;
-          App.handleRoute();
+      if (pc.status === 'pending') {
+        const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
+        withdrawBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => {
+            PendingChanges.delete(pc.id);
+            App.handleRoute();
+          }, 'danger');
         });
-        tdAct.appendChild(reviewBtn);
-
+        tdAct.appendChild(withdrawBtn);
+      } else if (pc.status === 'rejected') {
         const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
         dismissBtn.addEventListener('click', () => {
           Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
@@ -1744,13 +1713,13 @@ const Users = {
           }, 'danger');
         });
         tdAct.appendChild(dismissBtn);
+      }
 
-        tr.appendChild(tdAct);
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      container.appendChild(table);
-    }
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
   },
 
   renderMyPendingBoardView(container, items) {
