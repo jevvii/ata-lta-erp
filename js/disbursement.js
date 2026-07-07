@@ -1075,6 +1075,7 @@ const Disbursement = {
     const catGroup = el('div', { class: 'notion-prop' });
     catGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Category' }));
     
+    const OTHER_CATEGORY = 'Other';
     const standardCategories = this.STANDARD_CATEGORIES;
     let initialCategory = '';
     if (existing) {
@@ -1083,25 +1084,26 @@ const Disbursement = {
       initialCategory = opReq.category;
     }
     const isCustom = initialCategory && !standardCategories.includes(initialCategory);
-    let previousSelection;
-    if (isCustom) {
-      previousSelection = 'Other';
-    } else if (initialCategory && initialCategory !== 'Other') {
-      previousSelection = initialCategory;
-    } else {
-      previousSelection = standardCategories[0];
-    }
 
     const catSel = el('select', { required: true, class: 'notion-prop-select' });
     standardCategories.forEach(c => {
       const opt = el('option', { value: c, text: c });
       if (isCustom) {
-        if (c === 'Other') opt.selected = true;
+        if (c === OTHER_CATEGORY) opt.selected = true;
       } else {
         if (initialCategory === c) opt.selected = true;
       }
       catSel.appendChild(opt);
     });
+
+    let previousSelection;
+    if (isCustom) {
+      previousSelection = OTHER_CATEGORY;
+    } else if (initialCategory && initialCategory !== OTHER_CATEGORY) {
+      previousSelection = initialCategory;
+    } else {
+      previousSelection = catSel.value;
+    }
 
     const catInput = el('input', {
       type: 'text',
@@ -1149,9 +1151,8 @@ const Disbursement = {
     }
 
     catSel.addEventListener('change', () => {
-      if (catSel.value === 'Other') {
+      if (catSel.value === OTHER_CATEGORY) {
         switchToCustomInput();
-        catInput.value = '';
         catInput.focus();
       } else {
         previousSelection = catSel.value;
@@ -1160,7 +1161,6 @@ const Disbursement = {
 
     backBtn.addEventListener('click', () => {
       switchToDropdown();
-      catInput.value = '';
       catSel.value = previousSelection;
     });
 
