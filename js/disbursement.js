@@ -1082,6 +1082,7 @@ const Disbursement = {
       initialCategory = opReq.category;
     }
     const isCustom = initialCategory && !standardCategories.includes(initialCategory);
+    let previousSelection = (initialCategory && initialCategory !== 'Other' && !isCustom) ? initialCategory : standardCategories[0];
 
     const catSel = el('select', { required: true, class: 'notion-prop-select' });
     standardCategories.forEach(c => {
@@ -1098,61 +1099,62 @@ const Disbursement = {
       type: 'text',
       placeholder: 'Enter custom category...',
       class: 'notion-prop-input',
-      style: 'flex: 1;',
       value: isCustom ? initialCategory : ''
     });
 
     const backBtn = el('button', {
       type: 'button',
       class: 'btn btn-secondary btn-sm',
-      text: 'Back',
-      style: 'margin-left: 8px; padding: 4px 8px; font-size: 0.75rem; height: auto; line-height: 1.2;'
+      text: 'Back'
     });
 
     const inputWrapper = el('div', {
-      style: 'flex: 1; display: flex; align-items: center;'
+      class: 'notion-input-with-btn',
+      style: 'flex: 1;'
     });
     inputWrapper.appendChild(catInput);
     inputWrapper.appendChild(backBtn);
 
-    if (isCustom) {
+    const switchToCustomInput = () => {
       catSel.style.display = 'none';
+      catSel.removeAttribute('name');
       catSel.required = false;
+
+      inputWrapper.style.display = 'flex';
       catInput.setAttribute('name', 'category');
       catInput.required = true;
-      inputWrapper.style.display = 'flex';
-    } else {
+    };
+
+    const switchToDropdown = () => {
+      inputWrapper.style.display = 'none';
+      catInput.removeAttribute('name');
+      catInput.required = false;
+
+      catSel.style.display = 'block';
       catSel.setAttribute('name', 'category');
       catSel.required = true;
-      catSel.style.display = 'block';
-      inputWrapper.style.display = 'none';
-      catInput.required = false;
+    };
+
+    if (isCustom) {
+      switchToCustomInput();
+    } else {
+      switchToDropdown();
     }
 
     catSel.addEventListener('change', () => {
       if (catSel.value === 'Other') {
-        catSel.style.display = 'none';
-        catSel.removeAttribute('name');
-        catSel.required = false;
-
-        inputWrapper.style.display = 'flex';
-        catInput.setAttribute('name', 'category');
-        catInput.required = true;
+        switchToCustomInput();
         catInput.value = '';
         catInput.focus();
+      } else {
+        previousSelection = catSel.value;
       }
     });
 
     backBtn.addEventListener('click', () => {
-      inputWrapper.style.display = 'none';
-      catInput.removeAttribute('name');
-      catInput.required = false;
+      switchToDropdown();
       catInput.value = '';
-
-      catSel.style.display = 'block';
-      catSel.setAttribute('name', 'category');
-      catSel.required = true;
-      catSel.value = 'Transportation';
+      catSel.value = previousSelection;
     });
 
     catGroup.appendChild(catSel);
