@@ -10,6 +10,7 @@ const Disbursement = {
   listViewMode: 'table', // 'table' | 'board' | 'list'
   EDITABLE_STATUSES: ['Draft', 'Submitted', 'Under Review', 'Pending'],
   PENDING_APPROVAL_STATUSES: ['Submitted', 'Under Review', 'Pending'],
+  STANDARD_CATEGORIES: ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'],
 
   render() {
     const container = el('div', { class: 'page' });
@@ -1073,14 +1074,98 @@ const Disbursement = {
     // Category
     const catGroup = el('div', { class: 'notion-prop' });
     catGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Category' }));
-    const catSel = el('select', { name: 'category', required: true, class: 'notion-prop-select' });
-    ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
+    
+    const OTHER_CATEGORY = 'Other';
+    const standardCategories = this.STANDARD_CATEGORIES;
+    let initialCategory = '';
+    if (existing) {
+      initialCategory = existing.category;
+    } else if (opReq) {
+      initialCategory = opReq.category;
+    }
+    const isCustom = initialCategory && !standardCategories.includes(initialCategory);
+
+    const catSel = el('select', { required: true, class: 'notion-prop-select' });
+    standardCategories.forEach(c => {
       const opt = el('option', { value: c, text: c });
-      if (existing && existing.category === c) opt.selected = true;
-      else if (!existing && opReq && opReq.category === c) opt.selected = true;
+      if (isCustom) {
+        if (c === OTHER_CATEGORY) opt.selected = true;
+      } else {
+        if (initialCategory === c) opt.selected = true;
+      }
       catSel.appendChild(opt);
     });
+
+    let previousSelection;
+    if (isCustom) {
+      previousSelection = OTHER_CATEGORY;
+    } else if (initialCategory && initialCategory !== OTHER_CATEGORY) {
+      previousSelection = initialCategory;
+    } else {
+      previousSelection = catSel.value;
+    }
+
+    const catInput = el('input', {
+      type: 'text',
+      placeholder: 'Enter custom category...',
+      class: 'notion-prop-input',
+      value: isCustom ? initialCategory : ''
+    });
+
+    const backBtn = el('button', {
+      type: 'button',
+      class: 'btn btn-secondary btn-sm',
+      text: 'Back'
+    });
+
+    const inputWrapper = el('div', {
+      class: 'notion-input-with-btn'
+    });
+    inputWrapper.appendChild(catInput);
+    inputWrapper.appendChild(backBtn);
+
+    const switchToCustomInput = () => {
+      catSel.style.display = 'none';
+      catSel.removeAttribute('name');
+      catSel.required = false;
+
+      inputWrapper.style.display = 'flex';
+      catInput.setAttribute('name', 'category');
+      catInput.required = true;
+    };
+
+    const switchToDropdown = () => {
+      inputWrapper.style.display = 'none';
+      catInput.removeAttribute('name');
+      catInput.required = false;
+
+      catSel.style.display = '';
+      catSel.setAttribute('name', 'category');
+      catSel.required = true;
+    };
+
+    if (isCustom) {
+      switchToCustomInput();
+    } else {
+      switchToDropdown();
+    }
+
+    catSel.addEventListener('change', () => {
+      if (catSel.value === OTHER_CATEGORY) {
+        switchToCustomInput();
+        catInput.focus();
+      } else {
+        previousSelection = catSel.value;
+      }
+    });
+
+    backBtn.addEventListener('click', () => {
+      switchToDropdown();
+      catSel.value = previousSelection;
+    });
+
     catGroup.appendChild(catSel);
+    catGroup.appendChild(inputWrapper);
     propsGrid.appendChild(catGroup);
 
     // Linked Work Request
@@ -2425,7 +2510,7 @@ const Disbursement = {
     const catGroup = el('div', { class: 'form-group' });
     catGroup.appendChild(el('label', { text: 'Category *' }));
     const catSel = el('select', { name: 'category', required: true, class: 'form-select' });
-    ['Transportation', 'Notary', 'Meals', 'Government Fee', 'Other'].forEach(c => {
+    this.STANDARD_CATEGORIES.forEach(c => {
       catSel.appendChild(el('option', { value: c, text: c }));
     });
     if (template) catSel.value = template.category || '';
