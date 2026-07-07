@@ -2108,6 +2108,7 @@ const Users = {
 
     } else if (pc.table === 'clients') {
       propertyGrid.appendChild(createPropertyRow('TIN', Icons.document, el('span', { text: proposed.tin || 'None' })));
+      propertyGrid.appendChild(createPropertyRow('RDO Code', Icons.dueDate, el('span', { text: proposed.rdoCode || 'None' })));
       propertyGrid.appendChild(createPropertyRow('Contact person', Icons.assignee, el('span', { text: proposed.contactPerson || 'None' })));
       propertyGrid.appendChild(createPropertyRow('Phone', Icons.document, el('span', { text: proposed.phone || 'None' })));
       propertyGrid.appendChild(createPropertyRow('Email', Icons.document, el('span', { text: proposed.email || 'None' })));

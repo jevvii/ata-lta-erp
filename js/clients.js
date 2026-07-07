@@ -214,6 +214,9 @@ const Clients = {
         c.tin
           ? { text: 'TIN ' + c.tin, type: 'category' }
           : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
+        c.rdoCode
+          ? { text: 'RDO: ' + c.rdoCode, type: 'category' }
+          : { text: '', type: 'category', className: 'hidden-tag-placeholder' },
         (pocUser?.name || c.contactPerson)
           ? { text: pocUser?.name || c.contactPerson, type: 'client' }
           : { text: '', type: 'client', className: 'hidden-tag-placeholder' },
@@ -259,6 +262,7 @@ const Clients = {
         { label: 'Entity', width: '55px' },
         { label: 'Retainer', width: '55px' },
         { label: 'TIN', width: '110px' },
+        { label: 'RDO Code', width: '80px' },
         { label: 'Point of Contact', width: '120px' },
         { label: 'Trade Name', width: '140px' },
         { label: 'Address', width: '160px' },
@@ -397,6 +401,15 @@ const Clients = {
     });
     entityProp.appendChild(entitySel);
     propsGrid.appendChild(entityProp);
+
+    const rdoProp = el('div', { class: 'notion-prop' });
+    rdoProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> RDO Code' }));
+    const rdoInput = el('input', { type: 'text', name: 'rdoCode', class: 'notion-prop-input', placeholder: 'e.g. 034A', maxlength: '4', value: client ? (client.rdoCode || '') : '' });
+    rdoInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    });
+    rdoProp.appendChild(rdoInput);
+    propsGrid.appendChild(rdoProp);
 
     const pocProp = el('div', { class: 'notion-prop' });
     pocProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Point of Contact' }));
@@ -576,6 +589,12 @@ const Clients = {
       return;
     }
 
+    if (data.rdoCode && !/^[a-zA-Z0-9]{1,4}$/.test(data.rdoCode)) {
+      const rdoField = form.querySelector('[name="rdoCode"]');
+      showFieldError(rdoField, 'RDO Code must be up to 4 alphanumeric characters.');
+      return;
+    }
+
     const entityRadio = form.querySelector('[name="entity"]:checked, select[name="entity"]');
     if (!entityRadio || !entityRadio.value) {
       showFieldError(entityRadio || form.querySelector('[name="entity"]'), 'Entity is required.');
@@ -651,6 +670,7 @@ const Clients = {
     const record = {
       name: data.name.trim(),
       tin: data.tin.trim(),
+      rdoCode: data.rdoCode ? data.rdoCode.trim().toUpperCase() : '',
       address: data.address ? data.address.trim() : '',
       tradeName: data.tradeName ? data.tradeName.trim() : '',
       contactUserId,

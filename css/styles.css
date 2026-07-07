@@ -14517,6 +14517,8 @@ html.loading-active #loading-screen:not(.hidden) {
   background: var(--color-surface);
   z-index: 2;
   padding-left: 8px;
+  padding-right: 8px;
+  justify-content: flex-end;
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
 }
 
@@ -14531,6 +14533,8 @@ html.loading-active #loading-screen:not(.hidden) {
   background: var(--color-bg-light, #fafafa);
   z-index: 3;
   padding-left: 8px;
+  padding-right: 8px;
+  text-align: right;
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
 }
 
