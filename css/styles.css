@@ -2216,6 +2216,106 @@ tbody tr:hover {
 .handover-completed { color: var(--color-success); font-weight: 600; }
 .handover-pending { color: var(--color-text-muted); }
 
+/* User Department Badges and Layout Overrides */
+.jira-backlog-row-tags--columns .jira-backlog-tag-department,
+.jira-backlog-tag-department {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px 4px !important;
+  overflow: visible !important;
+  max-width: 100% !important;
+  justify-content: flex-start !important;
+}
+
+.user-dept-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-muted, #f1f5f9);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .user-dept-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-muted);
+}
+
+/* Color Coding based on department */
+.user-dept-badge--administration {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+[data-theme="dark"] .user-dept-badge--administration {
+  background: rgba(153, 27, 27, 0.2);
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.3);
+}
+
+.user-dept-badge--management {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+[data-theme="dark"] .user-dept-badge--management {
+  background: rgba(146, 64, 14, 0.2);
+  color: #fcd34d;
+  border-color: rgba(253, 224, 71, 0.3);
+}
+
+.user-dept-badge--accounting {
+  background: #e0f2fe;
+  color: #075985;
+  border-color: #bae6fd;
+}
+[data-theme="dark"] .user-dept-badge--accounting {
+  background: rgba(7, 89, 133, 0.25);
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.3);
+}
+
+.user-dept-badge--operations {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+[data-theme="dark"] .user-dept-badge--operations {
+  background: rgba(22, 101, 52, 0.25);
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.3);
+}
+
+.user-dept-badge--documentation {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #ddd6fe;
+}
+[data-theme="dark"] .user-dept-badge--documentation {
+  background: rgba(91, 33, 182, 0.25);
+  color: #c4b5fd;
+  border-color: rgba(196, 181, 253, 0.3);
+}
+
+.user-dept-badge--hr {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+[data-theme="dark"] .user-dept-badge--hr {
+  background: rgba(71, 85, 105, 0.25);
+  color: #cbd5e1;
+  border-color: rgba(203, 213, 225, 0.3);
+}
+
 /* ─── Admin Pending Approvals (reference-image layout) ─────────────────── */
 .admin-tabs-v2 {
   display: flex;

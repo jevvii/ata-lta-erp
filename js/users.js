@@ -217,7 +217,10 @@ const Users = {
     const items = users.map((u, idx) => {
       const depts = Array.isArray(u.departments) ? u.departments : [];
       const deptText = depts.length
-        ? depts.map(d => '<span class="user-dept-badge">' + escapeHtml(d) + '</span>').join('')
+        ? depts.map(d => {
+            const cleanDept = d.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return `<span class="user-dept-badge user-dept-badge--${cleanDept}">${escapeHtml(d)}</span>`;
+          }).join('')
         : '<span class="text-muted">No departments</span>';
       return {
         id: u.id,
