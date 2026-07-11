@@ -89,8 +89,14 @@ const Transmittal = {
           currentMode: PaneMode.FULL_PAGE,
           viewContext: 'transmittal-form',
           onSidePeek: () => {
-            this.showForm(this.detailId, PaneMode.SIDE_PEEK);
-            location.hash = '#transmittal';
+            const transmittalId = this.detailId;
+            closeFormPanelAndRoute('#transmittal');
+            this.showForm(transmittalId, PaneMode.SIDE_PEEK);
+          },
+          onCenterPeek: () => {
+            const transmittalId = this.detailId;
+            closeFormPanelAndRoute('#transmittal');
+            this.showForm(transmittalId, PaneMode.CENTER_PEEK);
           },
           onNewTab: () => {
             window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');

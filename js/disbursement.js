@@ -110,8 +110,14 @@ const Disbursement = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'expense-form',
         onSidePeek: () => {
-          this.showForm(this.detailId, PaneMode.SIDE_PEEK);
-          location.hash = '#disbursement';
+          const expenseId = this.detailId;
+          closeFormPanelAndRoute('#disbursement');
+          this.showForm(expenseId, PaneMode.SIDE_PEEK);
+        },
+        onCenterPeek: () => {
+          const expenseId = this.detailId;
+          closeFormPanelAndRoute('#disbursement');
+          this.showForm(expenseId, PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -136,8 +142,12 @@ const Disbursement = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'disbursement-template-form',
         onSidePeek: () => {
+          closeFormPanelAndRoute('#disbursement');
           this.showTemplateForm(template, PaneMode.SIDE_PEEK);
-          location.hash = '#disbursement';
+        },
+        onCenterPeek: () => {
+          closeFormPanelAndRoute('#disbursement');
+          this.showTemplateForm(template, PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');

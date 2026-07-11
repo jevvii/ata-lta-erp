@@ -51,6 +51,19 @@ async function run() {
   route('#clients/form/new', 'Add Client');
   check('Client form view switcher', () => document.querySelector('.form-view-switcher'));
   check('Client form save button', () => document.querySelector('button[form="client-form"]'));
+  (() => {
+    const toggle = document.querySelector('.form-view-switcher-btn');
+    if (toggle) {
+      toggle.click();
+      check('Client form view popup open', () => document.querySelector('.form-view-switcher-menu.open'));
+      check('Client form view popup has side peek', () => document.querySelector('[data-mode="side-peek"]'));
+      const defaultBtn = Array.from(document.querySelectorAll('.side-pane-view-menu-item')).find(b => b.textContent.includes('Set default view'));
+      if (defaultBtn) {
+        defaultBtn.click();
+        check('Client form default submenu open', () => !document.querySelector('.side-pane-view-default-submenu').classList.contains('hidden'));
+      }
+    }
+  })();
 
   route('#admin/users/form/new', 'Add User');
   check('User form view switcher', () => document.querySelector('.form-view-switcher'));
@@ -112,6 +125,29 @@ async function run() {
     route(`#operations/addTask/${firstWr.id}`, 'Add Task');
     check('Add task view switcher', () => document.querySelector('.form-view-switcher'));
   }
+
+  // Verify switching from full-page back to a peek opens the pane and lands on the list route.
+  route('#clients/form/new', 'Add Client');
+  await (async () => {
+    const toggle = document.querySelector('.form-view-switcher-btn');
+    if (!toggle) return;
+    toggle.click();
+    const sidePeekBtn = document.querySelector('.form-view-switcher-menu > .side-pane-view-menu-item[data-mode="side-peek"]');
+    if (sidePeekBtn) {
+      sidePeekBtn.click();
+      await waitFor(() => document.querySelector('.side-pane.open'), 1000);
+      check('Client form switch to side peek opens pane', () => document.querySelector('.side-pane.open'));
+      check('Client form side peek uses list route', () => location.hash === '#clients');
+    }
+    route('#clients/form/new', 'Add Client');
+    toggle.click();
+    const centerPeekBtn = document.querySelector('.form-view-switcher-menu > .side-pane-view-menu-item[data-mode="center-peek"]');
+    if (centerPeekBtn) {
+      centerPeekBtn.click();
+      await waitFor(() => document.querySelector('.side-pane.side-pane--center-peek.open'), 1000);
+      check('Client form switch to center peek opens pane', () => document.querySelector('.side-pane.side-pane--center-peek.open'));
+    }
+  })();
 
   const allPassed = results.every(r => r.passed);
   process.exit(allPassed ? 0 : 1);

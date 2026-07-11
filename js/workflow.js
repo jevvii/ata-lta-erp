@@ -2060,8 +2060,16 @@ const Workflow = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'work-request-form',
         onSidePeek: () => {
+          const editingId = this.editingId;
+          closeFormPanelAndRoute('#operations');
+          this.editingId = editingId;
           this.openWorkRequestForm(PaneMode.SIDE_PEEK);
-          location.hash = '#operations';
+        },
+        onCenterPeek: () => {
+          const editingId = this.editingId;
+          closeFormPanelAndRoute('#operations');
+          this.editingId = editingId;
+          this.openWorkRequestForm(PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -2087,8 +2095,16 @@ const Workflow = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'retainer-template-form',
         onSidePeek: () => {
+          const templateEditingId = this.templateEditingId;
+          closeFormPanelAndRoute('#operations');
+          this.templateEditingId = templateEditingId;
           this.openRetainerTemplateForm(PaneMode.SIDE_PEEK);
-          location.hash = '#operations';
+        },
+        onCenterPeek: () => {
+          const templateEditingId = this.templateEditingId;
+          closeFormPanelAndRoute('#operations');
+          this.templateEditingId = templateEditingId;
+          this.openRetainerTemplateForm(PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -2112,8 +2128,14 @@ const Workflow = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'add-task-form',
         onSidePeek: () => {
-          this.showAddTaskPanel(this.addTaskWrId, PaneMode.SIDE_PEEK);
-          location.hash = '#operations/detail/' + this.addTaskWrId;
+          const wrId = this.addTaskWrId;
+          closeFormPanelAndRoute('#operations/detail/' + wrId);
+          this.showAddTaskPanel(wrId, PaneMode.SIDE_PEEK);
+        },
+        onCenterPeek: () => {
+          const wrId = this.addTaskWrId;
+          closeFormPanelAndRoute('#operations/detail/' + wrId);
+          this.showAddTaskPanel(wrId, PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');

@@ -38,7 +38,11 @@ const Users = {
 
     if (canManageUsers) {
       const validAdminViews = ['users', 'audit', 'pending'];
-      if (!validAdminViews.includes(this.view)) this.view = 'users';
+      // Preserve URL-driven detail views (e.g. #admin/myRequests/:id) even if the
+      // view isn't in the standard admin tab list.
+      const isUrlDrivenDetail = this.sidePeekId &&
+        (location.hash || '').startsWith(`#admin/${this.view}/`);
+      if (!validAdminViews.includes(this.view) && !isUrlDrivenDetail) this.view = 'users';
     } else {
       const showRequestsTab = hasOperations || hasManagement;
       const isManager = hasManagement;
@@ -57,16 +61,14 @@ const Users = {
     const isUserFullPage = this.view === 'users' && this.editingId &&
       (location.hash || '').includes('/users/form/');
 
-    // Direct URL / new-tab visits have the side pane closed, so render full-page inline.
-    // When the pane is open (side-peek/center-peek), let it handle the display and keep
-    // the list visible underneath.
-    const sidePaneOpen = window.SidePaneInstance && window.SidePaneInstance.isOpen();
-    const viewMode = sidePaneOpen
+    // Default pending/request detail views to side-peek unless the user has set a
+    // different default for the relevant view context.
+    const viewMode = window.SidePaneInstance
       ? window.SidePaneInstance.resolveMode({
           viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
         })
-      : 'full-page';
-    const isFullPage = (viewMode === 'full-page' || viewMode === 'new-tab') && this.sidePeekId;
+      : PaneMode.SIDE_PEEK;
+    const isFullPage = (viewMode === PaneMode.FULL_PAGE || viewMode === PaneMode.NEW_TAB) && this.sidePeekId;
 
     // Full-page forms render their own breadcrumb header; list/tab views keep the main title.
     if (!isUserFullPage && !isFullPage) {
@@ -85,8 +87,14 @@ const Users = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'user-form',
         onSidePeek: () => {
-          this.showUserForm(this.editingId === 'new' ? null : this.editingId, PaneMode.SIDE_PEEK);
-          location.hash = '#admin/users';
+          const userId = this.editingId === 'new' ? null : this.editingId;
+          closeFormPanelAndRoute('#admin/users');
+          this.showUserForm(userId, PaneMode.SIDE_PEEK);
+        },
+        onCenterPeek: () => {
+          const userId = this.editingId === 'new' ? null : this.editingId;
+          closeFormPanelAndRoute('#admin/users');
+          this.showUserForm(userId, PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -141,8 +149,12 @@ const Users = {
             currentMode: PaneMode.FULL_PAGE,
             viewContext: 'request-detail',
             onSidePeek: () => {
+              closeFormPanelAndRoute('#admin');
               this.openRequestDetailSidePeek(r, PaneMode.SIDE_PEEK);
-              location.hash = '#admin';
+            },
+            onCenterPeek: () => {
+              closeFormPanelAndRoute('#admin');
+              this.openRequestDetailSidePeek(r, PaneMode.CENTER_PEEK);
             },
             onNewTab: () => {
               window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -213,8 +225,12 @@ const Users = {
             currentMode: PaneMode.FULL_PAGE,
             viewContext: 'pending-detail',
             onSidePeek: () => {
+              closeFormPanelAndRoute('#admin');
               this.openPendingDetailSidePeek(pc, PaneMode.SIDE_PEEK);
-              location.hash = '#admin';
+            },
+            onCenterPeek: () => {
+              closeFormPanelAndRoute('#admin');
+              this.openPendingDetailSidePeek(pc, PaneMode.CENTER_PEEK);
             },
             onNewTab: () => {
               window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -359,24 +375,25 @@ const Users = {
         this.showUserForm(this.editingId === 'new' ? null : this.editingId);
       }
     } else if (this.sidePeekId) {
-      const sidePaneOpen = window.SidePaneInstance && window.SidePaneInstance.isOpen();
-      const viewMode = sidePaneOpen
+      // Default pending/request detail views to side-peek unless the user has set a
+      // different default for the relevant view context.
+      const viewMode = window.SidePaneInstance
         ? window.SidePaneInstance.resolveMode({
             viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
           })
-        : 'full-page';
-      const isFullPage = (viewMode === 'full-page' || viewMode === 'new-tab');
+        : PaneMode.SIDE_PEEK;
+      const isFullPage = (viewMode === PaneMode.FULL_PAGE || viewMode === PaneMode.NEW_TAB);
 
       if (!isFullPage) {
         if (this.view === 'pending' || this.view === 'myPending') {
           const pc = PendingChanges.getById(this.sidePeekId);
           if (pc) {
-            this.openPendingDetailSidePeek(pc);
+            this.openPendingDetailSidePeek(pc, viewMode);
           }
         } else if (this.view === 'myRequests') {
           const r = DB.getById('operationsRequests', this.sidePeekId);
           if (r) {
-            this.openRequestDetailSidePeek(r);
+            this.openRequestDetailSidePeek(r, viewMode);
           }
         }
       }
@@ -2779,52 +2796,7 @@ const Users = {
 
     wrapper.appendChild(reviewCard);
 
-    // 6. Changed Fields (Diff) Table for Edits
-    const { current, diffs, isNew } = PendingChanges.buildDiff(pc);
-    if (!isSidePeek && !isNew && diffs.length > 0) {
-      const diffSection = el('div', { class: 'form-section', style: 'margin-top: 24px; margin-bottom: 24px;' });
-      diffSection.appendChild(el('h3', { text: 'Changed Fields (Diff)', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
-
-      const diffContainer = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
-      const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
-      const diffThead = el('thead');
-      const diffThr = el('tr');
-      ['Field', 'Current Approved Value', 'Proposed Pending Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: var(--color-bg-muted); border-bottom: 2px solid var(--color-border); font-size: 0.8125rem;' })));
-      diffThead.appendChild(diffThr);
-      diffTable.appendChild(diffThead);
-      
-      const diffTbody = el('tbody');
-      diffs.forEach(d => {
-        const tr = el('tr');
-        const niceKey = d.key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        
-        let oldVal = d.old;
-        let newVal = d.new;
-        if (oldVal.startsWith('[') || oldVal.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(oldVal);
-            if (Array.isArray(parsed)) oldVal = `${parsed.length} item(s)`;
-          } catch(e) {}
-        }
-        if (newVal.startsWith('[') || newVal.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(newVal);
-            if (Array.isArray(parsed)) newVal = `${parsed.length} item(s)`;
-          } catch(e) {}
-        }
-        
-        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-text-muted);' }));
-        tr.appendChild(el('td', { text: oldVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-size: 0.8125rem; color: var(--color-text);' }));
-        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-success); background: rgba(52, 211, 153, 0.1);' }));
-        diffTbody.appendChild(tr);
-      });
-      diffTable.appendChild(diffTbody);
-      diffContainer.appendChild(diffTable);
-      diffSection.appendChild(diffContainer);
-      wrapper.appendChild(diffSection);
-    }
-
-    // 7. Actions Footer
+    // 6. Actions Footer
     const actions = el('div', {
       class: isSidePeek ? 'side-pane-form-footer' : '',
       style: isSidePeek ? 'margin-top: 0;' : 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'

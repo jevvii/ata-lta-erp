@@ -1227,45 +1227,35 @@ tbody tr:hover {
 
 /* Shared form view-mode switcher for full-page breadcrumbs */
 .form-view-switcher {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  overflow: hidden;
 }
 
 .form-view-switcher-btn {
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 28px;
   border: none;
-  border-right: 1px solid var(--color-border);
   background: transparent;
-  color: var(--color-text-muted);
+  border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  color: var(--color-text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+  padding: 0;
 }
 
-.form-view-switcher-btn:last-child { border-right: none; }
-
-.form-view-switcher-btn:hover:not(:disabled) {
-  background: var(--color-bg-light);
+.form-view-switcher-btn:hover,
+.form-view-switcher-btn[aria-expanded="true"] {
+  background: var(--color-bg);
   color: var(--color-text);
 }
 
-.form-view-switcher-btn.active,
-.form-view-switcher-btn.active:disabled {
-  background: var(--color-primary);
-  color: #fff;
-  cursor: default;
-}
-
-.form-view-switcher-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.form-view-switcher-menu {
+  top: 38px;
+  right: 0;
 }
 
 .actions-bar .breadcrumb-view-switcher {

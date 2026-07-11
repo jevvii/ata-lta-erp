@@ -70,8 +70,14 @@ const Billing = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'invoice-form',
         onSidePeek: () => {
-          this.showForm(this.detailId, PaneMode.SIDE_PEEK);
-          location.hash = '#billing';
+          const invoiceId = this.detailId;
+          closeFormPanelAndRoute('#billing');
+          this.showForm(invoiceId, PaneMode.SIDE_PEEK);
+        },
+        onCenterPeek: () => {
+          const invoiceId = this.detailId;
+          closeFormPanelAndRoute('#billing');
+          this.showForm(invoiceId, PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -96,8 +102,12 @@ const Billing = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'billing-template-form',
         onSidePeek: () => {
+          closeFormPanelAndRoute('#billing');
           this.showTemplateForm(template, PaneMode.SIDE_PEEK);
-          location.hash = '#billing';
+        },
+        onCenterPeek: () => {
+          closeFormPanelAndRoute('#billing');
+          this.showTemplateForm(template, PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');

@@ -58,18 +58,14 @@ const Clients = {
         currentMode: PaneMode.FULL_PAGE,
         viewContext: 'client-form',
         onSidePeek: () => {
-          const formContainer = el('div', { class: 'form-container' });
-          this.renderForm(formContainer, this.editingId);
-          window.SidePaneInstance.open({
-            title: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
-            content: formContainer,
-            viewContext: 'client-form',
-            fullPageRoute,
-            newTabRoute: fullPageRoute,
-            recordId: isNew ? null : this.editingId,
-            mode: PaneMode.SIDE_PEEK
-          });
-          location.hash = '#clients';
+          const clientId = this.editingId === 'new' ? null : this.editingId;
+          closeFormPanelAndRoute('#clients');
+          this.showForm(clientId, PaneMode.SIDE_PEEK);
+        },
+        onCenterPeek: () => {
+          const clientId = this.editingId === 'new' ? null : this.editingId;
+          closeFormPanelAndRoute('#clients');
+          this.showForm(clientId, PaneMode.CENTER_PEEK);
         },
         onNewTab: () => {
           window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
@@ -687,7 +683,7 @@ const Clients = {
     });
   },
 
-  showForm(clientId) {
+  showForm(clientId, mode = null) {
     this.editingId = clientId || 'new';
     const isNew = this.editingId === 'new';
     const client = isNew ? null : DB.getById('clients', this.editingId);
@@ -701,6 +697,7 @@ const Clients = {
       title: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
       formContent: formContainer,
       formId: 'client-form',
+      mode,
       viewContext: 'client-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,

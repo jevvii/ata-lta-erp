@@ -1514,8 +1514,9 @@ function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [], v
 }
 
 /**
- * Builds a small segmented form view-mode switcher for full-page forms.
- * Mirrors the options available in the shared side-peek panel view menu.
+ * Builds a Notion-style popup view-mode switcher for full-page forms.
+ * Mirrors the popup inside the shared side-peek panel: "Open form as",
+ * Side peek / Center peek / Full page / New tab, plus "Set default view".
  *
  * @param {Object} opts
  * @param {string} [opts.currentMode] - 'side-peek' | 'center-peek' | 'full-page' | 'new-tab'
@@ -1523,7 +1524,7 @@ function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [], v
  * @param {Function} [opts.onCenterPeek] - Callback when Center peek is selected
  * @param {Function} [opts.onFullPage] - Callback when Full page is selected
  * @param {Function} [opts.onNewTab] - Callback when New tab is selected
- * @param {string} [opts.viewContext] - Optional context label for tooltips/title
+ * @param {string} [opts.viewContext] - Context used to store the default view preference
  * @returns {HTMLElement}
  */
 function buildFormViewSwitcher({
@@ -1539,36 +1540,141 @@ function buildFormViewSwitcher({
     title: `Form view: ${viewContext}`
   });
 
-  const items = [
+  const toggleBtn = el('button', {
+    type: 'button',
+    class: 'form-view-switcher-btn',
+    title: 'View options',
+    'aria-label': 'View options',
+    'aria-haspopup': 'true',
+    'aria-expanded': 'false',
+    html: PaneIcons.viewOptions
+  });
+  wrapper.appendChild(toggleBtn);
+
+  const menu = el('div', {
+    class: 'side-pane-view-menu form-view-switcher-menu',
+    'aria-hidden': 'true'
+  });
+
+  const header = el('div', { class: 'side-pane-view-menu-header', text: 'Open form as' });
+  menu.appendChild(header);
+
+  const viewItems = [
     { key: PaneMode.SIDE_PEEK, label: 'Side peek', icon: PaneIcons.sidePeek, onClick: onSidePeek },
     { key: PaneMode.CENTER_PEEK, label: 'Center peek', icon: PaneIcons.centerPeek, onClick: onCenterPeek },
     { key: PaneMode.FULL_PAGE, label: 'Full page', icon: PaneIcons.fullPage, onClick: onFullPage },
     { key: PaneMode.NEW_TAB, label: 'New tab', icon: PaneIcons.newTab, onClick: onNewTab }
   ];
 
-  items.forEach(item => {
-    const active = item.key === currentMode;
-    const btn = el('button', {
+  viewItems.forEach(item => {
+    const row = el('button', {
       type: 'button',
-      class: 'form-view-switcher-btn' + (active ? ' active' : ''),
-      'aria-label': item.label,
-      title: item.label,
-      html: item.icon
+      class: 'side-pane-view-menu-item' + (item.key === currentMode ? ' active' : ''),
+      'data-mode': item.key,
+      html: `<span class="side-pane-view-menu-icon">${item.icon}</span><span class="side-pane-view-menu-label">${item.label}</span>`
     });
-    if (active) {
-      btn.setAttribute('aria-current', 'true');
-      btn.disabled = true;
-    }
-    if (item.onClick) {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        item.onClick();
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeMenu();
+      if (item.key !== currentMode && item.onClick) item.onClick();
+    });
+    menu.appendChild(row);
+  });
+
+  menu.appendChild(el('div', { class: 'side-pane-view-menu-divider' }));
+
+  const defaultRow = el('button', {
+    type: 'button',
+    class: 'side-pane-view-menu-item',
+    html: `<span class="side-pane-view-menu-icon">${PaneIcons.editDefault}</span><span class="side-pane-view-menu-label">Set default view</span>`
+  });
+  const submenu = el('div', { class: 'side-pane-view-default-submenu hidden' });
+
+  function buildDefaultSubmenu() {
+    submenu.innerHTML = '';
+    const storedDefault = viewContext ? getPaneDefault(viewContext) : null;
+
+    submenu.appendChild(el('div', {
+      class: 'side-pane-view-menu-header',
+      text: 'Default view for this form'
+    }));
+
+    viewItems.forEach(item => {
+      const row = el('button', {
+        type: 'button',
+        class: 'side-pane-view-menu-item',
+        'data-mode': item.key,
+        html: `<span class="side-pane-view-menu-icon">${item.icon}</span><span class="side-pane-view-menu-label">${item.label}</span>${storedDefault === item.key ? ' <span class="side-pane-view-menu-check">✓</span>' : ''}`
       });
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (viewContext) {
+          setPaneDefault(viewContext, item.key);
+          toggleDefaultSubmenu();
+          toggleDefaultSubmenu();
+        }
+      });
+      submenu.appendChild(row);
+    });
+
+    const clearRow = el('button', {
+      type: 'button',
+      class: 'side-pane-view-menu-item',
+      html: '<span class="side-pane-view-menu-icon"></span><span class="side-pane-view-menu-label">Reset to side peek</span>'
+    });
+    clearRow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (viewContext) {
+        try { localStorage.removeItem(`erp_pane_default_${viewContext}`); } catch (e) {}
+        toggleDefaultSubmenu();
+        toggleDefaultSubmenu();
+      }
+    });
+    submenu.appendChild(clearRow);
+  }
+
+  function toggleDefaultSubmenu() {
+    const isOpen = !submenu.classList.contains('hidden');
+    if (isOpen) {
+      submenu.classList.add('hidden');
+      submenu.innerHTML = '';
     } else {
-      btn.disabled = true;
-      btn.classList.add('disabled');
+      buildDefaultSubmenu();
+      submenu.classList.remove('hidden');
     }
-    wrapper.appendChild(btn);
+  }
+
+  defaultRow.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleDefaultSubmenu();
+  });
+  menu.appendChild(defaultRow);
+  menu.appendChild(submenu);
+  wrapper.appendChild(menu);
+
+  function openMenu() {
+    menu.classList.add('open');
+    menu.setAttribute('aria-hidden', 'false');
+    toggleBtn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', outsideClick);
+  }
+
+  function closeMenu() {
+    menu.classList.remove('open');
+    menu.setAttribute('aria-hidden', 'true');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    submenu.classList.add('hidden');
+    submenu.innerHTML = '';
+    document.removeEventListener('click', outsideClick);
+  }
+
+  function outsideClick(e) {
+    if (!wrapper.contains(e.target)) closeMenu();
+  }
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('open')) closeMenu(); else openMenu();
   });
 
   return wrapper;
