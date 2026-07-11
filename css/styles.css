@@ -30,10 +30,10 @@
   --delay-loading: 0.25s;
   --pane-padding-x: 32px;
   --pane-padding-y: 28px;
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  --radius-xl: 32px;
+  --radius-sm: 12px;
+  --radius-md: 12px;
+  --radius-lg: 12px;
+  --radius-xl: 12px;
   --radius-pill: 999px;
   --spacing-xs: 6px;
   --spacing-sm: 12px;
@@ -312,7 +312,7 @@ a:hover {
 .icon-gear {
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: 12px;
   border: 2px solid var(--color-text-muted);
 }
 
@@ -385,7 +385,7 @@ a:hover {
   height: 2px;
   background: var(--color-text);
   margin: 4px 0;
-  border-radius: 1px;
+  border-radius: 12px;
 }
 
 /* App Layout */
@@ -493,7 +493,7 @@ a:hover {
 }
 .sidebar::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 12px;
 }
 
 .nav-list {
@@ -583,7 +583,7 @@ a:hover {
 }
 .content::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 /* Typography */
@@ -844,7 +844,7 @@ tbody tr:hover {
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1009,7 +1009,7 @@ tbody tr:hover {
 .modal-body .form-group select,
 .modal-body .form-group .form-select,
 .modal-body .form-group .form-control {
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg);
   font-weight: 500;
 }
@@ -1084,14 +1084,14 @@ tbody tr:hover {
   padding: 8px 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   margin-bottom: 8px;
   align-items: center;
 }
 
 .modal-body .line-item-row input,
 .modal-body .line-item-row select {
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg);
   font-weight: 500;
 }
@@ -1203,7 +1203,7 @@ tbody tr:hover {
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border-radius: 9px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1254,7 +1254,7 @@ tbody tr:hover {
   min-width: 220px;
   background: var(--color-surface);
   border: 1px solid var(--color-border, #dfdbe3);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md, 12px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
   z-index: 100;
   padding: 4px 0;
@@ -1760,7 +1760,7 @@ tbody tr:hover {
 .audit-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md, 12px);
   padding: var(--spacing-md) var(--spacing-lg);
   box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
@@ -2089,7 +2089,7 @@ tbody tr:hover {
   padding: var(--spacing-xs, 4px);
   background: var(--color-surface, #fff);
   border: 1px solid var(--color-border, #ccc);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 12px);
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 .multi-select-menu.show {
@@ -2102,7 +2102,7 @@ tbody tr:hover {
   padding: 6px 12px;
   cursor: pointer;
   font-size: 0.875rem;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 12px);
   color: var(--color-text, #333);
   margin-bottom: 2px;
   user-select: none;
@@ -2347,7 +2347,7 @@ tbody tr:hover {
   right: 0;
   height: 2px;
   background: var(--color-primary);
-  border-radius: 2px 2px 0 0;
+  border-radius: 12px 12px 0 0;
 }
 .admin-tab-badge {
   display: inline-flex;
@@ -2452,7 +2452,7 @@ tbody tr:hover {
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--color-success);
   background: transparent;
   color: var(--color-success);
@@ -2589,7 +2589,7 @@ tbody tr:hover {
 }
 .approval-item-actions .btn {
   padding: 5px 10px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 0.75rem;
   min-height: 26px;
 }
@@ -2669,7 +2669,7 @@ tbody tr:hover {
 }
 .report-card::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 12px;
 }
 
 .report-card-wide {
@@ -2722,7 +2722,7 @@ tbody tr:hover {
 .bar {
   width: 100%;
   background: var(--color-primary);
-  border-radius: 4px;
+  border-radius: 12px;
   min-height: 4px;
   transition: height 0.4s ease;
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
@@ -3180,7 +3180,7 @@ tbody tr:hover {
   padding: 7px 28px 7px 10px;
   font-size: 0.875rem;
   line-height: 1.25rem;
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm, 12px);
   border: 1px solid var(--color-border, #dfdbe3);
   background-color: var(--color-surface, #ffffff);
   box-sizing: border-box;
@@ -3196,7 +3196,7 @@ tbody tr:hover {
   height: 34px;
   padding: 7px 12px;
   font-size: 0.875rem;
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm, 12px);
 }
 
 /* Standard system-wide filter/search inputs */
@@ -3229,7 +3229,7 @@ tbody tr:hover {
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -3611,7 +3611,7 @@ tbody tr:hover {
   display: grid;
   place-items: center;
   border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm, 12px);
   background: var(--color-surface, #ffffff);
   color: var(--color-text-muted);
   cursor: pointer;
@@ -3686,7 +3686,7 @@ tbody tr:hover {
   width: 18px;
   height: 18px;
   border: 2px solid #cbd5e1;
-  border-radius: 4px;
+  border-radius: 12px;
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -3730,7 +3730,7 @@ tbody tr:hover {
   width: 40px;
   height: 4px;
   background: #e2e8f0;
-  border-radius: 2px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -3857,7 +3857,7 @@ tbody tr:hover {
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 12px;
   flex-shrink: 0;
   padding: 0;
   margin: -4px -6px -4px 0;
@@ -4072,7 +4072,7 @@ tbody tr:hover {
   gap: 4px;
   font-size: 0.75rem;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-weight: 600;
   white-space: nowrap;
   line-height: 1;
@@ -4189,7 +4189,7 @@ tbody tr:hover {
   display: grid;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm, 12px);
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -4228,7 +4228,7 @@ tbody tr:hover {
   padding: 0;
   margin: 6px 0;
   border: none;
-  border-radius: 2px;
+  border-radius: 12px;
   background: var(--column-phase-color, var(--color-primary));
   box-shadow: 0 0 0 1px var(--color-surface), 0 0 0 2px var(--column-phase-color, var(--color-primary));
   pointer-events: none;
@@ -4406,7 +4406,7 @@ tbody tr:hover {
   width: 18px;
   height: 18px;
   border: 2px solid #cbd5e1;
-  border-radius: 4px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4487,7 +4487,7 @@ tbody tr:hover {
   max-width: 800px;
   height: 4px;
   background: #e2e8f0;
-  border-radius: 2px;
+  border-radius: 12px;
 }
 
 .modern-progress-fill {
@@ -4496,7 +4496,7 @@ tbody tr:hover {
   left: 0;
   height: 100%;
   background: #10b981; /* Success Green */
-  border-radius: 2px;
+  border-radius: 12px;
   transition: width 0.4s ease;
 }
 
@@ -4724,7 +4724,7 @@ tbody tr:hover {
   font-weight: 700;
   padding: 4px 8px;
   padding-left: 24px !important;
-  border-radius: 6px;
+  border-radius: 12px;
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
@@ -4824,7 +4824,7 @@ tbody tr:hover {
   padding: 8px 12px;
   background: var(--color-surface);
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: 12px;
 }
 
 /* Task Row Caret Indicator */
@@ -5409,7 +5409,7 @@ tbody tr:hover {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 1px 6px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 
@@ -5925,7 +5925,7 @@ tbody tr:hover {
 
 .mdp-year-panel::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 .mdp-year-btn {
@@ -6184,7 +6184,7 @@ tbody tr:hover {
   flex-direction: column;
   margin-left: 12px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -6261,7 +6261,7 @@ tbody tr:hover {
   transform-origin: bottom center;
   transition: transform 0.15s ease, height 0.15s ease;
   z-index: 2;
-  border-radius: 2px;
+  border-radius: 12px;
 }
 
 .mtp-hand-dot {
@@ -6547,7 +6547,7 @@ tbody tr:hover {
 .calendar-week-grid::-webkit-scrollbar-thumb,
 .calendar-day-grid::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 12px;
 }
 
 .calendar-week-grid {
@@ -6852,7 +6852,7 @@ tbody tr:hover {
   font-size: 0.8125rem;
   font-weight: 600;
   color: #64748b;
-  border-radius: 10px;
+  border-radius: 12px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -6939,7 +6939,7 @@ tbody tr:hover {
 }
 .calendar-sidebar::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 12px;
 }
 
 /* Header */
@@ -7213,7 +7213,7 @@ tbody tr:hover {
 }
 .calendar-cell-events::-webkit-scrollbar-thumb {
   background: rgba(0,0,0,0.1);
-  border-radius: 2px;
+  border-radius: 12px;
 }
 
 .cell-events-group {
@@ -7394,7 +7394,7 @@ tbody tr:hover {
   margin-top: 8px;
   background: var(--color-bg);
   padding: 8px;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 0.75rem;
   color: var(--color-text);
   border-left: 3px solid var(--color-primary);
@@ -7528,7 +7528,7 @@ tbody tr:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   transition: background 0.1s ease;
-  border-radius: 4px;
+  border-radius: 12px;
   margin: 0 4px;
 }
 
@@ -7566,7 +7566,7 @@ tbody tr:hover {
 
 .searchable-dropdown-listbox::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 12px;
 }
 
 .searchable-dropdown-listbox::-webkit-scrollbar-thumb:hover {
@@ -7579,7 +7579,7 @@ tbody tr:hover {
 }
 
 .filters-bar .searchable-dropdown-input {
-  border-radius: var(--radius-sm, 8px) !important;
+  border-radius: var(--radius-sm, 12px) !important;
   height: 34px;
   min-height: 34px !important;
   font-size: 0.875rem;
@@ -7632,7 +7632,7 @@ tbody tr:hover {
   padding: 6px 12px 6px 32px !important; /* Make room for left inclined calendar icon */
   box-sizing: border-box !important;
   font-size: 0.875rem !important;
-  border-radius: var(--radius-sm, 8px) !important;
+  border-radius: var(--radius-sm, 12px) !important;
   transition: width 0.15s ease-in-out, min-width 0.15s ease-in-out, max-width 0.15s ease-in-out;
 }
 
@@ -7649,7 +7649,7 @@ tbody tr:hover {
   padding: 6px 12px 6px 32px !important;
   box-sizing: border-box !important;
   font-size: 0.875rem !important;
-  border-radius: var(--radius-sm, 8px) !important;
+  border-radius: var(--radius-sm, 12px) !important;
 }
 
 /* Prepended icons inside filter fields */
@@ -7764,7 +7764,7 @@ tbody tr:hover {
   padding: 8px 12px !important;
   background: var(--color-surface, #ffffff) !important;
   border: 1px solid var(--color-border, #e2e8f0) !important;
-  border-radius: 6px;
+  border-radius: 12px;
 }
 
 .checklist-items-list > div > span {
@@ -7807,7 +7807,7 @@ tbody tr:hover {
 
 /* WR task detail — two-pane accordion */
 .task-details-panes { display: flex; gap: 16px; align-items: flex-start; }
-.task-details-left, .task-details-right { flex: 1; min-width: 0; background: var(--color-surface); border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; }
+.task-details-left, .task-details-right { flex: 1; min-width: 0; background: var(--color-surface); border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
 .task-details-left { flex: 1.1; }
 .task-details-right { flex: 0.9; }
 .task-details-left .task-details-col,
@@ -7895,7 +7895,7 @@ tbody tr:hover {
   display: inline-flex;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 2px;
 }
 
@@ -7910,7 +7910,7 @@ tbody tr:hover {
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-muted);
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s cubic-bezier(0.2, 0, 0, 1);
@@ -7982,7 +7982,7 @@ tbody tr:hover {
 
 .checklist-view-item-wrap {
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--color-surface);
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -8060,7 +8060,7 @@ tbody tr:hover {
   accent-color: var(--color-success);
   cursor: pointer;
   flex-shrink: 0;
-  border-radius: 4px;
+  border-radius: 12px;
   border: 1px solid var(--color-border);
 }
 
@@ -8091,7 +8091,7 @@ tbody tr:hover {
   color: var(--color-text-muted);
   background: color-mix(in oklab, var(--color-text-muted), transparent 92%);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 .checklist-view-hours {
@@ -8099,7 +8099,7 @@ tbody tr:hover {
   color: var(--color-text-muted);
   background: color-mix(in oklab, var(--color-text-muted), transparent 90%);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 /* Connective lines for Notion style sub-items */
@@ -8186,7 +8186,7 @@ tbody tr:hover {
   justify-content: space-between;
   gap: 16px;
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   margin-bottom: 16px;
   flex-wrap: wrap;
   border: 1px solid color-mix(in oklab, var(--color-warning), transparent 75%);
@@ -8572,9 +8572,9 @@ tbody tr:hover {
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
-  --radius-sm: 8px;
+  --radius-sm: 12px;
   --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-lg: 12px;
   --radius-pill: 9999px;
   --elev-ring: 0 0 0 1px var(--border);
   --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
@@ -9068,7 +9068,7 @@ tbody tr:hover {
   padding: var(--space-2) var(--space-2);
   border-bottom: 1px solid var(--border);
   border-left: 3px solid transparent;
-  border-radius: 6px;
+  border-radius: 12px;
   transition: background-color 0.2s ease, border-left-color 0.2s ease;
 }
 
@@ -9963,7 +9963,7 @@ tbody tr:hover {
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   color: var(--color-text-muted);
   transition: background 0.15s ease, color 0.15s ease;
@@ -9996,7 +9996,7 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 12px;
   margin-bottom: 12px;
   font-size: 20px;
 }
@@ -10100,7 +10100,7 @@ tbody tr:hover {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--color-bg);
   font-size: 0.8125rem;
   transition: background 0.15s ease;
@@ -10114,7 +10114,7 @@ tbody tr:hover {
   width: 16px;
   height: 16px;
   border: 2px solid var(--color-text-muted);
-  border-radius: 4px;
+  border-radius: 12px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -10278,7 +10278,7 @@ tbody tr:hover {
   position: absolute;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   width: 360px;
   z-index: 1050;
@@ -10323,7 +10323,7 @@ tbody tr:hover {
   box-sizing: border-box;
   padding: 8px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 0.8125rem;
   background: var(--color-bg);
   color: var(--color-text);
@@ -10445,7 +10445,7 @@ tbody tr * {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 12px;
   margin-bottom: 10px;
   font-size: 22px;
 }
@@ -10547,7 +10547,7 @@ tbody tr * {
 .side-pane-body .multi-select-btn {
   background-color: #fafafa !important; /* Shaded background to contrast against white panel background */
   border: 1px solid #cbd5e1 !important; /* Visible slate border (contrast ratio ~ 2:1 on off-white, 3:1 on white) */
-  border-radius: 6px !important;
+  border-radius: 12px !important;
   color: var(--color-text) !important;
   font-weight: 500 !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
@@ -10570,7 +10570,7 @@ tbody tr * {
 .side-pane-body .searchable-dropdown-input {
   background-color: #fafafa !important;
   border: 1px solid #cbd5e1 !important;
-  border-radius: 6px !important;
+  border-radius: 12px !important;
   color: var(--color-text) !important;
   font-weight: 500 !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
@@ -10622,7 +10622,7 @@ tbody tr * {
   padding: 6px 10px !important;
   border: 1px dashed #cbd5e1 !important;
   background-color: #fafafa !important;
-  border-radius: 6px !important;
+  border-radius: 12px !important;
   cursor: pointer !important;
   width: 100% !important;
   color: var(--color-text) !important;
@@ -10634,7 +10634,7 @@ tbody tr * {
   color: white !important;
   border: none !important;
   padding: 6px 12px !important;
-  border-radius: 4px !important;
+  border-radius: 12px !important;
   cursor: pointer !important;
   margin-right: 8px !important;
   font-size: 0.8125rem !important;
@@ -10767,7 +10767,7 @@ tbody tr * {
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   color: var(--color-text-muted);
   transition: background 0.15s ease, color 0.15s ease;
@@ -10787,7 +10787,7 @@ tbody tr * {
   right: 12px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   padding: 6px;
   min-width: 200px;
@@ -10889,7 +10889,7 @@ tbody tr * {
   padding: 8px 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -10927,7 +10927,7 @@ tbody tr * {
   -webkit-appearance: none;
   -moz-appearance: none;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 6px 24px 6px 8px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -10982,7 +10982,7 @@ tbody tr * {
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 12px;
   color: var(--color-text-muted);
   cursor: pointer;
   flex-shrink: 0;
@@ -11116,7 +11116,7 @@ tbody tr * {
   box-sizing: border-box;
   padding: 8px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 0.875rem;
@@ -11195,7 +11195,7 @@ tbody tr * {
   box-sizing: border-box;
   padding: 8px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 0.875rem;
@@ -11215,7 +11215,7 @@ tbody tr * {
   box-sizing: border-box;
   padding: 8px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 0.875rem;
@@ -11236,7 +11236,7 @@ tbody tr * {
   width: 100%;
   padding: 8px;
   border: 1px dashed var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg);
   cursor: pointer;
 }
@@ -11388,7 +11388,7 @@ tbody tr * {
   background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
+  border-radius: 12px;
   box-shadow: 
     0 10px 15px -3px rgba(0, 0, 0, 0.06), 
     0 4px 6px -2px rgba(0, 0, 0, 0.03),
@@ -11459,7 +11459,7 @@ tbody tr * {
   background: var(--color-surface, #ffffff);
   border: 1px solid var(--color-border, #cbd5e1);
   border-left: 3px solid var(--color-primary, #2563eb);
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 10px 12px;
   margin-bottom: 10px;
   position: relative;
@@ -11530,7 +11530,7 @@ tbody tr * {
   padding: 4px 10px !important;
   font-size: 0.875rem !important;
   height: 32px !important;
-  border-radius: 6px !important;
+  border-radius: 12px !important;
   color: var(--color-text, #0f172a) !important;
   transition: border-color 0.15s ease, background-color 0.15s ease !important;
 }
@@ -11563,7 +11563,7 @@ tbody tr * {
   grid-column: 3 / 4;
   width: 28px !important;
   height: 28px !important;
-  border-radius: 6px !important;
+  border-radius: 12px !important;
   display: flex !important;
   align-items: center;
   justify-content: center;
@@ -11652,7 +11652,7 @@ tbody tr * {
   font-size: 0.8125rem !important;
   border: 1px solid var(--color-border, #cbd5e1) !important;
   background-color: var(--color-bg-light, #fafafa) !important;
-  border-radius: 6px !important;
+  border-radius: 12px !important;
   color: var(--color-text, #0f172a) !important;
   box-sizing: border-box !important;
 }
@@ -11702,7 +11702,7 @@ tbody tr * {
   color: var(--color-text-muted, #64748b);
   border: 1px solid var(--color-border, #e2e8f0);
   font-weight: 500;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 [data-theme="dark"] .side-pane-body .task-row .wr-task-row-coassignees .co-assignee-chip {
@@ -11748,7 +11748,7 @@ tbody tr * {
   height: 40px;
   font-size: 22px;
   margin-bottom: 14px;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .side-pane-title {
@@ -13005,7 +13005,7 @@ html.loading-active #loading-screen:not(.hidden) {
   height: 34px;
   padding: 0 12px;
   border: 1px solid var(--color-border, #dfdbe3);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm, 12px);
   background: var(--color-surface, #ffffff);
   color: var(--color-text, #1f2937);
   font-size: 0.875rem;
@@ -13122,7 +13122,7 @@ html.loading-active #loading-screen:not(.hidden) {
   width: 100%;
   padding: 8px 10px;
   border: none;
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm, 12px);
   background: transparent;
   color: var(--color-text, #1f2937);
   font-size: 0.875rem;
@@ -13195,7 +13195,7 @@ html.loading-active #loading-screen:not(.hidden) {
   padding: 8px 10px;
   border: none;
   border-left: 3px solid transparent;
-  border-radius: 6px;
+  border-radius: 12px;
   background: transparent;
   color: var(--color-text, #1f2937);
   font-size: 0.8125rem;
@@ -13212,7 +13212,7 @@ html.loading-active #loading-screen:not(.hidden) {
 .jira-filter-category.active {
   background: color-mix(in oklab, var(--color-primary, #2563eb), transparent 90%);
   border-left-color: var(--color-primary, #2563eb);
-  border-radius: 4px 6px 6px 4px;
+  border-radius: 12px 12px 12px 12px;
   color: var(--color-primary, #2563eb);
   font-weight: 600;
 }
@@ -13297,7 +13297,7 @@ html.loading-active #loading-screen:not(.hidden) {
   height: 34px;
   padding: 0 12px 0 34px;
   border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg, #f8fafc);
   color: var(--color-text, #1f2937);
   font-size: 0.8125rem;
@@ -13356,7 +13356,7 @@ html.loading-active #loading-screen:not(.hidden) {
   width: 100%;
   padding: 8px 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   background: transparent;
   color: var(--color-text, #1f2937);
   font-size: 0.8125rem;
@@ -13457,7 +13457,7 @@ html.loading-active #loading-screen:not(.hidden) {
   color: var(--color-text, #334155);
   background-color: var(--color-bg-muted, #e2e8f0);
   border: 1px solid var(--color-border, #cbd5e1);
-  border-radius: 4px;
+  border-radius: 12px;
   box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
@@ -13485,7 +13485,7 @@ html.loading-active #loading-screen:not(.hidden) {
 .jira-search-input {
   padding: 7px 32px 7px 32px !important;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm, 12px);
   font-size: 0.8125rem;
   font-family: inherit;
   font-weight: 500;
@@ -13572,7 +13572,7 @@ html.loading-active #loading-screen:not(.hidden) {
   padding: 8px 12px;
   background: var(--color-bg-light, #f1f5f9);
   border-bottom: 1px solid var(--color-border, #cbd5e1);
-  border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+  border-radius: var(--radius-sm, 12px) var(--radius-sm, 12px) 0 0;
   font-weight: 700;
   font-size: 0.8125rem;
   color: var(--color-text, #0f172a);
@@ -13587,7 +13587,7 @@ html.loading-active #loading-screen:not(.hidden) {
   right: 0;
   height: 3px;
   background: var(--column-phase-color, transparent);
-  border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
+  border-radius: var(--radius-sm, 12px) var(--radius-sm, 12px) 0 0;
 }
 
 .board-phase-header .board-phase-label {
@@ -13780,7 +13780,7 @@ html.loading-active #loading-screen:not(.hidden) {
 
 .phase-header-top {
   height: 3px;
-  border-radius: 2px;
+  border-radius: 12px;
   background: var(--phase-color, transparent);
 }
 
@@ -13970,7 +13970,7 @@ html.loading-active #loading-screen:not(.hidden) {
 .notion-warning-box {
   background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 12px 16px;
   color: #ef4444;
   font-size: 0.875rem;
@@ -14079,7 +14079,7 @@ html.loading-active #loading-screen:not(.hidden) {
 /* ── Jira-style Backlog Component ──────────── */
 .jira-backlog-container {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md, 12px);
   background: var(--color-surface);
   margin-bottom: 24px;
   overflow: hidden;
@@ -14239,7 +14239,7 @@ html.loading-active #loading-screen:not(.hidden) {
 .jira-backlog-tag {
   background: var(--color-bg-muted, #f1f5f9);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 3px 8px;
   font-size: 0.75rem;
   font-weight: 600;
@@ -14388,7 +14388,7 @@ html.loading-active #loading-screen:not(.hidden) {
 .kpi-icon-wrap {
   width: 30px; /* Reduced from 38px */
   height: 30px; /* Reduced from 38px */
-  border-radius: 8px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14515,7 +14515,7 @@ html.loading-active #loading-screen:not(.hidden) {
 .command-help-text code {
   background: var(--color-bg);
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: 12px;
   font-family: var(--font-mono);
 }
 
@@ -14582,7 +14582,7 @@ html.loading-active #loading-screen:not(.hidden) {
   font-size: 1.25rem;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14643,7 +14643,7 @@ html.loading-active #loading-screen:not(.hidden) {
 
 .notion-property-value-badge {
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -15000,7 +15000,7 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Schedule Color Schemes */
 .jira-backlog-tag-schedule {
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 .jira-backlog-tag-schedule-monthly {
   background: #e0f2fe;
@@ -15026,7 +15026,7 @@ html.loading-active #loading-screen:not(.hidden) {
 /* Fund Source Color Schemes */
 .jira-backlog-tag-fund {
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 .jira-backlog-tag-fund-firmfund {
   background: #e0f2fe;
@@ -15097,7 +15097,7 @@ html.loading-active #loading-screen:not(.hidden) {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   font-size: 0.7rem;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 .jira-backlog-tag-action-create {
@@ -15296,7 +15296,7 @@ html.loading-active #loading-screen:not(.hidden) {
 }
 
 .jira-backlog-bulk-actions .btn {
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 6px 12px;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -15376,7 +15376,7 @@ html.loading-active #loading-screen:not(.hidden) {
 /* ── Jira-inspired Grid/Table View ─────────────────────────────── */
 .jira-table-container {
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: 12px;
   background: var(--color-surface);
   margin-bottom: 24px;
   overflow-x: auto;
@@ -15468,7 +15468,7 @@ html.loading-active #loading-screen:not(.hidden) {
   height: 16px;
   background: #8777d9;
   color: #fff;
-  border-radius: 3px;
+  border-radius: 12px;
   font-size: 9px;
   margin-right: 6px;
   font-weight: bold;
@@ -15483,7 +15483,7 @@ html.loading-active #loading-screen:not(.hidden) {
   height: 16px;
   background: #4c9aff;
   color: #fff;
-  border-radius: 3px;
+  border-radius: 12px;
   font-size: 9px;
   margin-right: 6px;
   font-weight: bold;
@@ -15566,7 +15566,7 @@ html.loading-active #loading-screen:not(.hidden) {
   display: block;
   width: 12px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: 12px;
 }
 
 .jira-status-dropdown-wrap {
@@ -15582,7 +15582,7 @@ html.loading-active #loading-screen:not(.hidden) {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  border-radius: 3px;
+  border-radius: 12px;
   border: none;
   cursor: pointer;
   letter-spacing: 0.5px;
@@ -15621,7 +15621,7 @@ html.loading-active #loading-screen:not(.hidden) {
   margin-top: 4px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   z-index: 100;
   min-width: 120px;
@@ -15666,7 +15666,7 @@ html.loading-active #loading-screen:not(.hidden) {
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  border-radius: 3px;
+  border-radius: 12px;
   outline: none;
   font-size: 13px;
 }
@@ -15773,7 +15773,7 @@ html.loading-active #loading-screen:not(.hidden) {
   padding: 6px 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 .jira-details-list-item-key {
@@ -15800,7 +15800,7 @@ html.loading-active #loading-screen:not(.hidden) {
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 4px;
-  border-radius: 3px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -15822,54 +15822,160 @@ html.loading-active #loading-screen:not(.hidden) {
   width: 100%;
 }
 
-.data-table--selectable th.dt-checkbox-col,
-.data-table--selectable td.dt-checkbox-col {
-  width: 40px;
-  min-width: 40px;
-  padding: var(--spacing-sm) var(--spacing-sm);
+/* Container wrapper */
+.data-table-view.jira-backlog-container {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--color-surface);
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+}
+
+/* Table overrides */
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: none;
+  margin: 0;
+}
+
+table.data-table thead tr {
+  background: var(--color-bg-light, #fafafa);
+  border-bottom: 1px solid var(--color-border);
+}
+
+table.data-table th {
+  padding: 10px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-light, #fafafa);
+  text-align: left;
+}
+
+table.data-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s ease;
+}
+
+table.data-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+table.data-table tbody tr:hover {
+  background: var(--color-bg-light, #fafafa);
+}
+
+table.data-table tbody tr.selected {
+  background: color-mix(in oklab, var(--color-primary), transparent 94%);
+}
+
+table.data-table td {
+  padding: 10px 16px;
+  font-size: 0.84rem;
+  color: var(--color-text);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border);
+}
+
+table.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Key Column (First data column after checkbox) */
+table.data-table td.dt-key-col {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  width: 75px;
+}
+
+/* Title/Name Column (Second data column) */
+table.data-table td.dt-title-col {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Icon style matching Jira backlog icon */
+table.data-table td.dt-icon-cell {
+  width: 24px;
+  min-width: 24px;
+  padding-right: 0 !important;
+  padding-left: 10px !important;
+  color: var(--color-primary);
+  vertical-align: middle;
+}
+
+table.data-table td.dt-icon-cell svg {
+  display: block;
+}
+
+/* Checkbox Column */
+table.data-table th.dt-checkbox-col,
+table.data-table td.dt-checkbox-col {
+  width: 28px;
+  min-width: 28px;
+  padding: 10px 10px;
   text-align: center;
 }
 
-.data-table--selectable td.dt-checkbox-col input[type="checkbox"] {
+table.data-table td.dt-checkbox-col input[type="checkbox"],
+table.data-table th.dt-checkbox-col input[type="checkbox"] {
   cursor: pointer;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   accent-color: var(--color-primary);
+  display: block;
+  margin: 0 auto;
 }
 
-.dt-select-all {
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-primary);
-  opacity: 0.4;
-  transition: opacity 0.15s;
+/* Hide checkbox by default, reveal on hover or when checked */
+table.data-table--selectable tbody tr .dt-row-checkbox {
+  opacity: 0;
+  transition: opacity 0.1s ease;
 }
 
-thead:hover .dt-select-all,
-.dt-select-all:checked,
-.dt-select-all.indeterminate {
+table.data-table--selectable tbody tr:hover .dt-row-checkbox,
+table.data-table--selectable tbody tr .dt-row-checkbox:checked {
   opacity: 1;
 }
 
-/* Row hover cursor when clickable */
-.data-table--selectable tbody tr[data-clickable="true"],
-.data-table tbody tr[data-clickable="true"] {
-  cursor: pointer;
+/* Actions Column hover reveal and styling */
+table.data-table td.dt-actions-col,
+table.data-table th.dt-actions-col {
+  padding-left: 8px;
+  padding-right: 16px;
+  text-align: right;
 }
 
-/* Hover-reveal: row checkboxes and actions buttons are hidden by default
-   and appear when the row is hovered (or when a checkbox is checked). */
-.data-table--selectable tbody tr .dt-row-checkbox,
-.data-table--selectable tbody tr .dt-actions-col button {
+table.data-table td.dt-actions-col button {
   opacity: 0;
   transition: opacity 0.15s;
 }
 
-.data-table--selectable tbody tr:hover .dt-row-checkbox,
-.data-table--selectable tbody tr:hover .dt-actions-col button,
-.data-table--selectable tbody tr .dt-row-checkbox:checked {
+table.data-table tr:hover td.dt-actions-col button {
   opacity: 1;
+}
+
+/* Align cell alignments */
+table.data-table td.dt-cell--left,
+table.data-table th.dt-cell--left {
+  text-align: left;
+}
+
+table.data-table td.dt-cell--center,
+table.data-table th.dt-cell--center {
+  text-align: center;
+}
+
+table.data-table td.dt-cell--right,
+table.data-table th.dt-cell--right {
+  text-align: right;
 }
 
 /* Title cell with stacked badges */

@@ -1452,7 +1452,7 @@ const Transmittal = {
         padding: 6px 12px;
         text-align: center;
         background: rgba(255, 255, 255, 0.95);
-        border-radius: 4px;
+        border-radius: 12px;
         font-family: 'Courier New', Courier, monospace;
         font-weight: bold;
         pointer-events: none;
@@ -1813,7 +1813,7 @@ const Transmittal = {
         padding: 6px 12px;
         text-align: center;
         background: rgba(255, 255, 255, 0.95);
-        border-radius: 4px;
+        border-radius: 12px;
         font-family: 'Courier New', Courier, monospace;
         font-weight: bold;
         pointer-events: none;

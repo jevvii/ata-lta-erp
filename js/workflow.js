@@ -1140,7 +1140,7 @@ const Workflow = {
     form.appendChild(itemsSection);
 
     // ---------- Totals ----------
-    const totals = el('div', { style: 'display: flex; flex-direction: column; gap: 4px; align-items: flex-end; margin-top: 8px; padding: 12px; background: #f8fafc; border-radius: 8px;' });
+    const totals = el('div', { style: 'display: flex; flex-direction: column; gap: 4px; align-items: flex-end; margin-top: 8px; padding: 12px; background: #f8fafc; border-radius: 12px;' });
     const subRow = el('div', { style: 'display: flex; gap: 12px; font-size: 0.85rem; color: #64748b;' });
     subRow.appendChild(el('span', { text: 'Subtotal:' }));
     subRow.appendChild(el('span', { id: 'modal-inv-subtotal', text: '₱0.00' }));
@@ -2938,7 +2938,7 @@ const Workflow = {
         if (ts && ts.missing && ts.missing.length > 0) {
           const blockerBadge = el('span', {
             html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' blocker' + (ts.missing.length > 1 ? 's' : ''),
-            style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:rgba(245,158,11,0.08);border-radius:6px;cursor:help;'
+            style: 'color:#f59e0b;font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;background:rgba(245,158,11,0.08);border-radius: 12px;cursor:help;'
           });
           blockerBadge.title = ts.missing.join('\n');
           wrapper.appendChild(blockerBadge);
@@ -2984,7 +2984,7 @@ const Workflow = {
         if (ts && ts.canTransition && ts.nextPhase) {
           const routeBtn = el('button', {
             html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Route',
-            style: 'color:#10b981;font-weight:600;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;padding:2px 8px;margin-left:4px;cursor:pointer;font-size:11px;display:inline-flex;align-items:center;gap:3px;'
+            style: 'color:#10b981;font-weight:600;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius: 12px;padding:2px 8px;margin-left:4px;cursor:pointer;font-size:11px;display:inline-flex;align-items:center;gap:3px;'
           });
           routeBtn.title = 'Route to ' + ts.nextPhase;
           routeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.transitionWorkRequest(wr.id); });
@@ -3019,7 +3019,7 @@ const Workflow = {
           if (wr.isPendingApproval) {
             titleLine.appendChild(el('span', {
               text: 'Awaiting Approval',
-              style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning);'
+              style: 'font-size: 10px; border-radius: 12px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning);'
             }));
           }
           cell.appendChild(titleLine);
@@ -3037,7 +3037,7 @@ const Workflow = {
         label: 'Status',
         width: '130px',
         render: (wr) => wr.isPendingApproval
-          ? el('span', { text: 'Awaiting Approval', style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; display: inline-block;' })
+          ? el('span', { text: 'Awaiting Approval', style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 12px; display: inline-block;' })
           : this.statusBadge(wr.status)
       },
       { key: 'dueDate', label: 'Due Date', render: (wr) => wr.dueDate ? formatDate(wr.dueDate) : '—', width: '110px' },
@@ -3684,7 +3684,7 @@ const Workflow = {
       if (wr.isPendingApproval) {
         titleDiv.appendChild(el('span', {
           text: 'Awaiting Approval',
-          style: 'font-size: 10px; border-radius: 4px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning); margin-left: 8px; vertical-align: middle;'
+          style: 'font-size: 10px; border-radius: 12px; display: inline-block; padding: 1px 4px; background: var(--color-bg-muted); color: var(--color-warning); font-weight: 600; border: 1px solid var(--color-warning); margin-left: 8px; vertical-align: middle;'
         }));
       }
       textCol.appendChild(titleDiv);
@@ -3702,7 +3702,7 @@ const Workflow = {
       if (wr.isPendingApproval) {
         row.appendChild(el('span', {
           text: 'Awaiting Approval',
-          style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; align-self: center;'
+          style: 'background: var(--color-bg-muted); color: var(--color-warning); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 12px; align-self: center;'
         }));
       } else {
         row.appendChild(this.statusBadge(wr.status));
@@ -3714,7 +3714,7 @@ const Workflow = {
           if (ts && ts.canTransition && ts.nextPhase) {
             const readyBadge = el('span', {
               html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Ready to route',
-              style: 'color:var(--color-success);font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(52, 211, 153, 0.12);border-radius:10px;font-weight:500;cursor:pointer;'
+              style: 'color:var(--color-success);font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(52, 211, 153, 0.12);border-radius: 12px;font-weight:500;cursor:pointer;'
             });
             readyBadge.addEventListener('click', (e) => {
               e.stopPropagation();
@@ -3724,7 +3724,7 @@ const Workflow = {
           } else if (ts && ts.missing && ts.missing.length > 0) {
             const blockerChip = el('span', {
               html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> ' + ts.missing.length + ' pending',
-              style: 'color:var(--color-warning);font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(251, 191, 36, 0.12);border-radius:10px;cursor:help;font-weight:500;'
+              style: 'color:var(--color-warning);font-size:10px;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(251, 191, 36, 0.12);border-radius: 12px;cursor:help;font-weight:500;'
             });
             blockerChip.title = ts.missing.join('\n');
             row.appendChild(blockerChip);
@@ -4000,7 +4000,7 @@ const Workflow = {
             const categoryBadge = el('span', {
               text: item.category === 'document' ? 'Document' : 'Sub-task',
               class: 'checklist-category-badge',
-              style: 'font-size:0.65rem; padding:1px 5px; border-radius:8px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600; margin-left:6px;'
+              style: 'font-size:0.65rem; padding:1px 5px; border-radius: 12px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600; margin-left:6px;'
             });
             textWrap.appendChild(categoryBadge);
             row.appendChild(cb);
@@ -4500,7 +4500,7 @@ const Workflow = {
           const statusBadge = el('span', { 
             text: pStatus, 
             class: 'badge',
-            style: `font-size: 9px; padding: 1px 6px; background-color: color-mix(in srgb, ${pStatusColors[pStatus] || '#94a3b8'}, transparent 85%); color: ${pStatusColors[pStatus] || '#475569'}; border: 1px solid color-mix(in srgb, ${pStatusColors[pStatus] || '#94a3b8'}, transparent 70%); border-radius: 4px;` 
+            style: `font-size: 9px; padding: 1px 6px; background-color: color-mix(in srgb, ${pStatusColors[pStatus] || '#94a3b8'}, transparent 85%); color: ${pStatusColors[pStatus] || '#475569'}; border: 1px solid color-mix(in srgb, ${pStatusColors[pStatus] || '#94a3b8'}, transparent 70%); border-radius: 12px;` 
           });
           depItem.appendChild(statusBadge);
           
@@ -4523,7 +4523,7 @@ const Workflow = {
           const statusBadge = el('span', { 
             text: pStatus, 
             class: 'badge',
-            style: `font-size: 9px; padding: 1px 6px; background-color: color-mix(in srgb, ${pStatus === 'Completed' ? 'var(--color-success)' : 'var(--color-warning)'}, transparent 85%); color: ${pStatus === 'Completed' ? 'var(--color-success)' : 'var(--color-warning)'}; border: 1px solid color-mix(in srgb, ${pStatus === 'Completed' ? 'var(--color-success)' : 'var(--color-warning)'}, transparent 70%); border-radius: 4px;` 
+            style: `font-size: 9px; padding: 1px 6px; background-color: color-mix(in srgb, ${pStatus === 'Completed' ? 'var(--color-success)' : 'var(--color-warning)'}, transparent 85%); color: ${pStatus === 'Completed' ? 'var(--color-success)' : 'var(--color-warning)'}; border: 1px solid color-mix(in srgb, ${pStatus === 'Completed' ? 'var(--color-success)' : 'var(--color-warning)'}, transparent 70%); border-radius: 12px;` 
           });
           depItem.appendChild(statusBadge);
           
@@ -4732,7 +4732,7 @@ const Workflow = {
     const pConfig = pMap[priority] || pMap['Normal'];
     return el('span', {
       text: 'Priority: ' + pConfig.text,
-      style: 'font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ' + pConfig.bg + '; color: ' + pConfig.fg + '; display: inline-flex; align-items: center; border: 1px solid rgba(0,0,0,0.05);'
+      style: 'font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 12px; background: ' + pConfig.bg + '; color: ' + pConfig.fg + '; display: inline-flex; align-items: center; border: 1px solid rgba(0,0,0,0.05);'
     });
   },
 
@@ -5763,7 +5763,7 @@ const Workflow = {
             const goBtn = el('button', {
               text: 'Go',
               class: 'btn btn-xs',
-              style: 'margin-left:6px;padding:1px 6px;font-size:10px;background:color-mix(in oklab, var(--warn), transparent 85%);color:color-mix(in oklab, var(--warn), black 30%);border:none;border-radius:4px;cursor:pointer;font-weight:600;'
+              style: 'margin-left:6px;padding:1px 6px;font-size:10px;background:color-mix(in oklab, var(--warn), transparent 85%);color:color-mix(in oklab, var(--warn), black 30%);border:none;border-radius: 12px;cursor:pointer;font-weight:600;'
             });
             goBtn.addEventListener('click', () => {
               if (hint.route === '#billing') { Billing.view = 'list'; Billing.detailId = null; }
@@ -6066,7 +6066,7 @@ const Workflow = {
       pc.status === 'pending' && pc.table === 'tasks' && pc.proposedData && pc.proposedData.workRequestId === wr.id
     );
     if (pendingTaskChanges.length > 0) {
-      const pendingSection = el('div', { class: 'pending-tasks-section', style: 'margin-bottom: 16px; padding: 16px; background: #fef9c3; border: 1px solid #fde68a; border-radius: 8px;' });
+      const pendingSection = el('div', { class: 'pending-tasks-section', style: 'margin-bottom: 16px; padding: 16px; background: #fef9c3; border: 1px solid #fde68a; border-radius: 12px;' });
       pendingSection.appendChild(el('div', {
         html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <strong>Pending Task Approvals (' + pendingTaskChanges.length + ')</strong>',
         style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.875rem; color: #92400e;'
@@ -6075,7 +6075,7 @@ const Workflow = {
       pendingTaskChanges.forEach(pc => {
         const task = pc.proposedData;
         const submitter = DB.getById('users', pc.submittedBy);
-        const row = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #fff; border: 1px solid #fde68a; border-radius: 6px; margin-bottom: 8px;' });
+        const row = el('div', { style: 'display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #fff; border: 1px solid #fde68a; border-radius: 12px; margin-bottom: 8px;' });
 
         const infoCol = el('div');
         infoCol.appendChild(el('div', { style: 'font-weight: 600; font-size: 0.875rem; color: #1f2937;', text: task.title }));
@@ -6109,7 +6109,7 @@ const Workflow = {
         } else {
           row.appendChild(el('span', {
             text: 'Awaiting Approval',
-            style: 'background: #fef3c7; color: #d97706; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;'
+            style: 'background: #fef3c7; color: #d97706; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px;'
           }));
         }
 
@@ -7194,7 +7194,7 @@ const Workflow = {
               const categoryBadge = el('span', {
                 text: item.category === 'document' ? 'Document' : 'Sub-task',
                 class: 'checklist-category-badge',
-                style: 'font-size:0.65rem; padding:1px 5px; border-radius:8px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600; margin-left:6px;'
+                style: 'font-size:0.65rem; padding:1px 5px; border-radius: 12px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600; margin-left:6px;'
               });
               textWrap.appendChild(categoryBadge);
 
@@ -7588,7 +7588,7 @@ const Workflow = {
                 list.appendChild(renderEmptyState('No comments for this document', null, { style: 'padding: 4px 0;' }));
               } else {
                 d.comments.forEach((c, cIdx) => {
-                  const commentRow = el('div', { style: 'background:var(--surface); padding:8px 12px; border-radius:var(--radius-sm); border: 1px solid var(--border); position:relative;' });
+                  const commentRow = el('div', { style: 'background:var(--surface); padding:8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); position:relative;' });
                   const cUser = DB.getById('users', c.userId);
                   const header = el('div', { style: 'display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.75rem;' });
                   header.appendChild(el('span', { text: cUser?.name || 'Unknown', style: 'font-weight:600; color:var(--accent);' }));
@@ -7878,7 +7878,7 @@ const Workflow = {
         const stBadge = el('span', { 
           class: 'badge', 
           text: inv.status, 
-          style: `font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${bg}; color: ${fg};`
+          style: `font-size: 10px; padding: 2px 6px; border-radius: 12px; background: ${bg}; color: ${fg};`
         });
         item.appendChild(stBadge);
         invList.appendChild(item);
@@ -8461,7 +8461,7 @@ const Workflow = {
     const list = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
     driveFiles.forEach(f => {
       const item = el('div', { 
-        style: 'display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 6px; cursor: pointer; transition: all 0.15s ease;'
+        style: 'display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 12px; cursor: pointer; transition: all 0.15s ease;'
       });
       item.addEventListener('mouseenter', () => {
         item.style.borderColor = 'var(--color-primary)';
@@ -8806,11 +8806,11 @@ const Workflow = {
 
       const list = el('div', { class: 'checklist-items-list', style: 'display:flex; flex-direction:column; gap:6px; margin-top:8px;' });
       checklistItems.forEach((item, idx) => {
-        const row = el('div', { style: 'display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;' });
+        const row = el('div', { style: 'display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius: 12px;' });
         row.appendChild(el('span', { text: item.text, style: 'flex:1; font-size:0.85rem;' }));
         const categoryBadge = el('span', {
           text: item.category === 'document' ? 'Document' : 'Sub-task',
-          style: 'font-size:0.7rem; padding:2px 6px; border-radius:10px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600;'
+          style: 'font-size:0.7rem; padding:2px 6px; border-radius: 12px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600;'
         });
         row.appendChild(categoryBadge);
 
@@ -9252,11 +9252,11 @@ const Workflow = {
 
       const list = el('div', { class: 'checklist-items-list', style: 'display:flex; flex-direction:column; gap:6px; margin-top:8px;' });
       checklistItems.forEach((item, idx) => {
-        const row = el('div', { style: 'display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;' });
+        const row = el('div', { style: 'display:flex; align-items:center; gap:8px; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius: 12px;' });
         row.appendChild(el('span', { text: item.text, style: 'flex:1; font-size:0.85rem;' }));
         const categoryBadge = el('span', {
           text: item.category === 'document' ? 'Document' : 'Sub-task',
-          style: 'font-size:0.7rem; padding:2px 6px; border-radius:10px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600;'
+          style: 'font-size:0.7rem; padding:2px 6px; border-radius: 12px; background:' + (item.category === 'document' ? '#dbeafe' : '#f3f4f6') + '; color:' + (item.category === 'document' ? '#1e40af' : '#4b5563') + '; font-weight:600;'
         });
         row.appendChild(categoryBadge);
 
