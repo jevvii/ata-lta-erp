@@ -1513,7 +1513,7 @@ const Billing = {
     if (inv.status === 'Draft' && inv.rejectionReason) {
       const rejBanner = el('div', {
         class: 'alert-banner alert-danger',
-        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-danger); color: var(--color-danger); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-danger); color: var(--color-danger); padding: 12px 16px; border-radius: 12px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
       });
       rejBanner.appendChild(el('span', { html: '❌' }));
       rejBanner.appendChild(el('span', { html: `<strong>Rejection Reason:</strong> ${inv.rejectionReason}` }));
@@ -1523,7 +1523,7 @@ const Billing = {
     if (inv.status === 'Pending') {
       const banner = el('div', {
         class: 'alert-banner alert-warning',
-        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); color: var(--color-warning); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
+        style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); color: var(--color-warning); padding: 12px 16px; border-radius: 12px; margin-bottom: 20px; font-size: 0.875rem; display: flex; align-items: center; gap: 8px;'
       });
       banner.appendChild(el('span', { html: '⚠️' }));
       banner.appendChild(el('span', { text: 'This invoice is pending administrative approval and cannot be printed, sent, or have payments recorded until approved.' }));
@@ -1541,7 +1541,7 @@ const Billing = {
       const linkedWr = DB.getById('workRequests', inv.workRequestId);
       if (linkedWr) {
         const linkCard = el('div', {
-          style: 'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);border-radius:8px;padding:12px 16px;margin-bottom:var(--spacing-md);font-size:0.8125rem;'
+          style: 'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);border-radius: 12px;padding:12px 16px;margin-bottom:var(--spacing-md);font-size:0.8125rem;'
         });
         const linkHeader = el('div', {
           style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#1e40af;font-weight:600;'
@@ -1618,7 +1618,7 @@ const Billing = {
       const payHist = el('div', { class: 'form-section', style: 'overflow-x:auto;' });
       payHist.appendChild(el('h3', { text: 'Payment Details' }));
       inv.payments.forEach(p => {
-        const pCard = el('div', { class: 'card', style: 'margin-bottom:12px; padding:16px; border:1px solid #e2e8f0; border-radius:8px;' });
+        const pCard = el('div', { class: 'card', style: 'margin-bottom:12px; padding:16px; border:1px solid #e2e8f0; border-radius: 12px;' });
 
         // Header row: amount left, method icon right
         const header = el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;' });
@@ -2017,7 +2017,7 @@ const Billing = {
       .logo-img-lta {
         height: 40px;
         width: 40px;
-        border-radius: 4px;
+        border-radius: 12px;
         background: #fff;
         padding: 2px;
         margin-right: 12px;
@@ -2226,7 +2226,7 @@ const Billing = {
       .pay-summary {
         margin: 20px 0;
         border: 1.5px solid #cbd5e1;
-        border-radius: 6px;
+        border-radius: 12px;
         padding: 15px;
         background-color: #f8fafc;
       }
@@ -2240,7 +2240,7 @@ const Billing = {
       }
       .pay-card {
         border: 1px solid #e2e8f0;
-        border-radius: 4px;
+        border-radius: 12px;
         padding: 10px;
         margin-bottom: 8px;
         background: #fff;
@@ -2274,7 +2274,7 @@ const Billing = {
       .vat-breakdown {
         background: #f8fafc;
         padding: 12px;
-        border-radius: 4px;
+        border-radius: 12px;
         margin-top: 12px;
         font-size: 9pt;
         border: 1px solid #cbd5e1;
@@ -2556,7 +2556,7 @@ const Billing = {
       .section strong { color: #334155; }
       .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
       .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-      .box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 12px; }
+      .box { border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px; }
       table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }
       th { background: #f8fafc; border-bottom: 2px solid #1e293b; padding: 8px; text-align: left; font-weight: 600; text-transform: uppercase; font-size: 9pt; }
       td { padding: 8px; border-bottom: 1px solid #e2e8f0; }
@@ -2751,7 +2751,7 @@ const Billing = {
     const def = icons['Other Digital'];
     const cfg = icons[method] || def;
     const wrap = el('span', {
-      style: `display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px;`
+      style: `display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius: 12px; font-size:0.75rem; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px;`
     });
     const svgWrap = document.createElement('span');
     svgWrap.innerHTML = cfg.svg;
