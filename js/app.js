@@ -483,9 +483,22 @@ const App = {
       }
     } else if (baseHash === '#clients') {
       if (pathParts[1] === 'form') {
-        Clients.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+        Clients.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : 'new';
       } else {
         Clients.editingId = null;
+      }
+    } else if (baseHash === '#admin') {
+      if (pathParts[1] === 'users' && pathParts[2] === 'form') {
+        Users.view = 'users';
+        Users.editingId = (pathParts[3] && pathParts[3] !== 'new') ? pathParts[3] : 'new';
+        Users.sidePeekId = null;
+      } else if (pathParts[1]) {
+        Users.view = pathParts[1];
+        Users.sidePeekId = pathParts[2] || null;
+        Users.editingId = null;
+      } else {
+        Users.sidePeekId = null;
+        Users.editingId = null;
       }
     }
 

@@ -953,6 +953,7 @@ class SidePane {
     this._lastContent = null;
     this.isResizing = false;
     this._ignoreNextClick = false;
+    this._forceMode = null;
     this.init();
   }
 
@@ -1033,6 +1034,7 @@ class SidePane {
   }
 
   resolveMode(opts) {
+    if (this._forceMode && VALID_PANE_MODES.includes(this._forceMode)) return this._forceMode;
     if (opts.mode && VALID_PANE_MODES.includes(opts.mode)) return opts.mode;
     if (opts.viewContext) {
       const def = getPaneDefault(opts.viewContext);
@@ -1051,6 +1053,7 @@ class SidePane {
     this.onCloseCallback = opts.onClose || null;
     this.onExpandCallback = opts.onExpand || null;
     this._lastContent = opts.content || null;
+    this._lastFooter = null;
 
     if (mode === PaneMode.FULL_PAGE) { this.goFullPage(); return; }
     if (mode === PaneMode.NEW_TAB) { this.goNewTab(); return; }
@@ -1077,7 +1080,17 @@ class SidePane {
         this.body.appendChild(renderEmptyState('Unable to load panel content'));
       } else {
         this.body.innerHTML = '';
-        this.body.appendChild(opts.content);
+        
+        // Find any footer in the content and move it directly to this.pane
+        const footer = opts.content.querySelector('.side-pane-form-footer, .side-pane-footer');
+        if (footer) {
+          footer.remove();
+          this._lastFooter = footer;
+          this.body.appendChild(opts.content);
+          this.pane.appendChild(footer);
+        } else {
+          this.body.appendChild(opts.content);
+        }
       }
     } else {
       this.body.innerHTML = '';
@@ -1273,6 +1286,9 @@ class SidePane {
       this.body.innerHTML = '';
       this.body.appendChild(this._lastContent);
     }
+    if (this._lastFooter && this._lastFooter instanceof Node) {
+      this.pane.appendChild(this._lastFooter);
+    }
     requestAnimationFrame(() => {
       this.overlay.classList.toggle('open', this.mode === PaneMode.CENTER_PEEK);
       this.pane.classList.remove('side-pane--side-peek', 'side-pane--center-peek');
@@ -1317,9 +1333,16 @@ class SidePane {
     if (this.onExpandCallback) {
       this.onExpandCallback();
     } else if (this.fullPageRoute) {
+      // Force the next route resolve to render the full-page layout even when
+      // the user's default view is side-peek. This makes the "Full page" menu
+      // item a one-time navigation rather than requiring a default change.
+      // Keep the override around long enough for the asynchronous hashchange
+      // event that follows location.hash assignment to also see it.
+      this._forceMode = PaneMode.FULL_PAGE;
       location.hash = this.fullPageRoute;
       const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
       if (appRef && typeof appRef.handleRoute === 'function') appRef.handleRoute();
+      setTimeout(() => { this._forceMode = null; }, 0);
     } else {
       console.warn('SidePane: full-page requested but no route or onExpand provided.');
     }
@@ -1425,6 +1448,8 @@ class SidePane {
     }
 
     this.mode = PaneMode.SIDE_PEEK;
+    this._lastContent = null;
+    this._lastFooter = null;
 
     if (this.onCloseCallback && !opts.silent) {
       const cb = this.onCloseCallback;
@@ -1461,8 +1486,9 @@ function focusFormTitle(container) {
  * @param {string} opts.currentText - Non-clickable current page text (e.g. 'Add Client')
  * @param {Array<{text: string, class: string, type?: string, onClick?: Function, id?: string}>} [opts.actions] - Buttons on the right
  * @returns {HTMLElement}
+ * @param {HTMLElement} [opts.viewSwitcher] - Optional shared form view-mode switcher (e.g. from buildFormViewSwitcher).
  */
-function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [] }) {
+function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [], viewSwitcher = null }) {
   const titleBar = el('div', { class: 'page-title-bar-v2' });
   const h1 = el('h1', { class: 'breadcrumb-h1' });
   const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: baseLabel });
@@ -1472,8 +1498,12 @@ function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [] })
   h1.appendChild(document.createTextNode(currentText));
   titleBar.appendChild(h1);
 
-  if (actions.length > 0) {
+  if (actions.length > 0 || viewSwitcher) {
     const actionsBar = el('div', { class: 'actions-bar' });
+    if (viewSwitcher) {
+      viewSwitcher.classList.add('breadcrumb-view-switcher');
+      actionsBar.appendChild(viewSwitcher);
+    }
     actions.forEach(a => {
       const btn = el('button', {
         type: a.type || 'button',
@@ -1490,6 +1520,173 @@ function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [] })
   }
 
   return titleBar;
+}
+
+/**
+ * Builds a Notion-style popup view-mode switcher for full-page forms.
+ * Mirrors the popup inside the shared side-peek panel: "Open form as",
+ * Side peek / Center peek / Full page / New tab, plus "Set default view".
+ *
+ * @param {Object} opts
+ * @param {string} [opts.currentMode] - 'side-peek' | 'center-peek' | 'full-page' | 'new-tab'
+ * @param {Function} [opts.onSidePeek] - Callback when Side peek is selected
+ * @param {Function} [opts.onCenterPeek] - Callback when Center peek is selected
+ * @param {Function} [opts.onFullPage] - Callback when Full page is selected
+ * @param {Function} [opts.onNewTab] - Callback when New tab is selected
+ * @param {string} [opts.viewContext] - Context used to store the default view preference
+ * @returns {HTMLElement}
+ */
+function buildFormViewSwitcher({
+  currentMode = PaneMode.FULL_PAGE,
+  onSidePeek,
+  onCenterPeek,
+  onFullPage,
+  onNewTab,
+  viewContext = 'form'
+}) {
+  const wrapper = el('div', {
+    class: 'form-view-switcher',
+    title: `Form view: ${viewContext}`
+  });
+
+  const toggleBtn = el('button', {
+    type: 'button',
+    class: 'form-view-switcher-btn',
+    title: 'View options',
+    'aria-label': 'View options',
+    'aria-haspopup': 'true',
+    'aria-expanded': 'false',
+    html: PaneIcons.viewOptions
+  });
+  wrapper.appendChild(toggleBtn);
+
+  const menu = el('div', {
+    class: 'side-pane-view-menu form-view-switcher-menu',
+    'aria-hidden': 'true'
+  });
+
+  const header = el('div', { class: 'side-pane-view-menu-header', text: 'Open form as' });
+  menu.appendChild(header);
+
+  const viewItems = [
+    { key: PaneMode.SIDE_PEEK, label: 'Side peek', icon: PaneIcons.sidePeek, onClick: onSidePeek },
+    { key: PaneMode.CENTER_PEEK, label: 'Center peek', icon: PaneIcons.centerPeek, onClick: onCenterPeek },
+    { key: PaneMode.FULL_PAGE, label: 'Full page', icon: PaneIcons.fullPage, onClick: onFullPage },
+    { key: PaneMode.NEW_TAB, label: 'New tab', icon: PaneIcons.newTab, onClick: onNewTab }
+  ];
+
+  viewItems.forEach(item => {
+    const row = el('button', {
+      type: 'button',
+      class: 'side-pane-view-menu-item' + (item.key === currentMode ? ' active' : ''),
+      'data-mode': item.key,
+      html: `<span class="side-pane-view-menu-icon">${item.icon}</span><span class="side-pane-view-menu-label">${item.label}</span>`
+    });
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeMenu();
+      if (item.key !== currentMode && item.onClick) item.onClick();
+    });
+    menu.appendChild(row);
+  });
+
+  menu.appendChild(el('div', { class: 'side-pane-view-menu-divider' }));
+
+  const defaultRow = el('button', {
+    type: 'button',
+    class: 'side-pane-view-menu-item',
+    html: `<span class="side-pane-view-menu-icon">${PaneIcons.editDefault}</span><span class="side-pane-view-menu-label">Set default view</span>`
+  });
+  const submenu = el('div', { class: 'side-pane-view-default-submenu hidden' });
+
+  function buildDefaultSubmenu() {
+    submenu.innerHTML = '';
+    const storedDefault = viewContext ? getPaneDefault(viewContext) : null;
+
+    submenu.appendChild(el('div', {
+      class: 'side-pane-view-menu-header',
+      text: 'Default view for this form'
+    }));
+
+    viewItems.forEach(item => {
+      const row = el('button', {
+        type: 'button',
+        class: 'side-pane-view-menu-item',
+        'data-mode': item.key,
+        html: `<span class="side-pane-view-menu-icon">${item.icon}</span><span class="side-pane-view-menu-label">${item.label}</span>${storedDefault === item.key ? ' <span class="side-pane-view-menu-check">✓</span>' : ''}`
+      });
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (viewContext) {
+          setPaneDefault(viewContext, item.key);
+          toggleDefaultSubmenu();
+          toggleDefaultSubmenu();
+        }
+      });
+      submenu.appendChild(row);
+    });
+
+    const clearRow = el('button', {
+      type: 'button',
+      class: 'side-pane-view-menu-item',
+      html: '<span class="side-pane-view-menu-icon"></span><span class="side-pane-view-menu-label">Reset to side peek</span>'
+    });
+    clearRow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (viewContext) {
+        try { localStorage.removeItem(`erp_pane_default_${viewContext}`); } catch (e) {}
+        toggleDefaultSubmenu();
+        toggleDefaultSubmenu();
+      }
+    });
+    submenu.appendChild(clearRow);
+  }
+
+  function toggleDefaultSubmenu() {
+    const isOpen = !submenu.classList.contains('hidden');
+    if (isOpen) {
+      submenu.classList.add('hidden');
+      submenu.innerHTML = '';
+    } else {
+      buildDefaultSubmenu();
+      submenu.classList.remove('hidden');
+    }
+  }
+
+  defaultRow.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleDefaultSubmenu();
+  });
+  menu.appendChild(defaultRow);
+  menu.appendChild(submenu);
+  wrapper.appendChild(menu);
+
+  function openMenu() {
+    menu.classList.add('open');
+    menu.setAttribute('aria-hidden', 'false');
+    toggleBtn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', outsideClick);
+  }
+
+  function closeMenu() {
+    menu.classList.remove('open');
+    menu.setAttribute('aria-hidden', 'true');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    submenu.classList.add('hidden');
+    submenu.innerHTML = '';
+    document.removeEventListener('click', outsideClick);
+  }
+
+  function outsideClick(e) {
+    if (!wrapper.contains(e.target)) closeMenu();
+  }
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('open')) closeMenu(); else openMenu();
+  });
+
+  return wrapper;
 }
 
 /**

@@ -18,33 +18,46 @@ const Users = {
   render() {
     const container = el('div', { class: 'page admin-tab-page' });
 
-    // Keep the main page header — use role-appropriate title
     const isAdmin = Auth.user.role === 'Admin';
-    const titleBar = el('div', { class: 'page-title-bar-v2' });
-    const h1 = el('h1', { class: 'page-title-h1', text: isAdmin ? 'Admin' : 'My Submissions' });
-    titleBar.appendChild(h1);
-    container.appendChild(titleBar);
-
     const canManageUsers = Auth.can('users:view');
     const departments = Auth.user?.departments || [];
     const hasOperations = departments.includes('Operations');
     const hasManagement = departments.includes('Management');
 
-    // Initialize view state dynamically to prevent view state bleed-through
+    // Initialize view state dynamically to prevent view state bleed-through.
+    // Respect URL-driven admin subviews (e.g. #admin/myRequests/:id) so direct
+    // links and full-page detail routes are not overwritten on first render.
     if (this.lastUserId !== Auth.user.id) {
       this.lastUserId = Auth.user.id;
+      const urlAdminView = ((location.hash || '').match(/^#admin\/([^/?]+)/) || [])[1] || null;
       if (canManageUsers) {
-        this.view = 'users';
+        const validAdminViews = ['users', 'audit', 'pending'];
+        if (urlAdminView && (validAdminViews.includes(urlAdminView) || this.sidePeekId)) {
+          this.view = urlAdminView;
+        } else {
+          this.view = 'users';
+        }
       } else {
         const defaultToRequests = hasOperations || hasManagement;
-        this.view = defaultToRequests ? 'myRequests' : 'myPending';
+        const validViews = ['myPending'];
+        if (defaultToRequests) validViews.push('myRequests');
+        if (hasManagement) validViews.push('pending');
+        if (urlAdminView && validViews.includes(urlAdminView)) {
+          this.view = urlAdminView;
+        } else {
+          this.view = defaultToRequests ? 'myRequests' : 'myPending';
+        }
       }
       this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
     }
 
     if (canManageUsers) {
       const validAdminViews = ['users', 'audit', 'pending'];
-      if (!validAdminViews.includes(this.view)) this.view = 'users';
+      // Preserve URL-driven detail views (e.g. #admin/myRequests/:id) even if the
+      // view isn't in the standard admin tab list.
+      const isUrlDrivenDetail = this.sidePeekId &&
+        (location.hash || '').startsWith(`#admin/${this.view}/`);
+      if (!validAdminViews.includes(this.view) && !isUrlDrivenDetail) this.view = 'users';
     } else {
       const showRequestsTab = hasOperations || hasManagement;
       const isManager = hasManagement;
@@ -54,6 +67,202 @@ const Users = {
 
       if (!validViews.includes(this.view)) {
         this.view = showRequestsTab ? 'myRequests' : 'myPending';
+      }
+    }
+
+    // Full-page user form is triggered by the URL itself (#admin/users/form/new or .../:id).
+    // Side-peek/center-peek launch from the list view without touching the hash, so this
+    // branch only runs for full-page/new-tab navigation.
+    const isUserFullPage = this.view === 'users' && this.editingId &&
+      (location.hash || '').includes('/users/form/');
+
+    // Default pending/request detail views to side-peek unless the user has set a
+    // different default for the relevant view context.
+    const viewMode = window.SidePaneInstance
+      ? window.SidePaneInstance.resolveMode({
+          viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
+        })
+      : PaneMode.SIDE_PEEK;
+    const isFullPage = (viewMode === PaneMode.FULL_PAGE || viewMode === PaneMode.NEW_TAB) && this.sidePeekId;
+
+    // Full-page forms render their own breadcrumb header; list/tab views keep the main title.
+    if (!isUserFullPage && !isFullPage) {
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'page-title-h1', text: isAdmin ? 'Admin' : 'My Submissions' });
+      titleBar.appendChild(h1);
+      container.appendChild(titleBar);
+    }
+
+    if (isUserFullPage) {
+      const isNew = this.editingId === 'new';
+      const user = isNew ? null : DB.getById('users', this.editingId);
+      const fullPageRoute = isNew ? '#admin/users/form/new' : `#admin/users/form/${this.editingId}`;
+
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'user-form',
+        onSidePeek: () => {
+          const userId = this.editingId === 'new' ? null : this.editingId;
+          closeFormPanelAndRoute('#admin/users');
+          this.showUserForm(userId, PaneMode.SIDE_PEEK);
+        },
+        onCenterPeek: () => {
+          const userId = this.editingId === 'new' ? null : this.editingId;
+          closeFormPanelAndRoute('#admin/users');
+          this.showUserForm(userId, PaneMode.CENTER_PEEK);
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
+
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Users',
+        baseHash: '#admin/users',
+        currentText: isNew ? 'Add User' : 'Edit User',
+        viewSwitcher,
+        actions: [
+          {
+            text: isNew ? 'Save User' : 'Save Changes',
+            class: 'btn btn-primary btn-sm',
+            type: 'submit',
+            form: 'user-form'
+          },
+          {
+            text: 'Cancel',
+            class: 'btn btn-secondary btn-sm',
+            onClick: () => { this.showUserList(); }
+          }
+        ]
+      }));
+
+      const formEl = this.renderUserFormContent(user);
+      container.appendChild(formEl);
+      return container;
+    }
+
+    if (isFullPage) {
+      if (this.view === 'myRequests') {
+        const r = DB.getById('operationsRequests', this.sidePeekId);
+        if (r) {
+          const fullPageRoute = `#admin/myRequests/${r.id}`;
+          const actions = [];
+          if (r.status === 'pending') {
+            actions.push({
+              text: 'Cancel Request',
+              class: 'btn btn-danger btn-sm',
+              onClick: () => {
+                Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => {
+                  DB.delete('operationsRequests', r.id);
+                  location.hash = '#admin';
+                }, 'danger');
+              }
+            });
+          }
+
+          const viewSwitcher = buildFormViewSwitcher({
+            currentMode: PaneMode.FULL_PAGE,
+            viewContext: 'request-detail',
+            onSidePeek: () => {
+              closeFormPanelAndRoute('#admin');
+              this.openRequestDetailSidePeek(r, PaneMode.SIDE_PEEK);
+            },
+            onCenterPeek: () => {
+              closeFormPanelAndRoute('#admin');
+              this.openRequestDetailSidePeek(r, PaneMode.CENTER_PEEK);
+            },
+            onNewTab: () => {
+              window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+            }
+          });
+
+          container.appendChild(buildFormBreadcrumb({
+            baseLabel: 'My Submissions',
+            baseHash: '#admin',
+            currentText: `Request Details: ${this._requestTypeLabel(r.type)}`,
+            viewSwitcher,
+            actions
+          }));
+
+          container.appendChild(this.renderRequestDetailContent(r, true));
+          return container;
+        }
+      } else {
+        const pc = PendingChanges.getById(this.sidePeekId);
+        if (pc) {
+          const isMyPending = this.view === 'myPending';
+          const baseLabel = isMyPending ? 'My Submissions' : 'Admin';
+          const isNew = !pc.parentRecordId;
+          const currentText = pc.title || (isNew ? 'New Submission' : 'Edit Submission');
+          
+          const canApprove = PendingChanges.canApproveChange(pc);
+          const isSubmitter = pc.submittedBy === Auth.user.id;
+
+          const actions = [];
+          if (canApprove) {
+            actions.push({
+              text: 'Approve Change',
+              class: 'btn btn-success btn-sm',
+              onClick: () => {
+                Workflow.showConfirm('Confirm Approval', 'Are you sure you want to approve this change?', () => {
+                  PendingChanges.approve(pc.id);
+                  location.hash = '#admin';
+                }, 'success');
+              }
+            });
+            actions.push({
+              text: 'Reject',
+              class: 'btn btn-danger btn-sm',
+              onClick: () => {
+                const reason = prompt('Enter rejection reason:');
+                if (reason !== null) {
+                  PendingChanges.reject(pc.id, reason);
+                  location.hash = '#admin';
+                }
+              }
+            });
+          } else if (isSubmitter && pc.status === 'pending') {
+            actions.push({
+              text: 'Withdraw Submission',
+              class: 'btn btn-secondary btn-sm',
+              onClick: () => {
+                Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this submission?', () => {
+                  PendingChanges.delete(pc.id);
+                  location.hash = '#admin';
+                }, 'danger');
+              }
+            });
+          }
+
+          const fullPageRoute = isMyPending ? `#admin/myPending/${pc.id}` : `#admin/pending/${pc.id}`;
+          const viewSwitcher = buildFormViewSwitcher({
+            currentMode: PaneMode.FULL_PAGE,
+            viewContext: 'pending-detail',
+            onSidePeek: () => {
+              closeFormPanelAndRoute('#admin');
+              this.openPendingDetailSidePeek(pc, PaneMode.SIDE_PEEK);
+            },
+            onCenterPeek: () => {
+              closeFormPanelAndRoute('#admin');
+              this.openPendingDetailSidePeek(pc, PaneMode.CENTER_PEEK);
+            },
+            onNewTab: () => {
+              window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+            }
+          });
+
+          container.appendChild(buildFormBreadcrumb({
+            baseLabel,
+            baseHash: '#admin',
+            currentText,
+            viewSwitcher,
+            actions
+          }));
+
+          const detailContent = this.renderPendingDetail(pc.id, false, true);
+          container.appendChild(detailContent);
+          return container;
+        }
       }
     }
 
@@ -170,7 +379,237 @@ const Users = {
     }
   },
 
-  init() {},
+  init() {
+    if (this.editingId) {
+      const userViewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({ viewContext: 'user-form' }) : 'side-peek';
+      // Direct URL / new-tab full-page routes carry the form path in the hash.
+      const isUserFullPage = (userViewMode === 'full-page' || userViewMode === 'new-tab') ||
+        (location.hash || '').includes('/users/form/');
+      if (!isUserFullPage) {
+        this.showUserForm(this.editingId === 'new' ? null : this.editingId);
+      }
+    } else if (this.sidePeekId) {
+      // Default pending/request detail views to side-peek unless the user has set a
+      // different default for the relevant view context.
+      const viewMode = window.SidePaneInstance
+        ? window.SidePaneInstance.resolveMode({
+            viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
+          })
+        : PaneMode.SIDE_PEEK;
+      const isFullPage = (viewMode === PaneMode.FULL_PAGE || viewMode === PaneMode.NEW_TAB);
+
+      if (!isFullPage) {
+        if (this.view === 'pending' || this.view === 'myPending') {
+          const pc = PendingChanges.getById(this.sidePeekId);
+          if (pc) {
+            this.openPendingDetailSidePeek(pc, viewMode);
+          }
+        } else if (this.view === 'myRequests') {
+          const r = DB.getById('operationsRequests', this.sidePeekId);
+          if (r) {
+            this.openRequestDetailSidePeek(r, viewMode);
+          }
+        }
+      }
+    } else {
+      if (window.SidePaneInstance && window.SidePaneInstance.isOpen()) {
+        const ctx = window.SidePaneInstance.options.viewContext;
+        if (ctx === 'pending-detail' || ctx === 'request-detail' || ctx === 'user-form') {
+          window.SidePaneInstance.close({ silent: true });
+        }
+      }
+    }
+  },
+
+  openPendingDetailSidePeek(pc, mode = null) {
+    const isMyPending = this.view === 'myPending';
+    const fullPageRoute = isMyPending ? `#admin/myPending/${pc.id}` : `#admin/pending/${pc.id}`;
+    const title = `Pending Change: ${pc.title || 'Review'}`;
+    const content = this.renderPendingDetail(pc.id, true);
+    window.SidePaneInstance.open({
+      title,
+      content,
+      mode,
+      viewContext: 'pending-detail',
+      recordId: pc.id,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      onClose: () => {
+        const hash = location.hash;
+        if (hash.startsWith('#admin/pending/') || hash.startsWith('#admin/myPending/')) {
+          location.hash = '#admin';
+        }
+      }
+    });
+  },
+
+  renderRequestDetailContent(r, isFullPage = false) {
+    const self = this;
+    const wr = DB.getById('workRequests', r.workRequestId);
+    const client = DB.getById('clients', r.clientId);
+    const submitter = DB.getById('users', r.requestedBy);
+
+    const wrapper = el('div', { class: 'form-stacked notion-form', style: 'padding: var(--spacing-xs); display: flex; flex-direction: column; gap: var(--spacing-md);' });
+
+    // Status / Submitter info box
+    const infoBox = el('div', { 
+      style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-sm); display: flex; flex-direction: column; gap: var(--spacing-xs);' 
+    }, [
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Status', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        self._requestStatusBadge(r.status)
+      ]),
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Submitted By', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        el('span', { text: submitter ? submitter.name : '—', style: 'font-weight:500;' })
+      ]),
+      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
+        el('span', { text: 'Submitted At', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
+        el('span', { text: formatDate(r.requestedAt), style: 'font-weight:500;' })
+      ])
+    ]);
+    wrapper.appendChild(infoBox);
+
+    // Notion-style Property Grid
+    const grid = el('div', { class: 'notion-property-grid', style: 'margin-bottom: var(--spacing-xs);' });
+
+    const addProp = (label, valueNode) => {
+      const row = el('div', { class: 'notion-property-row' });
+      row.appendChild(el('div', { class: 'notion-property-label', text: label }));
+      row.appendChild(el('div', { class: 'notion-property-value' }, [valueNode]));
+      grid.appendChild(row);
+    };
+
+    addProp('Request Type', document.createTextNode(this._requestTypeLabel(r.type)));
+    addProp('Client', document.createTextNode(client ? client.name : '—'));
+    
+    // Work Request Link / Text
+    const wrSpan = el('span', { text: wr ? wr.title : '—' });
+    if (wr) {
+      wrSpan.style.cursor = 'pointer';
+      wrSpan.style.color = 'var(--color-primary)';
+      wrSpan.style.textDecoration = 'underline';
+      wrSpan.addEventListener('click', () => {
+        location.hash = `#operations/detail/${wr.id}`;
+      });
+    }
+    addProp('Work Request', wrSpan);
+
+    // Render type-specific fields
+    if (r.type === 'billing') {
+      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
+      addProp('Linked Task', document.createTextNode(linkedTask ? linkedTask.title : '— Whole Project —'));
+      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
+      if (r.receiptFilename) {
+        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
+      }
+    } else if (r.type === 'disbursement') {
+      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
+      addProp('Disbursement Type', document.createTextNode(r.disbursementType ? r.disbursementType.charAt(0).toUpperCase() + r.disbursementType.slice(1) : '—'));
+      addProp('Category', document.createTextNode(r.category || '—'));
+      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
+      addProp('Payment Method', document.createTextNode(r.paymentMethod || '—'));
+      if (linkedTask) {
+        addProp('Linked Task', document.createTextNode(linkedTask.title));
+      }
+      if (r.receiptFilename) {
+        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
+      }
+    } else if (r.type === 'transmittal') {
+      addProp('Recipient & Delivery', document.createTextNode(r.recipientDetails || '—'));
+    }
+
+    wrapper.appendChild(grid);
+
+    // Documents list for Transmittal
+    if (r.type === 'transmittal' && r.documents && r.documents.length > 0) {
+      wrapper.appendChild(el('h4', { text: 'Documents to Transmit', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
+      const docList = el('ul', { style: 'padding-left: var(--spacing-md); margin-bottom: var(--spacing-sm); display:flex; flex-direction:column; gap:4px;' });
+      r.documents.forEach(doc => {
+        docList.appendChild(el('li', { text: doc, style: 'font-size:0.875rem;' }));
+      });
+      wrapper.appendChild(docList);
+    }
+
+    // Notes
+    if (r.notes) {
+      wrapper.appendChild(el('h4', { text: 'Notes', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
+      wrapper.appendChild(el('div', { 
+        text: r.notes, 
+        style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size: 0.875rem; white-space: pre-wrap; font-style: italic;' 
+      }));
+    }
+
+    // Fulfillment Details or Rejection Details
+    if (r.status === 'fulfilled') {
+      const fulfiller = DB.getById('users', r.fulfilledBy);
+      wrapper.appendChild(el('h4', { text: 'Fulfillment Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--success);' }));
+      const fulfillBox = el('div', {
+        style: 'background: color-mix(in oklab, var(--success), transparent 95%); border: 1px solid color-mix(in oklab, var(--success), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
+      }, [
+        el('div', { text: `Fulfilled by: ${fulfiller ? fulfiller.name : 'System'}` }),
+        el('div', { text: `Fulfilled at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' })
+      ]);
+      wrapper.appendChild(fulfillBox);
+    } else if (r.status === 'rejected') {
+      const rejecter = r.fulfilledBy ? DB.getById('users', r.fulfilledBy) : null;
+      wrapper.appendChild(el('h4', { text: 'Rejection Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--danger);' }));
+      const rejectBox = el('div', {
+        style: 'background: color-mix(in oklab, var(--danger), transparent 95%); border: 1px solid color-mix(in oklab, var(--danger), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
+      }, [
+        el('div', { text: `Reason: ${r.rejectionReason || 'No reason provided'}` }),
+        rejecter ? el('div', { text: `Rejected by: ${rejecter.name}`, style: 'margin-top:4px;' }) : null,
+        r.fulfilledAt ? el('div', { text: `Rejected at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' }) : null
+      ].filter(Boolean));
+      wrapper.appendChild(rejectBox);
+    }
+
+    if (isFullPage) {
+      const outer = el('div', { class: 'request-detail-full-page' });
+      outer.appendChild(wrapper);
+      return outer;
+    }
+    return wrapper;
+  },
+
+  openRequestDetailSidePeek(r, mode = null) {
+    const wrapper = this.renderRequestDetailContent(r);
+
+    if (r.status === 'pending') {
+      const footerActions = el('div', { class: 'side-pane-form-footer' });
+      const cancelBtn = el('button', { class: 'btn btn-danger', text: 'Cancel Request' });
+      cancelBtn.addEventListener('click', () => {
+        Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => {
+          DB.delete('operationsRequests', r.id);
+          if (location.hash.includes('/')) {
+            location.hash = location.hash.split('/')[0];
+          } else {
+            App.handleRoute();
+          }
+        }, 'danger');
+      });
+      footerActions.appendChild(cancelBtn);
+      wrapper.appendChild(footerActions);
+    }
+
+    const title = `Request Details: ${this._requestTypeLabel(r.type)}`;
+    const fullPageRoute = `#admin/myRequests/${r.id}`;
+    window.SidePaneInstance.open({
+      title,
+      content: wrapper,
+      mode,
+      viewContext: 'request-detail',
+      recordId: r.id,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      onClose: () => {
+        const hash = location.hash;
+        if (hash.startsWith('#admin/myRequests/')) {
+          location.hash = '#admin';
+        }
+      }
+    });
+  },
 
   // ============================================================
   // Users Section
@@ -336,38 +775,58 @@ const Users = {
     return el('span', { class: 'badge ' + (map[role] || ''), text: role });
   },
 
-  showUserForm(userId) {
-    this.editingId = userId || null;
-    const user = userId ? DB.getById('users', userId) : null;
+  renderUserFormContent(user) {
+    const form = el('form', { id: 'user-form', class: 'form-stacked notion-form' });
 
-    const form = el('form', { id: 'user-form', class: 'form-stacked user-form' });
+    // Title-style primary field: name
+    const nameSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    nameSection.appendChild(el('label', { class: 'notion-section-label', text: 'Full Name' }));
+    const nameInput = el('input', {
+      type: 'text',
+      name: 'name',
+      class: 'notion-freeform-input notion-title-input',
+      placeholder: 'e.g. Juan Dela Cruz',
+      required: true,
+      value: user ? (user.name || '') : ''
+    });
+    nameSection.appendChild(nameInput);
+    nameSection.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    form.appendChild(nameSection);
 
-    // Name
-    const nameGroup = el('div', { class: 'form-group' });
-    nameGroup.appendChild(el('label', { text: 'Name *' }));
-    nameGroup.appendChild(el('input', { type: 'text', name: 'name', value: user ? user.name : '', required: true }));
-    nameGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(nameGroup);
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
     // Email
-    const emailGroup = el('div', { class: 'form-group' });
-    emailGroup.appendChild(el('label', { text: 'Email *' }));
-    emailGroup.appendChild(el('input', { type: 'email', name: 'email', value: user ? user.email : '', required: true }));
-    emailGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(emailGroup);
+    const emailProp = el('div', { class: 'notion-prop' });
+    emailProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Email' }));
+    emailProp.appendChild(el('input', {
+      type: 'email',
+      name: 'email',
+      class: 'notion-prop-input',
+      placeholder: 'user@example.com',
+      required: true,
+      value: user ? (user.email || '') : ''
+    }));
+    emailProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    propsGrid.appendChild(emailProp);
 
     // Password
-    const pwGroup = el('div', { class: 'form-group' });
-    pwGroup.appendChild(el('label', { text: userId ? 'Password (leave blank to keep current)' : 'Password *' }));
-    pwGroup.appendChild(el('input', { type: 'password', name: 'password', required: !userId }));
-    pwGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(pwGroup);
+    const pwProp = el('div', { class: 'notion-prop' });
+    pwProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Password' }));
+    pwProp.appendChild(el('input', {
+      type: 'password',
+      name: 'password',
+      class: 'notion-prop-input',
+      placeholder: user ? 'Leave blank to keep current' : 'Set password',
+      required: !user
+    }));
+    pwProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    propsGrid.appendChild(pwProp);
 
     // Department (multi-select); skip for Admin because Admin is all-powerful.
     if (!user || user.role !== 'Admin') {
-      const deptGroup = el('div', { class: 'form-group' });
-      deptGroup.appendChild(el('label', { text: 'Department *' }));
-      const deptWrap = el('div', { class: 'department-checkboxes' });
+      const deptProp = el('div', { class: 'notion-prop' });
+      deptProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg> Department' }));
+      const deptWrap = el('div', { class: 'notion-checkbox-group' });
       const departmentList = Auth.DEPARTMENTS || DB.getAll('departments').map(d => d.name || d);
       departmentList.forEach(d => {
         const label = el('label', { class: 'checkbox-label' });
@@ -377,15 +836,15 @@ const Users = {
         label.appendChild(document.createTextNode(' ' + d));
         deptWrap.appendChild(label);
       });
-      deptGroup.appendChild(deptWrap);
-      deptGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-      form.appendChild(deptGroup);
+      deptProp.appendChild(deptWrap);
+      deptProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+      propsGrid.appendChild(deptProp);
     }
 
     // Entity access
-    const entityGroup = el('div', { class: 'form-group' });
-    entityGroup.appendChild(el('label', { text: 'Entity Access *' }));
-    const entityWrap = el('div', { class: 'entity-checkboxes' });
+    const entityProp = el('div', { class: 'notion-prop' });
+    entityProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Entity Access' }));
+    const entityWrap = el('div', { class: 'notion-checkbox-group' });
     ['ATA', 'LTA'].forEach(e => {
       const label = el('label', { class: 'checkbox-label' });
       const cb = el('input', { type: 'checkbox', name: 'entities', value: e });
@@ -394,32 +853,46 @@ const Users = {
       label.appendChild(document.createTextNode(' ' + e));
       entityWrap.appendChild(label);
     });
-    entityGroup.appendChild(entityWrap);
-    entityGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(entityGroup);
+    entityProp.appendChild(entityWrap);
+    entityProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    propsGrid.appendChild(entityProp);
+
+    form.appendChild(propsGrid);
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       this.submitUserForm(form);
     });
 
+    return form;
+  },
+
+  showUserForm(userId, mode = null) {
+    this.editingId = userId || 'new';
+    const user = userId ? DB.getById('users', userId) : null;
+    const form = this.renderUserFormContent(user);
+
+    const fullPageRoute = userId ? `#admin/users/form/${userId}` : '#admin/users/form/new';
+
     openFormPanel({
       icon: '👤',
       title: userId ? 'Edit User' : 'Add User',
       formContent: form,
       formId: 'user-form',
-      mode: PaneMode.SIDE_PEEK,
+      mode,
       viewContext: 'user-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
-        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showUserList() },
-        { text: 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' }
+        { text: userId ? 'Save Changes' : 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showUserList() }
       ]
     });
   },
 
   showUserList() {
     this.editingId = null;
-    closeFormPanelAndRoute();
+    closeFormPanelAndRoute('#admin/users');
     this.updateBreadcrumb(null);
   },
 
@@ -475,13 +948,12 @@ const Users = {
 
     if (errors.length > 0) {
       errors.forEach(err => {
-        const group = form.querySelector('[name="' + err.field + '"]')?.closest('.form-group');
-        if (group) {
-          const elErr = group.querySelector('.field-error');
-          if (elErr) {
-            elErr.textContent = err.msg;
-            elErr.classList.remove('hidden');
-          }
+        const field = form.querySelector('[name="' + err.field + '"]');
+        const group = field && field.closest('.notion-prop, .notion-freeform');
+        const elErr = group && group.querySelector('.field-error');
+        if (elErr) {
+          elErr.textContent = err.msg;
+          elErr.classList.remove('hidden');
         }
       });
       return;
@@ -1126,7 +1598,10 @@ const Users = {
 
     const key = keyPrefix + '-' + String(index).padStart(3, '0');
 
-    const row = el('div', { class: 'approval-item' });
+    const row = el('div', { class: 'approval-item', style: 'cursor: pointer;' });
+    row.addEventListener('click', () => {
+      location.hash = `#admin/pending/${item.id}`;
+    });
 
     // Status icon
     const icon = el('div', { class: 'approval-item-icon' });
@@ -1636,10 +2111,7 @@ const Users = {
     const wrapper = el('div');
     const self = this;
 
-    if (this.pendingDetailId) {
-      wrapper.appendChild(this.renderPendingDetail(this.pendingDetailId));
-      return wrapper;
-    }
+
 
     // Initialize view mode from localStorage
     this.myPendingViewMode = App.getPreferredViewMode('myPending');
@@ -1699,7 +2171,8 @@ const Users = {
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
 
     let searchQuery = '';
-    const toolbarContainer = createJiraFilterToolbar({
+    const isPowerUser = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+    const toolbarConfig = {
       moduleName: 'myPending',
       searchConfig: {
         placeholder: 'Search pending...',
@@ -1710,15 +2183,18 @@ const Users = {
       onFilterChange: () => {
         saveCurrentFilters();
         updateFilters();
-      },
-      viewMode: this.myPendingViewMode || 'table',
-      onViewModeChange: (newMode) => {
+      }
+    };
+    if (isPowerUser) {
+      toolbarConfig.viewMode = this.myPendingViewMode || 'table';
+      toolbarConfig.onViewModeChange = (newMode) => {
         self.myPendingViewMode = newMode;
         App.setPreferredViewMode('myPending', newMode);
         saveCurrentFilters();
         updateFilters();
-      }
-    });
+      };
+    }
+    const toolbarContainer = createJiraFilterToolbar(toolbarConfig);
 
     stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
@@ -1726,7 +2202,7 @@ const Users = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => self.refreshMyPendingList(listContainer, activeFilters, self.myPendingViewMode || 'table', searchQuery);
+    const updateFilters = () => self.refreshMyPendingList(listContainer, activeFilters, isPowerUser ? (self.myPendingViewMode || 'table') : 'table', searchQuery);
     updateFilters();
 
     return wrapper;
@@ -1855,7 +2331,11 @@ const Users = {
 
     const tbody = el('tbody');
     items.forEach(pc => {
-      const tr = el('tr');
+      const tr = el('tr', { style: 'cursor: pointer;' });
+      tr.addEventListener('click', () => {
+        location.hash = `#admin/myPending/${pc.id}`;
+      });
+
       tr.appendChild(el('td', { text: self._pendingCategoryLabel(pc.table) }));
       tr.appendChild(el('td', { text: formatDate(pc.submittedAt) }));
       tr.appendChild(el('td', { text: pc.parentRecordId ? 'Edit' : 'New' }));
@@ -1872,27 +2352,37 @@ const Users = {
 
       const tdAct = el('td');
       const reviewBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Review', style: 'margin-right: 4px;' });
-      reviewBtn.addEventListener('click', () => {
-        self.pendingDetailId = pc.id;
-        App.handleRoute();
+      reviewBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        location.hash = `#admin/myPending/${pc.id}`;
       });
       tdAct.appendChild(reviewBtn);
 
       if (pc.status === 'pending') {
         const withdrawBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Withdraw' });
-        withdrawBtn.addEventListener('click', () => {
+        withdrawBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this pending submission?', () => {
             PendingChanges.delete(pc.id);
-            App.handleRoute();
+            if (location.hash.includes('/')) {
+              location.hash = location.hash.split('/')[0];
+            } else {
+              App.handleRoute();
+            }
           }, 'danger');
         });
         tdAct.appendChild(withdrawBtn);
       } else if (pc.status === 'rejected') {
         const dismissBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Dismiss' });
-        dismissBtn.addEventListener('click', () => {
+        dismissBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
             PendingChanges.delete(pc.id);
-            App.handleRoute();
+            if (location.hash.includes('/')) {
+              location.hash = location.hash.split('/')[0];
+            } else {
+              App.handleRoute();
+            }
           }, 'danger');
         });
         tdAct.appendChild(dismissBtn);
@@ -2021,10 +2511,10 @@ const Users = {
   },
 
 
-  renderPendingDetail(pendingId) {
+  renderPendingDetail(pendingId, isSidePeek = false, hideHeader = false) {
     const pc = PendingChanges.getById(pendingId);
     if (!pc) {
-      this.pendingDetailId = null;
+      if (!isSidePeek) this.pendingDetailId = null;
       return renderEmptyStateV2({
         variant: 'zero-state',
         icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
@@ -2036,19 +2526,27 @@ const Users = {
     const canApprove = PendingChanges.canApproveChange(pc);
     const isSubmitter = pc.submittedBy === Auth.user.id;
 
-    const wrapper = el('div', { style: 'max-width: 800px; margin: 0 auto;' });
-    
-    // Header
-    const header = el('div', { class: 'form-header-bar', style: 'border-bottom: 1px solid var(--color-border); padding-bottom: 16px; margin-bottom: 24px;' });
-    header.appendChild(el('h2', { text: 'Review Pending Change Request', style: 'margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--color-primary);' }));
-    
-    const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
-    backBtn.addEventListener('click', () => {
-      this.pendingDetailId = null;
-      App.handleRoute();
+    const isFullPage = !isSidePeek && hideHeader;
+    const wrapper = el('div', {
+      class: isFullPage ? 'pending-detail-full-page' : '',
+      style: isFullPage
+        ? 'width: 100%; max-width: 100%; padding: var(--spacing-md);'
+        : (isSidePeek ? 'padding: var(--spacing-xs);' : 'max-width: 800px; margin: 0 auto;')
     });
-    header.appendChild(backBtn);
-    wrapper.appendChild(header);
+
+    if (!isSidePeek && !hideHeader) {
+      // Inline header for tab/embedded views; full-page views use buildFormBreadcrumb.
+      const header = el('div', { class: 'form-header-bar', style: 'border-bottom: 1px solid var(--color-border); padding-bottom: 16px; margin-bottom: 24px;' });
+      header.appendChild(el('h2', { text: 'Review Pending Change Request', style: 'margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--color-primary);' }));
+
+      const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
+      backBtn.addEventListener('click', () => {
+        this.pendingDetailId = null;
+        App.handleRoute();
+      });
+      header.appendChild(backBtn);
+      wrapper.appendChild(header);
+    }
 
     // SVGs for Notion Property Grid
     const Icons = {
@@ -2096,12 +2594,24 @@ const Users = {
     }[pc.table] || pc.table;
 
     // Main Notion Card
-    const reviewCard = el('div', { class: 'admin-review-card' });
+    const reviewCard = el('div', { 
+      class: isSidePeek ? '' : 'admin-review-card',
+      style: isSidePeek ? 'display: flex; flex-direction: column; gap: var(--spacing-sm); padding: 0;' : ''
+    });
+
+    const avatarEl = el('div', { class: 'admin-review-avatar' });
+    if (submitter && submitter.avatarUrl) {
+      avatarEl.style.backgroundImage = `url('${submitter.avatarUrl}')`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+    } else {
+      avatarEl.textContent = submitterInitials;
+    }
 
     // 1. Card Header Row (Avatar, Meta Text, Status Badge)
     const cardHeader = el('div', { class: 'admin-review-card-header' }, [
       el('div', { class: 'admin-review-submitter-info' }, [
-        el('div', { class: 'admin-review-avatar', text: submitterInitials }),
+        avatarEl,
         el('div', { class: 'admin-review-meta-text' }, [
           el('strong', { text: submitterName }),
           ` proposed a new ${singularName} · ${formatDate(pc.submittedAt)}`
@@ -2340,63 +2850,27 @@ const Users = {
 
     wrapper.appendChild(reviewCard);
 
-    // 6. Changed Fields (Diff) Table for Edits
-    const { current, diffs, isNew } = PendingChanges.buildDiff(pc);
-    if (!isNew && diffs.length > 0) {
-      const diffSection = el('div', { class: 'form-section', style: 'margin-top: 24px; margin-bottom: 24px;' });
-      diffSection.appendChild(el('h3', { text: 'Changed Fields (Diff)', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
-
-      const diffContainer = el('div', { class: 'card', style: 'border-radius: 12px; padding: 20px;' });
-      const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
-      const diffThead = el('thead');
-      const diffThr = el('tr');
-      ['Field', 'Current Approved Value', 'Proposed Pending Value'].forEach(h => diffThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 10px; background: var(--color-bg-muted); border-bottom: 2px solid var(--color-border); font-size: 0.8125rem;' })));
-      diffThead.appendChild(diffThr);
-      diffTable.appendChild(diffThead);
-      
-      const diffTbody = el('tbody');
-      diffs.forEach(d => {
-        const tr = el('tr');
-        const niceKey = d.key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        
-        let oldVal = d.old;
-        let newVal = d.new;
-        if (oldVal.startsWith('[') || oldVal.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(oldVal);
-            if (Array.isArray(parsed)) oldVal = `${parsed.length} item(s)`;
-          } catch(e) {}
-        }
-        if (newVal.startsWith('[') || newVal.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(newVal);
-            if (Array.isArray(parsed)) newVal = `${parsed.length} item(s)`;
-          } catch(e) {}
-        }
-        
-        tr.appendChild(el('td', { text: niceKey, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-text-muted);' }));
-        tr.appendChild(el('td', { text: oldVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-size: 0.8125rem; color: var(--color-text);' }));
-        tr.appendChild(el('td', { text: newVal, style: 'padding: 12px 10px; border-bottom: 1px solid var(--color-border); font-weight: 600; font-size: 0.8125rem; color: var(--color-success); background: rgba(52, 211, 153, 0.1);' }));
-        diffTbody.appendChild(tr);
-      });
-      diffTable.appendChild(diffTbody);
-      diffContainer.appendChild(diffTable);
-      diffSection.appendChild(diffContainer);
-      wrapper.appendChild(diffSection);
-    }
-
-    // 7. Actions Footer
+    // 6. Actions Footer
     const actions = el('div', {
-      style: 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'
+      class: isSidePeek ? 'side-pane-form-footer' : '',
+      style: isSidePeek ? 'margin-top: 0;' : 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'
     });
+
+    const handleCloseAndRoute = () => {
+      this.pendingDetailId = null;
+      if (location.hash.includes('/')) {
+        location.hash = location.hash.split('/')[0];
+      } else {
+        App.handleRoute();
+      }
+    };
 
     if (canApprove) {
       const approveBtn = el('button', { class: 'btn btn-success', text: 'Approve Change' });
       approveBtn.addEventListener('click', () => {
         Workflow.showConfirm('Confirm Approval', 'Are you sure you want to approve this change?', () => {
           PendingChanges.approve(pc.id);
-          this.pendingDetailId = null;
-          App.handleRoute();
+          handleCloseAndRoute();
         }, 'success');
       });
       actions.appendChild(approveBtn);
@@ -2406,8 +2880,7 @@ const Users = {
         const reason = prompt('Enter rejection reason:');
         if (reason !== null) {
           PendingChanges.reject(pc.id, reason);
-          this.pendingDetailId = null;
-          App.handleRoute();
+          handleCloseAndRoute();
         }
       });
       actions.appendChild(rejectBtn);
@@ -2416,8 +2889,7 @@ const Users = {
       withdrawBtn.addEventListener('click', () => {
         Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this submission?', () => {
           PendingChanges.delete(pc.id);
-          this.pendingDetailId = null;
-          App.handleRoute();
+          handleCloseAndRoute();
         }, 'danger');
       });
       actions.appendChild(withdrawBtn);
@@ -2426,6 +2898,9 @@ const Users = {
       editResubmitBtn.addEventListener('click', () => {
         PendingChanges.editingPendingId = pc.id;
         this.pendingDetailId = null;
+        if (window.SidePaneInstance && window.SidePaneInstance.isOpen()) {
+          window.SidePaneInstance.close({ silent: true });
+        }
 
         if (pc.table === 'invoices') {
           location.hash = `#billing/form/${pc.proposedData.id}`;
@@ -2438,7 +2913,11 @@ const Users = {
         } else if (pc.table === 'workRequests') {
           location.hash = `#operations/form/${pc.proposedData.id}`;
         } else if (pc.table === 'tasks') {
-          App.handleRoute(); // navigate back to wherever they were
+          if (location.hash.includes('/')) {
+            location.hash = location.hash.split('/')[0];
+          } else {
+            App.handleRoute();
+          }
           PendingChanges.editingPendingId = pc.id;
           Workflow.showEditTaskModal(pc.proposedData.id, () => {
             App.handleRoute();
@@ -2451,14 +2930,15 @@ const Users = {
       dismissBtn.addEventListener('click', () => {
         Workflow.showConfirm('Confirm Dismissal', 'Are you sure you want to dismiss and clear this rejected submission?', () => {
           PendingChanges.delete(pc.id);
-          this.pendingDetailId = null;
-          App.handleRoute();
+          handleCloseAndRoute();
         }, 'danger');
       });
       actions.appendChild(dismissBtn);
     }
 
-    wrapper.appendChild(actions);
+    if (!hideHeader) {
+      wrapper.appendChild(actions);
+    }
     return wrapper;
   },
 
@@ -2523,7 +3003,8 @@ const Users = {
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
 
     let searchQuery = '';
-    const toolbarContainer = createJiraFilterToolbar({
+    const isPowerUser = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+    const toolbarConfig = {
       moduleName: 'myRequests',
       searchConfig: {
         placeholder: 'Search requests...',
@@ -2534,15 +3015,18 @@ const Users = {
       onFilterChange: () => {
         saveCurrentFilters();
         updateFilters();
-      },
-      viewMode: this.myRequestsViewMode || 'table',
-      onViewModeChange: (newMode) => {
+      }
+    };
+    if (isPowerUser) {
+      toolbarConfig.viewMode = this.myRequestsViewMode || 'table';
+      toolbarConfig.onViewModeChange = (newMode) => {
         self.myRequestsViewMode = newMode;
         App.setPreferredViewMode('myRequests', newMode);
         saveCurrentFilters();
         updateFilters();
-      }
-    });
+      };
+    }
+    const toolbarContainer = createJiraFilterToolbar(toolbarConfig);
 
     stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
@@ -2550,7 +3034,7 @@ const Users = {
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => self.refreshMyRequestsList(listContainer, activeFilters, self.myRequestsViewMode || 'table', searchQuery);
+    const updateFilters = () => self.refreshMyRequestsList(listContainer, activeFilters, isPowerUser ? (self.myRequestsViewMode || 'table') : 'table', searchQuery);
     updateFilters();
 
     return wrapper;
@@ -2670,7 +3154,10 @@ const Users = {
 
     const tbody = el('tbody');
     requests.forEach(r => {
-      const tr = el('tr');
+      const tr = el('tr', { style: 'cursor: pointer;' });
+      tr.addEventListener('click', () => {
+        location.hash = `#admin/myRequests/${r.id}`;
+      });
 
       tr.appendChild(el('td', { text: this._requestTypeLabel(r.type) }));
 
@@ -2688,17 +3175,23 @@ const Users = {
 
       const tdAct = el('td');
       const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View', style: 'margin-right: 8px;' });
-      viewBtn.addEventListener('click', () => {
-        self.showRequestDetailsModal(r);
+      viewBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        location.hash = `#admin/myRequests/${r.id}`;
       });
       tdAct.appendChild(viewBtn);
 
       if (r.status === 'pending') {
         const cancelBtn = el('button', { class: 'btn btn-danger btn-sm', text: 'Cancel Request' });
-        cancelBtn.addEventListener('click', () => {
+        cancelBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => {
             DB.delete('operationsRequests', r.id);
-            App.handleRoute();
+            if (location.hash.includes('/')) {
+              location.hash = location.hash.split('/')[0];
+            } else {
+              App.handleRoute();
+            }
           }, 'danger');
         });
         tdAct.appendChild(cancelBtn);
@@ -2846,129 +3339,6 @@ const Users = {
   },
 
   showRequestDetailsModal(r) {
-    const self = this;
-    const wr = DB.getById('workRequests', r.workRequestId);
-    const client = DB.getById('clients', r.clientId);
-    const submitter = DB.getById('users', r.requestedBy);
-
-    const wrapper = el('div', { class: 'form-stacked notion-form', style: 'padding: var(--spacing-xs); display: flex; flex-direction: column; gap: var(--spacing-md);' });
-
-    // Status / Submitter info box
-    const infoBox = el('div', { 
-      style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-sm); display: flex; flex-direction: column; gap: var(--spacing-xs);' 
-    }, [
-      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
-        el('span', { text: 'Status', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
-        self._requestStatusBadge(r.status)
-      ]),
-      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
-        el('span', { text: 'Submitted By', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
-        el('span', { text: submitter ? submitter.name : '—', style: 'font-weight:500;' })
-      ]),
-      el('div', { style: 'display:flex; justify-content:space-between; align-items:center;' }, [
-        el('span', { text: 'Submitted At', style: 'font-size:0.75rem; color:var(--color-text-muted); font-weight:600; text-transform:uppercase;' }),
-        el('span', { text: formatDate(r.requestedAt), style: 'font-weight:500;' })
-      ])
-    ]);
-    wrapper.appendChild(infoBox);
-
-    // Notion-style Property Grid
-    const grid = el('div', { class: 'notion-property-grid', style: 'margin-bottom: var(--spacing-xs);' });
-
-    const addProp = (label, valueNode) => {
-      const row = el('div', { class: 'notion-property-row' });
-      row.appendChild(el('div', { class: 'notion-property-label', text: label }));
-      row.appendChild(el('div', { class: 'notion-property-value' }, [valueNode]));
-      grid.appendChild(row);
-    };
-
-    addProp('Request Type', document.createTextNode(this._requestTypeLabel(r.type)));
-    addProp('Client', document.createTextNode(client ? client.name : '—'));
-    
-    // Work Request Link / Text
-    const wrSpan = el('span', { text: wr ? wr.title : '—' });
-    if (wr) {
-      wrSpan.style.cursor = 'pointer';
-      wrSpan.style.color = 'var(--color-primary)';
-      wrSpan.style.textDecoration = 'underline';
-      wrSpan.addEventListener('click', () => {
-        const overlay = document.querySelector('.modal-overlay');
-        if (overlay) overlay.remove();
-        location.hash = `#operations/detail/${wr.id}`;
-      });
-    }
-    addProp('Work Request', wrSpan);
-
-    // Render type-specific fields
-    if (r.type === 'billing') {
-      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
-      addProp('Linked Task', document.createTextNode(linkedTask ? linkedTask.title : '— Whole Project —'));
-      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
-      if (r.receiptFilename) {
-        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
-      }
-    } else if (r.type === 'disbursement') {
-      const linkedTask = r.linkedTaskId ? DB.getById('tasks', r.linkedTaskId) : null;
-      addProp('Disbursement Type', document.createTextNode(r.disbursementType ? r.disbursementType.charAt(0).toUpperCase() + r.disbursementType.slice(1) : '—'));
-      addProp('Category', document.createTextNode(r.category || '—'));
-      addProp('Amount', el('strong', { text: (r.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) }));
-      addProp('Payment Method', document.createTextNode(r.paymentMethod || '—'));
-      if (linkedTask) {
-        addProp('Linked Task', document.createTextNode(linkedTask.title));
-      }
-      if (r.receiptFilename) {
-        addProp('Receipt File', el('span', { text: r.receiptFilename, style: 'font-family: monospace;' }));
-      }
-    } else if (r.type === 'transmittal') {
-      addProp('Recipient & Delivery', document.createTextNode(r.recipientDetails || '—'));
-    }
-
-    wrapper.appendChild(grid);
-
-    // Documents list for Transmittal
-    if (r.type === 'transmittal' && r.documents && r.documents.length > 0) {
-      wrapper.appendChild(el('h4', { text: 'Documents to Transmit', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
-      const docList = el('ul', { style: 'padding-left: var(--spacing-md); margin-bottom: var(--spacing-sm); display:flex; flex-direction:column; gap:4px;' });
-      r.documents.forEach(doc => {
-        docList.appendChild(el('li', { text: doc, style: 'font-size:0.875rem;' }));
-      });
-      wrapper.appendChild(docList);
-    }
-
-    // Notes
-    if (r.notes) {
-      wrapper.appendChild(el('h4', { text: 'Notes', style: 'margin-top:var(--spacing-xs); margin-bottom:var(--spacing-xs); font-size:0.875rem;' }));
-      wrapper.appendChild(el('div', { 
-        text: r.notes, 
-        style: 'background: var(--color-bg-light); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size: 0.875rem; white-space: pre-wrap; font-style: italic;' 
-      }));
-    }
-
-    // Fulfillment Details or Rejection Details
-    if (r.status === 'fulfilled') {
-      const fulfiller = DB.getById('users', r.fulfilledBy);
-      wrapper.appendChild(el('h4', { text: 'Fulfillment Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--success);' }));
-      const fulfillBox = el('div', {
-        style: 'background: color-mix(in oklab, var(--success), transparent 95%); border: 1px solid color-mix(in oklab, var(--success), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
-      }, [
-        el('div', { text: `Fulfilled by: ${fulfiller ? fulfiller.name : 'System'}` }),
-        el('div', { text: `Fulfilled at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' })
-      ]);
-      wrapper.appendChild(fulfillBox);
-    } else if (r.status === 'rejected') {
-      const rejecter = r.fulfilledBy ? DB.getById('users', r.fulfilledBy) : null;
-      wrapper.appendChild(el('h4', { text: 'Rejection Info', style: 'margin-top:var(--spacing-sm); margin-bottom:var(--spacing-xs); font-size:0.875rem; color:var(--danger);' }));
-      const rejectBox = el('div', {
-        style: 'background: color-mix(in oklab, var(--danger), transparent 95%); border: 1px solid color-mix(in oklab, var(--danger), transparent 70%); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size:0.875rem;'
-      }, [
-        el('div', { text: `Reason: ${r.rejectionReason || 'No reason provided'}` }),
-        rejecter ? el('div', { text: `Rejected by: ${rejecter.name}`, style: 'margin-top:4px;' }) : null,
-        r.fulfilledAt ? el('div', { text: `Rejected at: ${formatDate(r.fulfilledAt)}`, style: 'margin-top:4px;' }) : null
-      ].filter(Boolean));
-      wrapper.appendChild(rejectBox);
-    }
-
-    const title = `Request Details: ${this._requestTypeLabel(r.type)}`;
-    Workflow.showModal(title, wrapper);
+    location.hash = `#admin/myRequests/${r.id}`;
   }
 };
