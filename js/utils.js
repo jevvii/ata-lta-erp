@@ -3111,3 +3111,19 @@ const JiraBacklogList = {
   }
 };
 
+function getChronologicalSequenceMap(table) {
+  const items = DB.getAll(table) || [];
+  items.sort((a, b) => {
+    const ta = new Date(a.createdAt || a.sentAt || a.submittedAt || a.requestedAt || a.issueDate || a.timestamp || 0).getTime();
+    const tb = new Date(b.createdAt || b.sentAt || b.submittedAt || b.requestedAt || b.issueDate || b.timestamp || 0).getTime();
+    if (ta !== tb) return ta - tb;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+  const map = new Map();
+  items.forEach((item, index) => {
+    map.set(item.id, index + 1);
+  });
+  return map;
+}
+
+

@@ -590,9 +590,11 @@ const Clients = {
         rightSec.appendChild(el('div', { style: 'color: var(--color-text-muted); font-size: 13px;', text: 'No work requests assigned.' }));
       } else {
         const childWrsList = el('div', { class: 'jira-details-list' });
+        const seqMap = getChronologicalSequenceMap('workRequests');
         clientWrs.forEach((wr, wrIdx) => {
           const wrItem = el('div', { class: 'jira-details-list-item' });
-          const wrKey = 'WR-' + String(wrIdx + 1).padStart(2, '0');
+          const wrSeq = seqMap.get(wr.id) || (wrIdx + 1);
+          const wrKey = 'WR-' + String(wrSeq).padStart(2, '0');
           const wrLink = el('a', { class: 'jira-details-list-item-key', href: `#operations/detail/${wr.id}`, text: wrKey });
           const wrTitle = el('span', { class: 'jira-details-list-item-title', text: wr.title });
           const wrStatus = el('span', { class: 'badge badge-info jira-details-list-item-status', text: wr.status });

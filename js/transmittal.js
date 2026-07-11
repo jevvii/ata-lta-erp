@@ -657,7 +657,7 @@ const Transmittal = {
       emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
     }));
 
-    let cardNumber = 1;
+    const seqMap = getChronologicalSequenceMap('transmittals');
 
     const renderCard = (t) => {
       const clientName = self.getClientName(t.clientId);
@@ -678,7 +678,7 @@ const Transmittal = {
       const detail = wr ? wr.title : '';
 
       return buildCompactBoardCard({
-        key: 'TX-' + cardNumber++,
+        key: 'TX-' + (seqMap.get(t.id) || 1),
         progress,
         statusColor: statusColors[t.status] || '#cbd5e1',
         title: t.trackingNumber,
@@ -803,7 +803,6 @@ const Transmittal = {
 
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
-      cardNumber = 1;
       renderGroupedKanbanBoard({
         container,
         items,
@@ -818,8 +817,6 @@ const Transmittal = {
       });
       return;
     }
-
-    cardNumber = 1;
 
     KanbanBoard.render({
       container,

@@ -690,7 +690,7 @@ const Billing = {
       return col;
     });
 
-    let cardNumber = 1;
+    const seqMap = getChronologicalSequenceMap('invoices');
 
     const renderCard = (inv) => {
       const client = DB.getById('clients', inv.clientId);
@@ -716,7 +716,7 @@ const Billing = {
       if (inv.fromTemplate) descParts.push('Recurring');
 
       const card = buildCompactBoardCard({
-        key: 'INV-' + cardNumber++,
+        key: 'INV-' + (seqMap.get(inv.id) || 1),
         progress,
         statusColor: statusColors[inv.status] || '#cbd5e1',
         title: inv.invoiceNumber,
@@ -872,7 +872,6 @@ const Billing = {
 
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
-      cardNumber = 1;
       renderGroupedKanbanBoard({
         container,
         items: invoices,
@@ -887,8 +886,6 @@ const Billing = {
       });
       return;
     }
-
-    cardNumber = 1;
 
     KanbanBoard.render({
       container,

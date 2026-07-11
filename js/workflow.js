@@ -3159,7 +3159,7 @@ const Workflow = {
       { key: 'completed', label: 'Completed', statuses: ['Completed'], targetStatus: 'Completed', color: '#10b981' }
     ];
 
-    let cardNumber = 1;
+    const seqMap = getChronologicalSequenceMap('workRequests');
 
     const renderBoardCard = (wr, phase) => {
       const tasks = wr.isPendingApproval ? (wr.tasks || []) : DB.getWhere('tasks', t => t.workRequestId === wr.id);
@@ -3215,7 +3215,7 @@ const Workflow = {
       if (allComments > 0) counts.push({ icon: BoardCardIcons.comment, value: allComments });
 
       return buildCompactBoardCard({
-        key: 'WR-' + cardNumber++,
+        key: 'WR-' + (seqMap.get(wr.id) || 1),
         progress,
         statusColor: phase.color,
         title: wr.title,

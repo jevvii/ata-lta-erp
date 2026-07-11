@@ -811,7 +811,7 @@ const Disbursement = {
       return col;
     });
 
-    let cardNumber = 1;
+    const seqMap = getChronologicalSequenceMap('disbursements');
 
     const renderCard = (d) => {
       const emp = DB.getById('users', self.getEmployeeId(d));
@@ -855,7 +855,7 @@ const Disbursement = {
       if (d.fromTemplate) descParts.push('Recurring');
 
       const card = buildCompactBoardCard({
-        key: 'DIS-' + cardNumber++,
+        key: 'DIS-' + (seqMap.get(d.id) || 1),
         progress,
         statusColor: statusColors[d.status] || '#cbd5e1',
         title: d.category,
@@ -1003,7 +1003,6 @@ const Disbursement = {
 
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
-      cardNumber = 1;
       renderGroupedKanbanBoard({
         container,
         items,
@@ -1018,8 +1017,6 @@ const Disbursement = {
       });
       return;
     }
-
-    cardNumber = 1;
 
     KanbanBoard.render({
       container,
