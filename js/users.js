@@ -217,7 +217,10 @@ const Users = {
     const items = users.map((u, idx) => {
       const depts = Array.isArray(u.departments) ? u.departments : [];
       const deptText = depts.length
-        ? depts.map(d => '<span class="user-dept-badge">' + escapeHtml(d) + '</span>').join('')
+        ? depts.map(d => {
+            const cleanDept = d.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return `<span class="user-dept-badge user-dept-badge--${cleanDept}">${escapeHtml(d)}</span>`;
+          }).join('')
         : '<span class="text-muted">No departments</span>';
       return {
         id: u.id,
@@ -1552,7 +1555,7 @@ const Users = {
       tdType.appendChild(el('span', {
         class: `badge ${badgeInfo.className}`,
         text: badgeInfo.text,
-        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 12px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       tr.appendChild(tdType);
       
@@ -1606,7 +1609,7 @@ const Users = {
       leftPart.appendChild(el('span', {
         class: `badge ${badgeInfo.className}`,
         text: badgeInfo.text,
-        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 12px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       
       const textInfo = el('div');
@@ -2183,7 +2186,7 @@ const Users = {
       const priorityVal = el('span', { 
         class: `badge ${priorityClass}`, 
         text: priority,
-        style: 'font-size: 11px; padding: 2px 8px; border-radius: 4px;'
+        style: 'font-size: 11px; padding: 2px 8px; border-radius: 12px;'
       });
       propertyGrid.appendChild(createPropertyRow('Priority', Icons.priority, priorityVal));
 
@@ -2294,7 +2297,7 @@ const Users = {
         `Line Items`
       ]));
 
-      const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px;' });
+      const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px;' });
       const liThead = el('thead');
       const liThr = el('tr');
       ['Type', 'Description', 'Amount'].forEach(h => liThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 8px;' })));
@@ -2343,7 +2346,7 @@ const Users = {
       const diffSection = el('div', { class: 'form-section', style: 'margin-top: 24px; margin-bottom: 24px;' });
       diffSection.appendChild(el('h3', { text: 'Changed Fields (Diff)', style: 'font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 12px;' }));
 
-      const diffContainer = el('div', { class: 'card', style: 'border-radius: 8px; padding: 20px;' });
+      const diffContainer = el('div', { class: 'card', style: 'border-radius: 12px; padding: 20px;' });
       const diffTable = el('table', { class: 'report-table', style: 'width: 100%; border-collapse: collapse;' });
       const diffThead = el('thead');
       const diffThr = el('tr');
