@@ -66,27 +66,17 @@ const Users = {
       const isNew = this.editingId === 'new';
       const user = isNew ? null : DB.getById('users', this.editingId);
       
-      const actions = [
-        {
-          text: isNew ? 'Save User' : 'Save Changes',
-          class: 'btn btn-primary btn-sm',
-          onClick: () => {
-            const form = container.querySelector('#user-form');
-            if (form) form.requestSubmit();
-          }
-        },
-        {
-          text: 'Cancel',
-          class: 'btn btn-secondary btn-sm',
-          onClick: () => { this.showUserList(); }
-        }
-      ];
-
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Users',
-        baseHash: '#admin',
+        baseHash: '#admin/users',
         currentText: isNew ? 'Add User' : 'Edit User',
-        actions
+        actions: [
+          {
+            text: '← Back to Users',
+            class: 'btn btn-secondary btn-sm',
+            onClick: () => { this.editingId = null; location.hash = '#admin/users'; }
+          }
+        ]
       }));
 
       const formEl = this.renderUserFormContent(user);
@@ -693,34 +683,68 @@ const Users = {
   },
 
   renderUserFormContent(user) {
-    const form = el('form', { id: 'user-form', class: 'form-stacked user-form' });
+    const form = el('form', { id: 'user-form', class: 'form-stacked notion-form' });
 
-    // Name
-    const nameGroup = el('div', { class: 'form-group' });
-    nameGroup.appendChild(el('label', { text: 'Name *' }));
-    nameGroup.appendChild(el('input', { type: 'text', name: 'name', value: user ? user.name : '', required: true }));
-    nameGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(nameGroup);
+    // Top action bar for full-page / new-tab views (hidden inside side-peek panels)
+    const headerBar = el('div', { class: 'form-header-bar' });
+    const headerActions = el('div', { class: 'form-actions-top' });
+    const saveBtn = el('button', { type: 'submit', form: 'user-form', class: 'btn btn-primary', text: user ? 'Save Changes' : 'Save User' });
+    headerActions.appendChild(saveBtn);
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+    cancelBtn.addEventListener('click', () => this.showUserList());
+    headerActions.appendChild(cancelBtn);
+    headerBar.appendChild(headerActions);
+    form.appendChild(headerBar);
+
+    // Title-style primary field: name
+    const nameSection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    nameSection.appendChild(el('label', { class: 'notion-section-label', text: 'Full Name' }));
+    const nameInput = el('input', {
+      type: 'text',
+      name: 'name',
+      class: 'notion-freeform-input notion-title-input',
+      placeholder: 'e.g. Juan Dela Cruz',
+      required: true,
+      value: user ? (user.name || '') : ''
+    });
+    nameSection.appendChild(nameInput);
+    nameSection.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    form.appendChild(nameSection);
+
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
     // Email
-    const emailGroup = el('div', { class: 'form-group' });
-    emailGroup.appendChild(el('label', { text: 'Email *' }));
-    emailGroup.appendChild(el('input', { type: 'email', name: 'email', value: user ? user.email : '', required: true }));
-    emailGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(emailGroup);
+    const emailProp = el('div', { class: 'notion-prop' });
+    emailProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Email' }));
+    emailProp.appendChild(el('input', {
+      type: 'email',
+      name: 'email',
+      class: 'notion-prop-input',
+      placeholder: 'user@example.com',
+      required: true,
+      value: user ? (user.email || '') : ''
+    }));
+    emailProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    propsGrid.appendChild(emailProp);
 
     // Password
-    const pwGroup = el('div', { class: 'form-group' });
-    pwGroup.appendChild(el('label', { text: user ? 'Password (leave blank to keep current)' : 'Password *' }));
-    pwGroup.appendChild(el('input', { type: 'password', name: 'password', required: !user }));
-    pwGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(pwGroup);
+    const pwProp = el('div', { class: 'notion-prop' });
+    pwProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Password' }));
+    pwProp.appendChild(el('input', {
+      type: 'password',
+      name: 'password',
+      class: 'notion-prop-input',
+      placeholder: user ? 'Leave blank to keep current' : 'Set password',
+      required: !user
+    }));
+    pwProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    propsGrid.appendChild(pwProp);
 
     // Department (multi-select); skip for Admin because Admin is all-powerful.
     if (!user || user.role !== 'Admin') {
-      const deptGroup = el('div', { class: 'form-group' });
-      deptGroup.appendChild(el('label', { text: 'Department *' }));
-      const deptWrap = el('div', { class: 'department-checkboxes' });
+      const deptProp = el('div', { class: 'notion-prop' });
+      deptProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg> Department' }));
+      const deptWrap = el('div', { class: 'notion-checkbox-group' });
       const departmentList = Auth.DEPARTMENTS || DB.getAll('departments').map(d => d.name || d);
       departmentList.forEach(d => {
         const label = el('label', { class: 'checkbox-label' });
@@ -730,15 +754,15 @@ const Users = {
         label.appendChild(document.createTextNode(' ' + d));
         deptWrap.appendChild(label);
       });
-      deptGroup.appendChild(deptWrap);
-      deptGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-      form.appendChild(deptGroup);
+      deptProp.appendChild(deptWrap);
+      deptProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+      propsGrid.appendChild(deptProp);
     }
 
     // Entity access
-    const entityGroup = el('div', { class: 'form-group' });
-    entityGroup.appendChild(el('label', { text: 'Entity Access *' }));
-    const entityWrap = el('div', { class: 'entity-checkboxes' });
+    const entityProp = el('div', { class: 'notion-prop' });
+    entityProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Entity Access' }));
+    const entityWrap = el('div', { class: 'notion-checkbox-group' });
     ['ATA', 'LTA'].forEach(e => {
       const label = el('label', { class: 'checkbox-label' });
       const cb = el('input', { type: 'checkbox', name: 'entities', value: e });
@@ -747,9 +771,11 @@ const Users = {
       label.appendChild(document.createTextNode(' ' + e));
       entityWrap.appendChild(label);
     });
-    entityGroup.appendChild(entityWrap);
-    entityGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
-    form.appendChild(entityGroup);
+    entityProp.appendChild(entityWrap);
+    entityProp.appendChild(el('span', { class: 'field-error hidden', text: '' }));
+    propsGrid.appendChild(entityProp);
+
+    form.appendChild(propsGrid);
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -783,7 +809,7 @@ const Users = {
 
   showUserList() {
     this.editingId = null;
-    closeFormPanelAndRoute();
+    closeFormPanelAndRoute('#admin/users');
     this.updateBreadcrumb(null);
   },
 
@@ -839,13 +865,12 @@ const Users = {
 
     if (errors.length > 0) {
       errors.forEach(err => {
-        const group = form.querySelector('[name="' + err.field + '"]')?.closest('.form-group');
-        if (group) {
-          const elErr = group.querySelector('.field-error');
-          if (elErr) {
-            elErr.textContent = err.msg;
-            elErr.classList.remove('hidden');
-          }
+        const field = form.querySelector('[name="' + err.field + '"]');
+        const group = field && field.closest('.notion-prop, .notion-freeform');
+        const elErr = group && group.querySelector('.field-error');
+        if (elErr) {
+          elErr.textContent = err.msg;
+          elErr.classList.remove('hidden');
         }
       });
       return;
