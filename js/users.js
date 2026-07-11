@@ -724,8 +724,8 @@ const Users = {
       mode: PaneMode.SIDE_PEEK,
       viewContext: 'user-form',
       actions: [
-        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showUserList() },
-        { text: 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' }
+        { text: 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showUserList() }
       ]
     });
   },

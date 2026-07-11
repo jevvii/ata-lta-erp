@@ -2210,6 +2210,14 @@ tbody tr:hover {
 .audit-filters .form-select { max-width: 200px; }
 .user-form { max-width: 500px; margin: 0 auto; background: var(--color-surface); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); }
 .user-form h3 { margin-bottom: var(--spacing-md); font-size: 1.25rem; }
+.side-pane .user-form {
+  max-width: none;
+  margin: 0;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
 
 .doc-type-badge-original { background: #f4f6fb; color: var(--color-text); }
 .doc-type-badge-generated { background: #dbeafe; color: var(--color-primary); }
@@ -10587,7 +10595,7 @@ tbody tr * {
   top: 50%;
   transform: translate(-50%, -50%) scale(0.95);
   width: min(720px, 92vw);
-  height: 86vh;
+  height: auto;
   max-height: 86vh;
   min-height: 200px;
   border-radius: 12px;
@@ -10598,6 +10606,8 @@ tbody tr * {
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
   /* Center-peek panels should scroll their body, not the whole panel. */
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .side-pane.side-pane--center-peek.open {
   transform: translate(-50%, -50%) scale(1);
@@ -11211,6 +11221,8 @@ tbody tr * {
   max-height: calc(86vh - 110px);
   overflow-y: auto;
   padding: 0 16px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Center-peek form layout: spacious padding matching Notion's modal aesthetic */
