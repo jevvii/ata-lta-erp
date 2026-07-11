@@ -2572,7 +2572,8 @@ const Users = {
 
     // 7. Actions Footer
     const actions = el('div', {
-      style: 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'
+      class: isSidePeek ? 'side-pane-form-footer' : '',
+      style: isSidePeek ? 'margin-top: 0;' : 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;'
     });
 
     const handleCloseAndRoute = () => {

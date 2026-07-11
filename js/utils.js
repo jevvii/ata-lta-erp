@@ -1077,7 +1077,16 @@ class SidePane {
         this.body.appendChild(renderEmptyState('Unable to load panel content'));
       } else {
         this.body.innerHTML = '';
-        this.body.appendChild(opts.content);
+        
+        // Find any footer in the content and move it directly to this.pane
+        const footer = opts.content.querySelector('.side-pane-form-footer, .side-pane-footer');
+        if (footer) {
+          footer.remove();
+          this.body.appendChild(opts.content);
+          this.pane.appendChild(footer);
+        } else {
+          this.body.appendChild(opts.content);
+        }
       }
     } else {
       this.body.innerHTML = '';
