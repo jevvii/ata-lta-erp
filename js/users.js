@@ -2907,7 +2907,9 @@ const Users = {
       actions.appendChild(dismissBtn);
     }
 
-    wrapper.appendChild(actions);
+    if (!hideHeader) {
+      wrapper.appendChild(actions);
+    }
     return wrapper;
   },
 
