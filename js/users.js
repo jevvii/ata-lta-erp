@@ -18,13 +18,7 @@ const Users = {
   render() {
     const container = el('div', { class: 'page admin-tab-page' });
 
-    // Keep the main page header — use role-appropriate title
     const isAdmin = Auth.user.role === 'Admin';
-    const titleBar = el('div', { class: 'page-title-bar-v2' });
-    const h1 = el('h1', { class: 'page-title-h1', text: isAdmin ? 'Admin' : 'My Submissions' });
-    titleBar.appendChild(h1);
-    container.appendChild(titleBar);
-
     const canManageUsers = Auth.can('users:view');
     const departments = Auth.user?.departments || [];
     const hasOperations = departments.includes('Operations');
@@ -57,24 +51,64 @@ const Users = {
       }
     }
 
-    const isEditingUser = this.editingId;
-    const userViewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({ viewContext: 'user-form' }) : 'side-peek';
-    const isUserFullPage = (userViewMode === 'full-page' || userViewMode === 'new-tab') && isEditingUser;
+    // Full-page user form is triggered by the URL itself (#admin/users/form/new or .../:id).
+    // Side-peek/center-peek launch from the list view without touching the hash, so this
+    // branch only runs for full-page/new-tab navigation.
+    const isUserFullPage = this.view === 'users' && this.editingId &&
+      (location.hash || '').includes('/users/form/');
+
+    // Direct URL / new-tab visits have the side pane closed, so render full-page inline.
+    // When the pane is open (side-peek/center-peek), let it handle the display and keep
+    // the list visible underneath.
+    const sidePaneOpen = window.SidePaneInstance && window.SidePaneInstance.isOpen();
+    const viewMode = sidePaneOpen
+      ? window.SidePaneInstance.resolveMode({
+          viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
+        })
+      : 'full-page';
+    const isFullPage = (viewMode === 'full-page' || viewMode === 'new-tab') && this.sidePeekId;
+
+    // Full-page forms render their own breadcrumb header; list/tab views keep the main title.
+    if (!isUserFullPage && !isFullPage) {
+      const titleBar = el('div', { class: 'page-title-bar-v2' });
+      const h1 = el('h1', { class: 'page-title-h1', text: isAdmin ? 'Admin' : 'My Submissions' });
+      titleBar.appendChild(h1);
+      container.appendChild(titleBar);
+    }
 
     if (isUserFullPage) {
-      const container = el('div', { class: 'page admin-tab-page' });
       const isNew = this.editingId === 'new';
       const user = isNew ? null : DB.getById('users', this.editingId);
-      
+      const fullPageRoute = isNew ? '#admin/users/form/new' : `#admin/users/form/${this.editingId}`;
+
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'user-form',
+        onSidePeek: () => {
+          this.showUserForm(this.editingId === 'new' ? null : this.editingId, PaneMode.SIDE_PEEK);
+          location.hash = '#admin/users';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
+
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Users',
         baseHash: '#admin/users',
         currentText: isNew ? 'Add User' : 'Edit User',
+        viewSwitcher,
         actions: [
           {
-            text: '← Back to Users',
+            text: isNew ? 'Save User' : 'Save Changes',
+            class: 'btn btn-primary btn-sm',
+            type: 'submit',
+            form: 'user-form'
+          },
+          {
+            text: 'Cancel',
             class: 'btn btn-secondary btn-sm',
-            onClick: () => { this.editingId = null; location.hash = '#admin/users'; }
+            onClick: () => { this.showUserList(); }
           }
         ]
       }));
@@ -84,15 +118,11 @@ const Users = {
       return container;
     }
 
-    const viewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({
-      viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
-    }) : 'side-peek';
-    const isFullPage = (viewMode === 'full-page' || viewMode === 'new-tab') && this.sidePeekId;
-
     if (isFullPage) {
       if (this.view === 'myRequests') {
         const r = DB.getById('operationsRequests', this.sidePeekId);
         if (r) {
+          const fullPageRoute = `#admin/myRequests/${r.id}`;
           const actions = [];
           if (r.status === 'pending') {
             actions.push({
@@ -106,16 +136,24 @@ const Users = {
               }
             });
           }
-          actions.push({
-            text: '← Back to List',
-            class: 'btn btn-secondary btn-sm',
-            onClick: () => { location.hash = '#admin'; }
+
+          const viewSwitcher = buildFormViewSwitcher({
+            currentMode: PaneMode.FULL_PAGE,
+            viewContext: 'request-detail',
+            onSidePeek: () => {
+              this.openRequestDetailSidePeek(r, PaneMode.SIDE_PEEK);
+              location.hash = '#admin';
+            },
+            onNewTab: () => {
+              window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+            }
           });
 
           container.appendChild(buildFormBreadcrumb({
             baseLabel: 'My Submissions',
             baseHash: '#admin',
             currentText: `Request Details: ${this._requestTypeLabel(r.type)}`,
+            viewSwitcher,
             actions
           }));
 
@@ -133,7 +171,7 @@ const Users = {
           
           const canApprove = PendingChanges.canApproveChange(pc);
           const isSubmitter = pc.submittedBy === Auth.user.id;
-          
+
           const actions = [];
           if (canApprove) {
             actions.push({
@@ -169,20 +207,29 @@ const Users = {
               }
             });
           }
-          actions.push({
-            text: '← Back to List',
-            class: 'btn btn-secondary btn-sm',
-            onClick: () => { location.hash = '#admin'; }
+
+          const fullPageRoute = isMyPending ? `#admin/myPending/${pc.id}` : `#admin/pending/${pc.id}`;
+          const viewSwitcher = buildFormViewSwitcher({
+            currentMode: PaneMode.FULL_PAGE,
+            viewContext: 'pending-detail',
+            onSidePeek: () => {
+              this.openPendingDetailSidePeek(pc, PaneMode.SIDE_PEEK);
+              location.hash = '#admin';
+            },
+            onNewTab: () => {
+              window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+            }
           });
 
           container.appendChild(buildFormBreadcrumb({
             baseLabel,
             baseHash: '#admin',
             currentText,
+            viewSwitcher,
             actions
           }));
 
-          const detailContent = this.renderPendingDetail(pc.id, false);
+          const detailContent = this.renderPendingDetail(pc.id, false, true);
           container.appendChild(detailContent);
           return container;
         }
@@ -305,14 +352,19 @@ const Users = {
   init() {
     if (this.editingId) {
       const userViewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({ viewContext: 'user-form' }) : 'side-peek';
-      const isUserFullPage = (userViewMode === 'full-page' || userViewMode === 'new-tab');
+      // Direct URL / new-tab full-page routes carry the form path in the hash.
+      const isUserFullPage = (userViewMode === 'full-page' || userViewMode === 'new-tab') ||
+        (location.hash || '').includes('/users/form/');
       if (!isUserFullPage) {
         this.showUserForm(this.editingId === 'new' ? null : this.editingId);
       }
     } else if (this.sidePeekId) {
-      const viewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({
-        viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
-      }) : 'side-peek';
+      const sidePaneOpen = window.SidePaneInstance && window.SidePaneInstance.isOpen();
+      const viewMode = sidePaneOpen
+        ? window.SidePaneInstance.resolveMode({
+            viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
+          })
+        : 'full-page';
       const isFullPage = (viewMode === 'full-page' || viewMode === 'new-tab');
 
       if (!isFullPage) {
@@ -338,7 +390,7 @@ const Users = {
     }
   },
 
-  openPendingDetailSidePeek(pc) {
+  openPendingDetailSidePeek(pc, mode = null) {
     const isMyPending = this.view === 'myPending';
     const fullPageRoute = isMyPending ? `#admin/myPending/${pc.id}` : `#admin/pending/${pc.id}`;
     const title = `Pending Change: ${pc.title || 'Review'}`;
@@ -346,6 +398,7 @@ const Users = {
     window.SidePaneInstance.open({
       title,
       content,
+      mode,
       viewContext: 'pending-detail',
       recordId: pc.id,
       fullPageRoute,
@@ -483,7 +536,7 @@ const Users = {
     return wrapper;
   },
 
-  openRequestDetailSidePeek(r) {
+  openRequestDetailSidePeek(r, mode = null) {
     const wrapper = this.renderRequestDetailContent(r);
 
     if (r.status === 'pending') {
@@ -508,6 +561,7 @@ const Users = {
     window.SidePaneInstance.open({
       title,
       content: wrapper,
+      mode,
       viewContext: 'request-detail',
       recordId: r.id,
       fullPageRoute,
@@ -685,17 +739,6 @@ const Users = {
   renderUserFormContent(user) {
     const form = el('form', { id: 'user-form', class: 'form-stacked notion-form' });
 
-    // Top action bar for full-page / new-tab views (hidden inside side-peek panels)
-    const headerBar = el('div', { class: 'form-header-bar' });
-    const headerActions = el('div', { class: 'form-actions-top' });
-    const saveBtn = el('button', { type: 'submit', form: 'user-form', class: 'btn btn-primary', text: user ? 'Save Changes' : 'Save User' });
-    headerActions.appendChild(saveBtn);
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => this.showUserList());
-    headerActions.appendChild(cancelBtn);
-    headerBar.appendChild(headerActions);
-    form.appendChild(headerBar);
-
     // Title-style primary field: name
     const nameSection = el('div', { class: 'notion-freeform notion-freeform--title' });
     nameSection.appendChild(el('label', { class: 'notion-section-label', text: 'Full Name' }));
@@ -785,7 +828,7 @@ const Users = {
     return form;
   },
 
-  showUserForm(userId) {
+  showUserForm(userId, mode = null) {
     this.editingId = userId || 'new';
     const user = userId ? DB.getById('users', userId) : null;
     const form = this.renderUserFormContent(user);
@@ -797,11 +840,12 @@ const Users = {
       title: userId ? 'Edit User' : 'Add User',
       formContent: form,
       formId: 'user-form',
+      mode,
       viewContext: 'user-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,
       actions: [
-        { text: 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' },
+        { text: userId ? 'Save Changes' : 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showUserList() }
       ]
     });
@@ -2402,7 +2446,7 @@ const Users = {
   },
 
 
-  renderPendingDetail(pendingId, isSidePeek = false) {
+  renderPendingDetail(pendingId, isSidePeek = false, hideHeader = false) {
     const pc = PendingChanges.getById(pendingId);
     if (!pc) {
       if (!isSidePeek) this.pendingDetailId = null;
@@ -2418,12 +2462,12 @@ const Users = {
     const isSubmitter = pc.submittedBy === Auth.user.id;
 
     const wrapper = el('div', { style: isSidePeek ? 'padding: var(--spacing-xs);' : 'max-width: 800px; margin: 0 auto;' });
-    
-    if (!isSidePeek) {
-      // Header
+
+    if (!isSidePeek && !hideHeader) {
+      // Inline header for tab/embedded views; full-page views use buildFormBreadcrumb.
       const header = el('div', { class: 'form-header-bar', style: 'border-bottom: 1px solid var(--color-border); padding-bottom: 16px; margin-bottom: 24px;' });
       header.appendChild(el('h2', { text: 'Review Pending Change Request', style: 'margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--color-primary);' }));
-      
+
       const backBtn = el('button', { class: 'btn btn-secondary btn-sm', text: '← Back to List' });
       backBtn.addEventListener('click', () => {
         this.pendingDetailId = null;

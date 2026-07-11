@@ -65,10 +65,23 @@ const Billing = {
       container.classList.add('billing-tab-page');
       const isNew = !this.detailId;
       const inv = isNew ? null : this.getInvoiceById(this.detailId);
+      const fullPageRoute = isNew ? '#billing/form/new' : `#billing/form/${this.detailId}`;
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'invoice-form',
+        onSidePeek: () => {
+          this.showForm(this.detailId, PaneMode.SIDE_PEEK);
+          location.hash = '#billing';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Billing',
         baseHash: '#billing',
         currentText: isNew ? 'New Invoice' : (inv?.invoiceNumber || 'Edit Invoice'),
+        viewSwitcher,
         actions: [
           { text: isNew ? 'Save Invoice' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'invoice-form' },
           { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
@@ -78,12 +91,26 @@ const Billing = {
       container.classList.add('billing-tab-page');
       const isNew = !this.templateEditingId;
       const template = isNew ? null : DB.getById('billingTemplates', this.templateEditingId);
+      const fullPageRoute = isNew ? '#billing/templateForm/new' : `#billing/templateForm/${this.templateEditingId}`;
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'billing-template-form',
+        onSidePeek: () => {
+          this.showTemplateForm(template, PaneMode.SIDE_PEEK);
+          location.hash = '#billing';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Billing',
         baseHash: '#billing',
         currentText: isNew ? 'New Billing Template' : (template?.name || 'Edit Template'),
+        viewSwitcher,
         actions: [
-          { text: '← Back to Billing', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
+          { text: 'Save Template', class: 'btn btn-primary btn-sm', type: 'submit', form: 'billing-tpl-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#billing'; } }
         ]
       }));
     } else {
@@ -103,7 +130,7 @@ const Billing = {
     else if (this.view === 'aging') container.appendChild(this.renderAging());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
     else if (this.view === 'archive') container.appendChild(this.renderArchive());
-    else if (this.view === 'templateForm') container.appendChild(this.renderTemplateForm());
+    else if (this.view === 'templateForm') container.appendChild(this.renderTemplateForm({ hideHeader: true }));
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -1339,7 +1366,7 @@ const Billing = {
     closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
-  showForm(invoiceId = null) {
+  showForm(invoiceId = null, mode = null) {
     this.detailId = invoiceId;
     const isNew = !invoiceId;
     const inv = isNew ? null : this.getInvoiceById(invoiceId);
@@ -1352,6 +1379,7 @@ const Billing = {
       title: isNew ? 'Create Sales Invoice' : `Edit Invoice ${inv?.invoiceNumber || ''}`.trim(),
       formContent: this.renderForm(invoiceId),
       formId: 'invoice-form',
+      mode,
       viewContext: 'invoice-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,
@@ -2894,30 +2922,33 @@ const Billing = {
     while (container.firstChild) container.removeChild(container.firstChild);
   },
 
-  renderTemplateForm() {
+  renderTemplateForm(opts = {}) {
+    const { hideHeader = false } = opts;
     const entity = Auth.activeEntity;
     const template = this.templateEditingId ? DB.getById('billingTemplates', this.templateEditingId) : null;
     const container = el('div', { class: 'page' });
 
     const form = el('form', { id: 'billing-tpl-form', class: 'form-stacked notion-form' });
 
-    const headerBar = el('div', { class: 'form-header-bar' });
-    const topActions = el('div', { class: 'form-actions-top' });
-    topActions.appendChild(el('button', { type: 'submit', form: 'billing-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
-    if (template) {
-      const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
-      delBtn.addEventListener('click', () => {
-        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${template.name}"?`, () => {
-          DB.delete('billingTemplates', template.id);
-          this.view = 'templates';
-          this.templateEditingId = null;
-          closeFormPanelAndRoute('#billing');
-        }, 'danger');
-      });
-      topActions.appendChild(delBtn);
+    if (!hideHeader) {
+      const headerBar = el('div', { class: 'form-header-bar' });
+      const topActions = el('div', { class: 'form-actions-top' });
+      topActions.appendChild(el('button', { type: 'submit', form: 'billing-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
+      if (template) {
+        const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
+        delBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${template.name}"?`, () => {
+            DB.delete('billingTemplates', template.id);
+            this.view = 'templates';
+            this.templateEditingId = null;
+            closeFormPanelAndRoute('#billing');
+          }, 'danger');
+        });
+        topActions.appendChild(delBtn);
+      }
+      headerBar.appendChild(topActions);
+      form.appendChild(headerBar);
     }
-    headerBar.appendChild(topActions);
-    form.appendChild(headerBar);
 
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
@@ -2988,7 +3019,7 @@ const Billing = {
     return container;
   },
 
-  showTemplateForm(existing = null) {
+  showTemplateForm(existing = null, mode = null) {
     this.templateEditingId = existing ? existing.id : null;
     const fullPageRoute = this.templateEditingId ? `#billing/templateForm/${this.templateEditingId}` : '#billing/templateForm/new';
     openFormPanel({
@@ -2996,6 +3027,7 @@ const Billing = {
       title: ' ',
       formContent: this.renderTemplateForm(),
       formId: 'billing-tpl-form',
+      mode,
       viewContext: 'billing-template-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,

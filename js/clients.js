@@ -45,9 +45,61 @@ const Clients = {
 
   render() {
     if (!this.activeTab) this.activeTab = 'active';
-    const container = el('div', { class: 'page' });
-    
-    container.classList.add('clients-tab-page');
+    const container = el('div', { class: 'page clients-tab-page' });
+
+    // Full-page form route (#clients/form/new or #clients/form/:id) renders inline
+    // with its own breadcrumb header and right-aligned Save/Cancel actions.
+    if (this.editingId) {
+      const isNew = this.editingId === 'new';
+      const client = isNew ? null : DB.getById('clients', this.editingId);
+      const fullPageRoute = isNew ? '#clients/form/new' : `#clients/form/${this.editingId}`;
+
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'client-form',
+        onSidePeek: () => {
+          const formContainer = el('div', { class: 'form-container' });
+          this.renderForm(formContainer, this.editingId);
+          window.SidePaneInstance.open({
+            title: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
+            content: formContainer,
+            viewContext: 'client-form',
+            fullPageRoute,
+            newTabRoute: fullPageRoute,
+            recordId: isNew ? null : this.editingId,
+            mode: PaneMode.SIDE_PEEK
+          });
+          location.hash = '#clients';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
+
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Clients',
+        baseHash: '#clients',
+        currentText: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
+        viewSwitcher,
+        actions: [
+          {
+            text: isNew ? 'Save Client' : 'Save Changes',
+            class: 'btn btn-primary btn-sm',
+            type: 'submit',
+            form: 'client-form'
+          },
+          {
+            text: 'Cancel',
+            class: 'btn btn-secondary btn-sm',
+            onClick: () => { this.showList(); }
+          }
+        ]
+      }));
+      container.appendChild(this.renderForm(el('div'), this.editingId, true));
+      setTimeout(() => this.updateStickyOffsets(), 0);
+      return container;
+    }
+
     const titleBar = el('div', { class: 'page-title-bar-v2' });
     titleBar.appendChild(el('h1', { text: 'Clients' }));
     container.appendChild(titleBar);
@@ -57,7 +109,7 @@ const Clients = {
     const stickyContainer = el('div', { class: 'toolbar-sticky-container' });
     const filters = el('div', { class: 'filters-bar' });
     const searchWrapper = el('div', { style: 'position: relative; display: flex; align-items: center; width: 100%; max-width: 320px;' });
-    
+
     const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     searchIcon.setAttribute('width', '14');
     searchIcon.setAttribute('height', '14');
@@ -69,14 +121,14 @@ const Clients = {
     searchIcon.setAttribute('stroke-linejoin', 'round');
     searchIcon.setAttribute('style', 'position: absolute; left: 12px; color: var(--color-text-muted); pointer-events: none;');
     searchIcon.innerHTML = '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>';
-    
+
     const search = el('input', {
       type: 'text',
       placeholder: 'Search client...',
       class: 'form-control search-input',
       style: 'width: 100%; padding-left: 36px; max-width: 320px;'
     });
-    
+
     searchWrapper.appendChild(searchIcon);
     searchWrapper.appendChild(search);
     filters.appendChild(searchWrapper);
@@ -108,27 +160,6 @@ const Clients = {
         archiveContainer.appendChild(this.renderArchive(q));
       }
     }, 200));
-
-    const formContainer = el('div', { class: 'form-container hidden' });
-    container.appendChild(formContainer);
-
-    // Full-page form route: when editingId is set (e.g. from #clients/form/:id),
-    // render the form inline instead of the list/archive tab content.
-    if (this.editingId) {
-      while (container.firstChild) container.removeChild(container.firstChild);
-      container.classList.add('clients-tab-page');
-      const isNew = this.editingId === 'new';
-      const client = isNew ? null : DB.getById('clients', this.editingId);
-      container.appendChild(buildFormBreadcrumb({
-        baseLabel: 'Clients',
-        baseHash: '#clients',
-        currentText: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
-        actions: [
-          { text: '← Back to Clients', class: 'btn btn-secondary btn-sm', onClick: () => { this.editingId = null; location.hash = '#clients'; } }
-        ]
-      }));
-      container.appendChild(this.renderForm(el('div'), this.editingId));
-    }
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -680,21 +711,23 @@ const Clients = {
     });
   },
 
-  renderForm(container, clientId) {
+  renderForm(container, clientId, hideHeader = false) {
     const client = clientId && clientId !== 'new' ? DB.getById('clients', clientId) : null;
     this.clearNode(container);
 
-    // Form header bar (actions only; title is handled by the inline title input
-    // and by the full-page breadcrumb header)
-    const headerBar = el('div', { class: 'form-header-bar' });
-    const headerActions = el('div', { class: 'form-actions-top' });
-    const saveBtnTop = el('button', { type: 'submit', form: 'client-form', class: 'btn btn-primary', text: client ? 'Save Changes' : 'Save Client' });
-    headerActions.appendChild(saveBtnTop);
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => this.showList());
-    headerActions.appendChild(cancelBtn);
-    headerBar.appendChild(headerActions);
-    container.appendChild(headerBar);
+    // Inline action bar for embedded/list views. Full-page forms render their own
+    // Save/Cancel actions in the breadcrumb, so suppress this internal header.
+    if (!hideHeader) {
+      const headerBar = el('div', { class: 'form-header-bar' });
+      const headerActions = el('div', { class: 'form-actions-top' });
+      const saveBtnTop = el('button', { type: 'submit', form: 'client-form', class: 'btn btn-primary', text: client ? 'Save Changes' : 'Save Client' });
+      headerActions.appendChild(saveBtnTop);
+      const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+      cancelBtn.addEventListener('click', () => this.showList());
+      headerActions.appendChild(cancelBtn);
+      headerBar.appendChild(headerActions);
+      container.appendChild(headerBar);
+    }
 
     const form = el('form', { id: 'client-form', class: 'form-stacked notion-form' });
 

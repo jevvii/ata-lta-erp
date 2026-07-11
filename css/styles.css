@@ -1225,6 +1225,53 @@ tbody tr:hover {
 .form-header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-lg); }
 .form-actions-top { display: flex; gap: var(--spacing-sm); align-items: center; }
 
+/* Shared form view-mode switcher for full-page breadcrumbs */
+.form-view-switcher {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.form-view-switcher-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.form-view-switcher-btn:last-child { border-right: none; }
+
+.form-view-switcher-btn:hover:not(:disabled) {
+  background: var(--color-bg-light);
+  color: var(--color-text);
+}
+
+.form-view-switcher-btn.active,
+.form-view-switcher-btn.active:disabled {
+  background: var(--color-primary);
+  color: #fff;
+  cursor: default;
+}
+
+.form-view-switcher-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actions-bar .breadcrumb-view-switcher {
+  margin-right: var(--spacing-sm);
+}
+
 /* Template button with dropdown */
 .btn-outline {
   background: transparent;

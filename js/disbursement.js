@@ -105,24 +105,52 @@ const Disbursement = {
       container.classList.add('disbursement-tab-page');
       const isNew = !this.detailId;
       const existing = isNew ? null : DB.getById('disbursements', this.detailId);
+      const fullPageRoute = isNew ? '#disbursement/form/new' : `#disbursement/form/${this.detailId}`;
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'expense-form',
+        onSidePeek: () => {
+          this.showForm(this.detailId, PaneMode.SIDE_PEEK);
+          location.hash = '#disbursement';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Disbursement',
         baseHash: '#disbursement',
         currentText: isNew ? 'New Expense' : (existing?.description || 'Edit Expense'),
+        viewSwitcher,
         actions: [
-          { text: '← Back to List', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#disbursement'; } }
+          { text: isNew ? 'Submit Expense' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'disbursement-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#disbursement'; } }
         ]
       }));
     } else if (this.view === 'templateForm') {
       container.classList.add('disbursement-tab-page');
       const isNew = !this.templateEditingId;
       const template = isNew ? null : DB.getById('disbursementTemplates', this.templateEditingId);
+      const fullPageRoute = isNew ? '#disbursement/templateForm/new' : `#disbursement/templateForm/${this.templateEditingId}`;
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'disbursement-template-form',
+        onSidePeek: () => {
+          this.showTemplateForm(template, PaneMode.SIDE_PEEK);
+          location.hash = '#disbursement';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Disbursement',
         baseHash: '#disbursement',
         currentText: isNew ? 'New Disbursement Template' : (template?.name || 'Edit Template'),
+        viewSwitcher,
         actions: [
-          { text: '← Back to Disbursement', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#disbursement'; } }
+          { text: 'Save Template', class: 'btn btn-primary btn-sm', type: 'submit', form: 'disb-tpl-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#disbursement'; } }
         ]
       }));
     } else if (['list', 'templates', 'report', 'archive'].includes(this.view)) {
@@ -134,12 +162,12 @@ const Disbursement = {
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
-    else if (this.view === 'form') container.appendChild(this.renderForm());
+    else if (this.view === 'form') container.appendChild(this.renderForm({ hideHeader: true }));
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'report') container.appendChild(this.renderReport());
     else if (this.view === 'templates') container.appendChild(this.renderTemplates());
     else if (this.view === 'archive') container.appendChild(this.renderArchive());
-    else if (this.view === 'templateForm') container.appendChild(this.renderTemplateForm());
+    else if (this.view === 'templateForm') container.appendChild(this.renderTemplateForm({ hideHeader: true }));
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -291,7 +319,7 @@ const Disbursement = {
            this.EDITABLE_STATUSES.includes(d.status);
   },
 
-  showForm(disbId = null) {
+  showForm(disbId = null, mode = null) {
     this.detailId = disbId;
     const isNew = !disbId;
     const existing = isNew ? null : DB.getById('disbursements', disbId);
@@ -302,6 +330,7 @@ const Disbursement = {
       title: isNew ? 'File Expense' : `Edit Expense — ${existing?.description || ''}`.trim(),
       formContent: this.renderForm(),
       formId: 'disbursement-form',
+      mode,
       viewContext: 'expense-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,
@@ -1078,7 +1107,8 @@ const Disbursement = {
   // ============================================================
   // Expense Filing Form
   // ============================================================
-  renderForm() {
+  renderForm(opts = {}) {
+    const { hideHeader = false } = opts;
     // Allow access if user can create new disbursements OR can edit existing ones
     const isNew = !this.detailId;
     if (isNew && !Auth.can('disbursement:create')) {
@@ -1099,15 +1129,17 @@ const Disbursement = {
 
     const container = el('div');
 
-    const headerBar = el('div', { class: 'form-header-bar' });
-    const headerActions = el('div', { class: 'form-actions-top' });
-    const saveBtnTop = el('button', { type: 'submit', form: 'disbursement-form', class: 'btn btn-primary', text: isNew ? 'Submit Expense' : 'Save Changes' });
-    headerActions.appendChild(saveBtnTop);
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#disbursement'));
-    headerActions.appendChild(cancelBtn);
-    headerBar.appendChild(headerActions);
-    container.appendChild(headerBar);
+    if (!hideHeader) {
+      const headerBar = el('div', { class: 'form-header-bar' });
+      const headerActions = el('div', { class: 'form-actions-top' });
+      const saveBtnTop = el('button', { type: 'submit', form: 'disbursement-form', class: 'btn btn-primary', text: isNew ? 'Submit Expense' : 'Save Changes' });
+      headerActions.appendChild(saveBtnTop);
+      const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+      cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#disbursement'));
+      headerActions.appendChild(cancelBtn);
+      headerBar.appendChild(headerActions);
+      container.appendChild(headerBar);
+    }
 
     const form = el('form', { class: 'form-stacked notion-form', id: 'disbursement-form' });
 
@@ -2525,30 +2557,33 @@ const Disbursement = {
     return wrapper;
   },
 
-  renderTemplateForm() {
+  renderTemplateForm(opts = {}) {
+    const { hideHeader = false } = opts;
     const entity = Auth.activeEntity;
     const template = this.templateEditingId ? DB.getById('disbursementTemplates', this.templateEditingId) : null;
     const container = el('div', { class: 'page' });
 
     const form = el('form', { id: 'disb-tpl-form', class: 'form-stacked notion-form' });
 
-    const headerBar = el('div', { class: 'form-header-bar' });
-    const topActions = el('div', { class: 'form-actions-top' });
-    topActions.appendChild(el('button', { type: 'submit', form: 'disb-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
-    if (template) {
-      const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
-      delBtn.addEventListener('click', () => {
-        Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${template.name}"?`, () => {
-          DB.delete('disbursementTemplates', template.id);
-          this.view = 'templates';
-          this.templateEditingId = null;
-          closeFormPanelAndRoute('#disbursement');
-        }, 'danger');
-      });
-      topActions.appendChild(delBtn);
+    if (!hideHeader) {
+      const headerBar = el('div', { class: 'form-header-bar' });
+      const topActions = el('div', { class: 'form-actions-top' });
+      topActions.appendChild(el('button', { type: 'submit', form: 'disb-tpl-form', class: 'btn btn-primary', text: 'Save Template' }));
+      if (template) {
+        const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
+        delBtn.addEventListener('click', () => {
+          Workflow.showConfirm('Delete Template', `Are you sure you want to delete "${template.name}"?`, () => {
+            DB.delete('disbursementTemplates', template.id);
+            this.view = 'templates';
+            this.templateEditingId = null;
+            closeFormPanelAndRoute('#disbursement');
+          }, 'danger');
+        });
+        topActions.appendChild(delBtn);
+      }
+      headerBar.appendChild(topActions);
+      form.appendChild(headerBar);
     }
-    headerBar.appendChild(topActions);
-    form.appendChild(headerBar);
 
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });
@@ -2659,7 +2694,7 @@ const Disbursement = {
     return container;
   },
 
-  showTemplateForm(existing = null) {
+  showTemplateForm(existing = null, mode = null) {
     this.templateEditingId = existing ? existing.id : null;
     const fullPageRoute = this.templateEditingId ? `#disbursement/templateForm/${this.templateEditingId}` : '#disbursement/templateForm/new';
     openFormPanel({
@@ -2667,6 +2702,7 @@ const Disbursement = {
       title: ' ',
       formContent: this.renderTemplateForm(),
       formId: 'disb-tpl-form',
+      mode,
       viewContext: 'disbursement-template-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,

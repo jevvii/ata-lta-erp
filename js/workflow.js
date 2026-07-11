@@ -2050,41 +2050,83 @@ const Workflow = {
       titleBar.appendChild(el('h1', { text: 'Operations' }));
       container.appendChild(titleBar);
       container.appendChild(this.renderTabNav());
-    } else if (this.view === 'form' || this.view === 'templateForm') {
-      // Full-page form routes: render a breadcrumb header with a back link and
-      // leave the rest of the container for the form content below.
+    } else if (this.view === 'form') {
+      // Full-page work-request form: breadcrumb with view switcher + save/cancel
       container.classList.add('operations-tab-page');
-      const isTemplate = this.view === 'templateForm';
-      const isNew = isTemplate
-        ? !this.templateEditingId
-        : !this.editingId;
-      const record = isTemplate
-        ? (this.templateEditingId ? DB.getById('retainerTemplates', this.templateEditingId) : null)
-        : (this.editingId ? DB.getById('workRequests', this.editingId) : null);
-
-      const actions = [];
-      if (!isTemplate) {
-        actions.push({ text: isNew ? 'Submit Request' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'wr-form' });
-      }
-      actions.push({ text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } });
-
+      const isNew = !this.editingId;
+      const wr = isNew ? null : DB.getById('workRequests', this.editingId);
+      const fullPageRoute = isNew ? '#operations/form/new' : `#operations/form/${this.editingId}`;
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'work-request-form',
+        onSidePeek: () => {
+          this.openWorkRequestForm(PaneMode.SIDE_PEEK);
+          location.hash = '#operations';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Operations',
         baseHash: '#operations',
-        currentText: isTemplate
-          ? (isNew ? 'New Retainer Template' : (record?.name || 'Edit Template'))
-          : (isNew ? 'New Work Request' : (record?.title || 'Edit Work Request')),
-        actions: actions
+        currentText: isNew ? 'New Work Request' : (wr?.title || 'Edit Work Request'),
+        viewSwitcher,
+        actions: [
+          { text: isNew ? 'Submit Request' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'wr-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } }
+        ]
+      }));
+    } else if (this.view === 'templateForm') {
+      // Full-page retainer template form: breadcrumb with view switcher + save/cancel
+      container.classList.add('operations-tab-page');
+      const isNew = !this.templateEditingId;
+      const template = isNew ? null : DB.getById('retainerTemplates', this.templateEditingId);
+      const fullPageRoute = isNew ? '#operations/templateForm/new' : `#operations/templateForm/${this.templateEditingId}`;
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'retainer-template-form',
+        onSidePeek: () => {
+          this.openRetainerTemplateForm(PaneMode.SIDE_PEEK);
+          location.hash = '#operations';
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Operations',
+        baseHash: '#operations',
+        currentText: isNew ? 'New Retainer Template' : (template?.name || 'Edit Template'),
+        viewSwitcher,
+        actions: [
+          { text: 'Save Template', class: 'btn btn-primary btn-sm', type: 'submit', form: 'template-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations'; } }
+        ]
       }));
     } else if (this.view === 'addTask' && this.addTaskWrId) {
       container.classList.add('operations-tab-page');
       const wr = DB.getById('workRequests', this.addTaskWrId);
+      const fullPageRoute = '#operations/addTask/' + this.addTaskWrId;
+      const viewSwitcher = buildFormViewSwitcher({
+        currentMode: PaneMode.FULL_PAGE,
+        viewContext: 'add-task-form',
+        onSidePeek: () => {
+          this.showAddTaskPanel(this.addTaskWrId, PaneMode.SIDE_PEEK);
+          location.hash = '#operations/detail/' + this.addTaskWrId;
+        },
+        onNewTab: () => {
+          window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+        }
+      });
       container.appendChild(buildFormBreadcrumb({
         baseLabel: 'Operations',
         baseHash: '#operations',
         currentText: 'Add Task',
+        viewSwitcher,
         actions: [
-          { text: '← Back to Work Request', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations/detail/' + this.addTaskWrId; } }
+          { text: 'Add Task', class: 'btn btn-primary btn-sm', type: 'submit', form: 'add-task-form' },
+          { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#operations/detail/' + this.addTaskWrId; } }
         ]
       }));
     }
@@ -2098,11 +2140,11 @@ const Workflow = {
     } else if (this.view === 'templates') {
       container.appendChild(this.renderTemplates());
     } else if (this.view === 'templateForm') {
-      container.appendChild(this.renderTemplateForm());
+      container.appendChild(this.renderTemplateForm({ hideHeader: true }));
     } else if (this.view === 'archive') {
       container.appendChild(this.renderArchive());
     } else if (this.view === 'addTask' && this.addTaskWrId) {
-      const form = this.renderAddTaskForm(this.addTaskWrId);
+      const form = this.renderAddTaskForm(this.addTaskWrId, { hideHeader: true });
       if (form) {
         container.appendChild(el('div', { class: 'page-content-section' }, [form]));
       } else {
@@ -2203,18 +2245,7 @@ const Workflow = {
       });
       addBtn.addEventListener('click', () => {
         this.editingId = null;
-        const fullPageRoute = '#operations/form/new';
-        openFormPanel({
-          icon: '📝', title: ' ',
-          formContent: this.renderForm(), formId: 'wr-form',
-          viewContext: 'work-request-form',
-          fullPageRoute,
-          newTabRoute: fullPageRoute,
-          actions: [
-            { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
-            { text: 'Cancel', class: 'btn btn-secondary', onClick: () => { closeFormPanelAndRoute('#operations'); } }
-          ]
-        });
+        this.openWorkRequestForm();
       });
       tabNav.appendChild(addBtn);
     }
@@ -2901,18 +2932,7 @@ const Workflow = {
             className: 'btn btn-primary btn-sm',
             onClick: () => {
               this.editingId = null;
-              const fullPageRoute = '#operations/form/new';
-              openFormPanel({
-                icon: '📝', title: ' ',
-                formContent: this.renderForm(), formId: 'wr-form',
-                viewContext: 'work-request-form',
-                fullPageRoute,
-                newTabRoute: fullPageRoute,
-                actions: [
-                  { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
-                  { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
-                ]
-              });
+        this.openWorkRequestForm();
             }
           });
         }
@@ -3103,18 +3123,7 @@ const Workflow = {
             className: 'btn btn-primary btn-sm',
             onClick: () => {
               this.editingId = null;
-              const fullPageRoute = '#operations/form/new';
-              openFormPanel({
-                icon: '📝', title: ' ',
-                formContent: this.renderForm(), formId: 'wr-form',
-                viewContext: 'work-request-form',
-                fullPageRoute,
-                newTabRoute: fullPageRoute,
-                actions: [
-                  { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
-                  { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
-                ]
-              });
+        this.openWorkRequestForm();
             }
           });
         }
@@ -3138,18 +3147,7 @@ const Workflow = {
 
     const openNewWrForm = () => {
       this.editingId = null;
-      const fullPageRoute = '#operations/form/new';
-      openFormPanel({
-        icon: '📝', title: ' ',
-        formContent: this.renderForm(), formId: 'wr-form',
-        viewContext: 'work-request-form',
-        fullPageRoute,
-        newTabRoute: fullPageRoute,
-        actions: [
-          { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
-          { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
-        ]
-      });
+        this.openWorkRequestForm();
     };
 
     const boardPhases = [
@@ -3647,18 +3645,7 @@ const Workflow = {
             className: 'btn btn-primary btn-sm',
             onClick: () => {
               this.editingId = null;
-              const fullPageRoute = '#operations/form/new';
-              openFormPanel({
-                icon: '📝', title: ' ',
-                formContent: this.renderForm(), formId: 'wr-form',
-                viewContext: 'work-request-form',
-                fullPageRoute,
-                newTabRoute: fullPageRoute,
-                actions: [
-                  { text: 'Save Work Request', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
-                  { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
-                ]
-              });
+        this.openWorkRequestForm();
             }
           });
         }
@@ -8728,7 +8715,8 @@ const Workflow = {
     });
   },
 
-  renderAddTaskForm(wrId) {
+  renderAddTaskForm(wrId, opts = {}) {
+    const { hideHeader = false } = opts;
     let wr = DB.getById('workRequests', wrId);
     if (!wr) {
       const pc = DB.getById('pendingChanges', wrId) || 
@@ -8746,15 +8734,17 @@ const Workflow = {
 
     const form = el('form', { id: 'add-task-form', class: 'form-stacked notion-form' });
 
-    const headerBar = el('div', { class: 'form-header-bar' });
-    const topActions = el('div', { class: 'form-actions-top' });
-    const saveBtn = el('button', { type: 'submit', form: 'add-task-form', class: 'btn btn-primary', text: 'Add Task' });
-    topActions.appendChild(saveBtn);
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#operations/detail/' + wrId));
-    topActions.appendChild(cancelBtn);
-    headerBar.appendChild(topActions);
-    form.appendChild(headerBar);
+    if (!hideHeader) {
+      const headerBar = el('div', { class: 'form-header-bar' });
+      const topActions = el('div', { class: 'form-actions-top' });
+      const saveBtn = el('button', { type: 'submit', form: 'add-task-form', class: 'btn btn-primary', text: 'Add Task' });
+      topActions.appendChild(saveBtn);
+      const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+      cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#operations/detail/' + wrId));
+      topActions.appendChild(cancelBtn);
+      headerBar.appendChild(topActions);
+      form.appendChild(headerBar);
+    }
 
     // Standard Task Template state
     let checklistItems = [];
@@ -9127,8 +9117,8 @@ const Workflow = {
     return form;
   },
 
-  showAddTaskPanel(wrId) {
-    const form = this.renderAddTaskForm(wrId);
+  showAddTaskPanel(wrId, mode = null) {
+    const form = this.renderAddTaskForm(wrId, { hideHeader: mode !== PaneMode.SIDE_PEEK && mode !== null });
     if (!form) return;
     const fullPageRoute = '#operations/addTask/' + wrId;
     openFormPanel({
@@ -9136,12 +9126,61 @@ const Workflow = {
       title: null,
       formContent: form,
       formId: 'add-task-form',
+      mode,
       viewContext: 'add-task-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,
       actions: [
         { text: 'Add Task', class: 'btn btn-primary', type: 'submit', form: 'add-task-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations/detail/' + wrId) }
+      ]
+    });
+  },
+
+  /**
+   * Opens the Work Request form in a shared side-peek panel, optionally forcing a
+   * specific pane mode. Used by the full-page view switcher.
+   */
+  openWorkRequestForm(mode = null) {
+    const isNew = !this.editingId;
+    const wr = isNew ? null : DB.getById('workRequests', this.editingId);
+    const fullPageRoute = isNew ? '#operations/form/new' : `#operations/form/${this.editingId}`;
+    openFormPanel({
+      icon: '📝',
+      title: ' ',
+      formContent: this.renderForm(),
+      formId: 'wr-form',
+      mode,
+      viewContext: 'work-request-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      actions: [
+        { text: isNew ? 'Submit Request' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'wr-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
+      ]
+    });
+  },
+
+  /**
+   * Opens the Retainer Template form in a shared side-peek panel, optionally forcing
+   * a specific pane mode. Used by the full-page view switcher.
+   */
+  openRetainerTemplateForm(mode = null) {
+    const isNew = !this.templateEditingId;
+    const template = isNew ? null : DB.getById('retainerTemplates', this.templateEditingId);
+    const fullPageRoute = isNew ? '#operations/templateForm/new' : `#operations/templateForm/${this.templateEditingId}`;
+    openFormPanel({
+      icon: '📋',
+      title: ' ',
+      formContent: this.renderTemplateForm({ hideHeader: mode !== PaneMode.SIDE_PEEK && mode !== null }),
+      formId: 'template-form',
+      mode,
+      viewContext: 'retainer-template-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
+      actions: [
+        { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
+        { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
       ]
     });
   },
@@ -9854,18 +9893,7 @@ const Workflow = {
           className: 'btn btn-primary btn-sm',
           onClick: () => {
             this.templateEditingId = null;
-            const fullPageRoute = '#operations/templateForm/new';
-            openFormPanel({
-              icon: '📋', title: ' ',
-              formContent: this.renderTemplateForm(), formId: 'template-form',
-              viewContext: 'retainer-template-form',
-              fullPageRoute,
-              newTabRoute: fullPageRoute,
-              actions: [
-                { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
-              ]
-            });
+            this.openRetainerTemplateForm();
           }
         }
       ],
@@ -9875,18 +9903,7 @@ const Workflow = {
           className: 'btn btn-secondary btn-xs',
           onClick: () => {
             this.templateEditingId = item.id;
-            const fullPageRoute = `#operations/templateForm/${item.id}`;
-            openFormPanel({
-              icon: '📋', title: ' ',
-              formContent: this.renderTemplateForm(), formId: 'template-form',
-              viewContext: 'retainer-template-form',
-              fullPageRoute,
-              newTabRoute: fullPageRoute,
-              actions: [
-                { text: 'Save Template', class: 'btn btn-primary', type: 'submit', form: 'template-form' },
-                { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#operations') }
-              ]
-            });
+            this.openRetainerTemplateForm();
           }
         },
         {
@@ -9906,40 +9923,43 @@ const Workflow = {
     return wrapper;
   },
 
-  renderTemplateForm() {
+  renderTemplateForm(opts = {}) {
     if (!Auth.can('workflow:approve')) {
       this.view = 'list';
       App.handleRoute();
       return el('div');
     }
 
+    const { hideHeader = false } = opts || {};
     const entity = Auth.activeEntity;
     const template = this.templateEditingId ? DB.getById('retainerTemplates', this.templateEditingId) : null;
     const container = el('div', { class: 'page' });
 
     const form = el('form', { id: 'template-form', class: 'form-stacked notion-form' });
 
-    const headerBar = el('div', { class: 'form-header-bar' });
+    if (!hideHeader) {
+      const headerBar = el('div', { class: 'form-header-bar' });
 
-    const topActions = el('div', { class: 'form-actions-top' });
-    const saveBtn = el('button', { type: 'submit', form: 'template-form', class: 'btn btn-primary', text: 'Save Template' });
-    topActions.appendChild(saveBtn);
-    
-    if (template) {
-      const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
-      delBtn.addEventListener('click', () => {
-        this.showConfirm('Delete Template', 'Are you sure you want to delete this template?', () => {
-          DB.delete('retainerTemplates', template.id);
-          this.view = 'templates'; 
-          this.templateEditingId = null; 
-          closeFormPanelAndRoute('#operations');
-        }, 'danger');
-      });
-      topActions.appendChild(delBtn);
+      const topActions = el('div', { class: 'form-actions-top' });
+      const saveBtn = el('button', { type: 'submit', form: 'template-form', class: 'btn btn-primary', text: 'Save Template' });
+      topActions.appendChild(saveBtn);
+      
+      if (template) {
+        const delBtn = el('button', { type: 'button', class: 'btn btn-danger', text: 'Delete', style: 'margin-left: 8px;' });
+        delBtn.addEventListener('click', () => {
+          this.showConfirm('Delete Template', 'Are you sure you want to delete this template?', () => {
+            DB.delete('retainerTemplates', template.id);
+            this.view = 'templates'; 
+            this.templateEditingId = null; 
+            closeFormPanelAndRoute('#operations');
+          }, 'danger');
+        });
+        topActions.appendChild(delBtn);
+      }
+
+      headerBar.appendChild(topActions);
+      form.appendChild(headerBar);
     }
-
-    headerBar.appendChild(topActions);
-    form.appendChild(headerBar);
 
     // ── Title free-form ──
     const titleSection = el('div', { class: 'notion-freeform notion-freeform--title' });

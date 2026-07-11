@@ -483,7 +483,7 @@ const App = {
       }
     } else if (baseHash === '#clients') {
       if (pathParts[1] === 'form') {
-        Clients.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : null;
+        Clients.editingId = (pathParts[2] && pathParts[2] !== 'new') ? pathParts[2] : 'new';
       } else {
         Clients.editingId = null;
       }

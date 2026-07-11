@@ -1477,8 +1477,9 @@ function focusFormTitle(container) {
  * @param {string} opts.currentText - Non-clickable current page text (e.g. 'Add Client')
  * @param {Array<{text: string, class: string, type?: string, onClick?: Function, id?: string}>} [opts.actions] - Buttons on the right
  * @returns {HTMLElement}
+ * @param {HTMLElement} [opts.viewSwitcher] - Optional shared form view-mode switcher (e.g. from buildFormViewSwitcher).
  */
-function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [] }) {
+function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [], viewSwitcher = null }) {
   const titleBar = el('div', { class: 'page-title-bar-v2' });
   const h1 = el('h1', { class: 'breadcrumb-h1' });
   const baseLink = el('a', { href: 'javascript:void(0)', class: 'breadcrumb-base', text: baseLabel });
@@ -1488,8 +1489,12 @@ function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [] })
   h1.appendChild(document.createTextNode(currentText));
   titleBar.appendChild(h1);
 
-  if (actions.length > 0) {
+  if (actions.length > 0 || viewSwitcher) {
     const actionsBar = el('div', { class: 'actions-bar' });
+    if (viewSwitcher) {
+      viewSwitcher.classList.add('breadcrumb-view-switcher');
+      actionsBar.appendChild(viewSwitcher);
+    }
     actions.forEach(a => {
       const btn = el('button', {
         type: a.type || 'button',
@@ -1506,6 +1511,67 @@ function buildFormBreadcrumb({ baseLabel, baseHash, currentText, actions = [] })
   }
 
   return titleBar;
+}
+
+/**
+ * Builds a small segmented form view-mode switcher for full-page forms.
+ * Mirrors the options available in the shared side-peek panel view menu.
+ *
+ * @param {Object} opts
+ * @param {string} [opts.currentMode] - 'side-peek' | 'center-peek' | 'full-page' | 'new-tab'
+ * @param {Function} [opts.onSidePeek] - Callback when Side peek is selected
+ * @param {Function} [opts.onCenterPeek] - Callback when Center peek is selected
+ * @param {Function} [opts.onFullPage] - Callback when Full page is selected
+ * @param {Function} [opts.onNewTab] - Callback when New tab is selected
+ * @param {string} [opts.viewContext] - Optional context label for tooltips/title
+ * @returns {HTMLElement}
+ */
+function buildFormViewSwitcher({
+  currentMode = PaneMode.FULL_PAGE,
+  onSidePeek,
+  onCenterPeek,
+  onFullPage,
+  onNewTab,
+  viewContext = 'form'
+}) {
+  const wrapper = el('div', {
+    class: 'form-view-switcher',
+    title: `Form view: ${viewContext}`
+  });
+
+  const items = [
+    { key: PaneMode.SIDE_PEEK, label: 'Side peek', icon: PaneIcons.sidePeek, onClick: onSidePeek },
+    { key: PaneMode.CENTER_PEEK, label: 'Center peek', icon: PaneIcons.centerPeek, onClick: onCenterPeek },
+    { key: PaneMode.FULL_PAGE, label: 'Full page', icon: PaneIcons.fullPage, onClick: onFullPage },
+    { key: PaneMode.NEW_TAB, label: 'New tab', icon: PaneIcons.newTab, onClick: onNewTab }
+  ];
+
+  items.forEach(item => {
+    const active = item.key === currentMode;
+    const btn = el('button', {
+      type: 'button',
+      class: 'form-view-switcher-btn' + (active ? ' active' : ''),
+      'aria-label': item.label,
+      title: item.label,
+      html: item.icon
+    });
+    if (active) {
+      btn.setAttribute('aria-current', 'true');
+      btn.disabled = true;
+    }
+    if (item.onClick) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        item.onClick();
+      });
+    } else {
+      btn.disabled = true;
+      btn.classList.add('disabled');
+    }
+    wrapper.appendChild(btn);
+  });
+
+  return wrapper;
 }
 
 /**

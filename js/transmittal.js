@@ -84,12 +84,26 @@ const Transmittal = {
       } else {
         const isNew = !this.detailId;
         const existing = isNew ? null : DB.getById('transmittals', this.detailId);
+        const fullPageRoute = isNew ? '#transmittal/form/new' : `#transmittal/form/${this.detailId}`;
+        const viewSwitcher = buildFormViewSwitcher({
+          currentMode: PaneMode.FULL_PAGE,
+          viewContext: 'transmittal-form',
+          onSidePeek: () => {
+            this.showForm(this.detailId, PaneMode.SIDE_PEEK);
+            location.hash = '#transmittal';
+          },
+          onNewTab: () => {
+            window.open(location.origin + location.pathname + fullPageRoute, '_blank', 'noopener,noreferrer');
+          }
+        });
         container.appendChild(buildFormBreadcrumb({
           baseLabel: 'Transmittal',
           baseHash: '#transmittal',
           currentText: isNew ? 'New Transmittal' : (existing?.trackingNumber || 'Edit Transmittal'),
+          viewSwitcher,
           actions: [
-            { text: '← Back to List', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#transmittal'; } }
+            { text: isNew ? 'Create Transmittal' : 'Save Changes', class: 'btn btn-primary btn-sm', type: 'submit', form: 'transmittal-form' },
+            { text: 'Cancel', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#transmittal'; } }
           ]
         }));
       }
@@ -102,7 +116,7 @@ const Transmittal = {
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
-    else if (this.view === 'form') container.appendChild(this.renderForm());
+    else if (this.view === 'form') container.appendChild(this.renderForm({ hideHeader: true }));
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
     else if (this.view === 'archive') container.appendChild(this.renderArchive());
 
@@ -859,7 +873,7 @@ const Transmittal = {
     return Auth.can('transmittal:edit') && t.status === 'Draft';
   },
 
-  showForm(txId = null) {
+  showForm(txId = null, mode = null) {
     this.detailId = txId;
     const isNew = !txId;
     const existing = isNew ? null : DB.getById('transmittals', txId);
@@ -870,6 +884,7 @@ const Transmittal = {
       title: isNew ? 'Create Transmittal' : `Edit Transmittal — ${existing?.trackingNumber || ''}`.trim(),
       formContent: this.renderForm(),
       formId: 'transmittal-form',
+      mode,
       viewContext: 'transmittal-form',
       fullPageRoute,
       newTabRoute: fullPageRoute,
@@ -883,22 +898,25 @@ const Transmittal = {
   // ============================================================
   // Create Form
   // ============================================================
-  renderForm() {
+  renderForm(opts = {}) {
+    const { hideHeader = false } = opts;
     const entity = Auth.activeEntity;
     const isNew = !this.detailId;
     const existing = this.detailId ? DB.getById('transmittals', this.detailId) : null;
 
     const container = el('div');
 
-    const headerBar = el('div', { class: 'form-header-bar' });
-    const headerActions = el('div', { class: 'form-actions-top' });
-    const saveBtnTop = el('button', { type: 'submit', form: 'transmittal-form', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
-    headerActions.appendChild(saveBtnTop);
-    const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#transmittal'));
-    headerActions.appendChild(cancelBtn);
-    headerBar.appendChild(headerActions);
-    container.appendChild(headerBar);
+    if (!hideHeader) {
+      const headerBar = el('div', { class: 'form-header-bar' });
+      const headerActions = el('div', { class: 'form-actions-top' });
+      const saveBtnTop = el('button', { type: 'submit', form: 'transmittal-form', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
+      headerActions.appendChild(saveBtnTop);
+      const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
+      cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#transmittal'));
+      headerActions.appendChild(cancelBtn);
+      headerBar.appendChild(headerActions);
+      container.appendChild(headerBar);
+    }
 
     const form = el('form', { id: 'transmittal-form', class: 'form-stacked notion-form' });
 
