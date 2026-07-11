@@ -487,6 +487,13 @@ const App = {
       } else {
         Clients.editingId = null;
       }
+    } else if (baseHash === '#admin') {
+      if (pathParts[1]) {
+        Users.view = pathParts[1];
+        Users.sidePeekId = pathParts[2] || null;
+      } else {
+        Users.sidePeekId = null;
+      }
     }
 
     const moduleMap = {
