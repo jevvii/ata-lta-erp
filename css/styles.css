@@ -13915,6 +13915,21 @@ html.loading-active #loading-screen:not(.hidden) {
   border: 1px solid rgba(217, 119, 6, 0.2);
 }
 
+/* Full-page detail layouts */
+.pending-detail-full-page,
+.request-detail-full-page {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.request-detail-full-page > .notion-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  padding: 24px !important;
+  box-shadow: var(--shadow-card);
+}
+
 /* Warning block */
 .notion-warning-box {
   background: rgba(239, 68, 68, 0.08);

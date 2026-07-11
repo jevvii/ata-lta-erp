@@ -953,6 +953,7 @@ class SidePane {
     this._lastContent = null;
     this.isResizing = false;
     this._ignoreNextClick = false;
+    this._forceMode = null;
     this.init();
   }
 
@@ -1033,6 +1034,7 @@ class SidePane {
   }
 
   resolveMode(opts) {
+    if (this._forceMode && VALID_PANE_MODES.includes(this._forceMode)) return this._forceMode;
     if (opts.mode && VALID_PANE_MODES.includes(opts.mode)) return opts.mode;
     if (opts.viewContext) {
       const def = getPaneDefault(opts.viewContext);
@@ -1331,9 +1333,16 @@ class SidePane {
     if (this.onExpandCallback) {
       this.onExpandCallback();
     } else if (this.fullPageRoute) {
+      // Force the next route resolve to render the full-page layout even when
+      // the user's default view is side-peek. This makes the "Full page" menu
+      // item a one-time navigation rather than requiring a default change.
+      // Keep the override around long enough for the asynchronous hashchange
+      // event that follows location.hash assignment to also see it.
+      this._forceMode = PaneMode.FULL_PAGE;
       location.hash = this.fullPageRoute;
       const appRef = (typeof window !== 'undefined' && window.App) || (typeof App !== 'undefined' ? App : null);
       if (appRef && typeof appRef.handleRoute === 'function') appRef.handleRoute();
+      setTimeout(() => { this._forceMode = null; }, 0);
     } else {
       console.warn('SidePane: full-page requested but no route or onExpand provided.');
     }

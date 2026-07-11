@@ -24,14 +24,29 @@ const Users = {
     const hasOperations = departments.includes('Operations');
     const hasManagement = departments.includes('Management');
 
-    // Initialize view state dynamically to prevent view state bleed-through
+    // Initialize view state dynamically to prevent view state bleed-through.
+    // Respect URL-driven admin subviews (e.g. #admin/myRequests/:id) so direct
+    // links and full-page detail routes are not overwritten on first render.
     if (this.lastUserId !== Auth.user.id) {
       this.lastUserId = Auth.user.id;
+      const urlAdminView = ((location.hash || '').match(/^#admin\/([^/?]+)/) || [])[1] || null;
       if (canManageUsers) {
-        this.view = 'users';
+        const validAdminViews = ['users', 'audit', 'pending'];
+        if (urlAdminView && (validAdminViews.includes(urlAdminView) || this.sidePeekId)) {
+          this.view = urlAdminView;
+        } else {
+          this.view = 'users';
+        }
       } else {
         const defaultToRequests = hasOperations || hasManagement;
-        this.view = defaultToRequests ? 'myRequests' : 'myPending';
+        const validViews = ['myPending'];
+        if (defaultToRequests) validViews.push('myRequests');
+        if (hasManagement) validViews.push('pending');
+        if (urlAdminView && validViews.includes(urlAdminView)) {
+          this.view = urlAdminView;
+        } else {
+          this.view = defaultToRequests ? 'myRequests' : 'myPending';
+        }
       }
       this.filters = { category: '', status: '', dateFrom: '', dateTo: '' };
     }
@@ -169,8 +184,7 @@ const Users = {
             actions
           }));
 
-          const detailContent = this.renderRequestDetailContent(r);
-          container.appendChild(detailContent);
+          container.appendChild(this.renderRequestDetailContent(r, true));
           return container;
         }
       } else {
@@ -429,7 +443,7 @@ const Users = {
     });
   },
 
-  renderRequestDetailContent(r) {
+  renderRequestDetailContent(r, isFullPage = false) {
     const self = this;
     const wr = DB.getById('workRequests', r.workRequestId);
     const client = DB.getById('clients', r.clientId);
@@ -550,6 +564,11 @@ const Users = {
       wrapper.appendChild(rejectBox);
     }
 
+    if (isFullPage) {
+      const outer = el('div', { class: 'request-detail-full-page' });
+      outer.appendChild(wrapper);
+      return outer;
+    }
     return wrapper;
   },
 
@@ -2478,7 +2497,13 @@ const Users = {
     const canApprove = PendingChanges.canApproveChange(pc);
     const isSubmitter = pc.submittedBy === Auth.user.id;
 
-    const wrapper = el('div', { style: isSidePeek ? 'padding: var(--spacing-xs);' : 'max-width: 800px; margin: 0 auto;' });
+    const isFullPage = !isSidePeek && hideHeader;
+    const wrapper = el('div', {
+      class: isFullPage ? 'pending-detail-full-page' : '',
+      style: isFullPage
+        ? 'width: 100%; max-width: 100%; padding: var(--spacing-md);'
+        : (isSidePeek ? 'padding: var(--spacing-xs);' : 'max-width: 800px; margin: 0 auto;')
+    });
 
     if (!isSidePeek && !hideHeader) {
       // Inline header for tab/embedded views; full-page views use buildFormBreadcrumb.
