@@ -2210,8 +2210,9 @@ tbody tr:hover {
 .audit-filters .form-select { max-width: 200px; }
 .user-form { max-width: 500px; margin: 0 auto; background: var(--color-surface); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); }
 .user-form h3 { margin-bottom: var(--spacing-md); font-size: 1.25rem; }
-.side-pane .user-form {
-  max-width: none;
+.side-pane .user-form,
+.admin-tab-page .user-form {
+  max-width: 600px;
   margin: 0;
   background: none;
   padding: 0;

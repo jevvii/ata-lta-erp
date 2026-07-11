@@ -57,6 +57,43 @@ const Users = {
       }
     }
 
+    const isEditingUser = this.editingId;
+    const userViewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({ viewContext: 'user-form' }) : 'side-peek';
+    const isUserFullPage = (userViewMode === 'full-page' || userViewMode === 'new-tab') && isEditingUser;
+
+    if (isUserFullPage) {
+      const container = el('div', { class: 'page admin-tab-page' });
+      const isNew = this.editingId === 'new';
+      const user = isNew ? null : DB.getById('users', this.editingId);
+      
+      const actions = [
+        {
+          text: isNew ? 'Save User' : 'Save Changes',
+          class: 'btn btn-primary btn-sm',
+          onClick: () => {
+            const form = container.querySelector('#user-form');
+            if (form) form.requestSubmit();
+          }
+        },
+        {
+          text: 'Cancel',
+          class: 'btn btn-secondary btn-sm',
+          onClick: () => { this.showUserList(); }
+        }
+      ];
+
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Users',
+        baseHash: '#admin',
+        currentText: isNew ? 'Add User' : 'Edit User',
+        actions
+      }));
+
+      const formEl = this.renderUserFormContent(user);
+      container.appendChild(formEl);
+      return container;
+    }
+
     const viewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({
       viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
     }) : 'side-peek';
@@ -276,7 +313,13 @@ const Users = {
   },
 
   init() {
-    if (this.sidePeekId) {
+    if (this.editingId) {
+      const userViewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({ viewContext: 'user-form' }) : 'side-peek';
+      const isUserFullPage = (userViewMode === 'full-page' || userViewMode === 'new-tab');
+      if (!isUserFullPage) {
+        this.showUserForm(this.editingId === 'new' ? null : this.editingId);
+      }
+    } else if (this.sidePeekId) {
       const viewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({
         viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
       }) : 'side-peek';
@@ -298,7 +341,7 @@ const Users = {
     } else {
       if (window.SidePaneInstance && window.SidePaneInstance.isOpen()) {
         const ctx = window.SidePaneInstance.options.viewContext;
-        if (ctx === 'pending-detail' || ctx === 'request-detail') {
+        if (ctx === 'pending-detail' || ctx === 'request-detail' || ctx === 'user-form') {
           window.SidePaneInstance.close({ silent: true });
         }
       }
@@ -649,10 +692,7 @@ const Users = {
     return el('span', { class: 'badge ' + (map[role] || ''), text: role });
   },
 
-  showUserForm(userId) {
-    this.editingId = userId || null;
-    const user = userId ? DB.getById('users', userId) : null;
-
+  renderUserFormContent(user) {
     const form = el('form', { id: 'user-form', class: 'form-stacked user-form' });
 
     // Name
@@ -671,8 +711,8 @@ const Users = {
 
     // Password
     const pwGroup = el('div', { class: 'form-group' });
-    pwGroup.appendChild(el('label', { text: userId ? 'Password (leave blank to keep current)' : 'Password *' }));
-    pwGroup.appendChild(el('input', { type: 'password', name: 'password', required: !userId }));
+    pwGroup.appendChild(el('label', { text: user ? 'Password (leave blank to keep current)' : 'Password *' }));
+    pwGroup.appendChild(el('input', { type: 'password', name: 'password', required: !user }));
     pwGroup.appendChild(el('span', { class: 'field-error hidden', text: '' }));
     form.appendChild(pwGroup);
 
@@ -716,13 +756,24 @@ const Users = {
       this.submitUserForm(form);
     });
 
+    return form;
+  },
+
+  showUserForm(userId) {
+    this.editingId = userId || 'new';
+    const user = userId ? DB.getById('users', userId) : null;
+    const form = this.renderUserFormContent(user);
+
+    const fullPageRoute = userId ? `#admin/users/form/${userId}` : '#admin/users/form/new';
+
     openFormPanel({
       icon: '👤',
       title: userId ? 'Edit User' : 'Add User',
       formContent: form,
       formId: 'user-form',
-      mode: PaneMode.SIDE_PEEK,
       viewContext: 'user-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: 'Save User', class: 'btn btn-primary', type: 'submit', form: 'user-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showUserList() }
