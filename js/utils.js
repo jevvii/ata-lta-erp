@@ -1051,6 +1051,7 @@ class SidePane {
     this.onCloseCallback = opts.onClose || null;
     this.onExpandCallback = opts.onExpand || null;
     this._lastContent = opts.content || null;
+    this._lastFooter = null;
 
     if (mode === PaneMode.FULL_PAGE) { this.goFullPage(); return; }
     if (mode === PaneMode.NEW_TAB) { this.goNewTab(); return; }
@@ -1082,6 +1083,7 @@ class SidePane {
         const footer = opts.content.querySelector('.side-pane-form-footer, .side-pane-footer');
         if (footer) {
           footer.remove();
+          this._lastFooter = footer;
           this.body.appendChild(opts.content);
           this.pane.appendChild(footer);
         } else {
@@ -1282,6 +1284,9 @@ class SidePane {
       this.body.innerHTML = '';
       this.body.appendChild(this._lastContent);
     }
+    if (this._lastFooter && this._lastFooter instanceof Node) {
+      this.pane.appendChild(this._lastFooter);
+    }
     requestAnimationFrame(() => {
       this.overlay.classList.toggle('open', this.mode === PaneMode.CENTER_PEEK);
       this.pane.classList.remove('side-pane--side-peek', 'side-pane--center-peek');
@@ -1434,6 +1439,8 @@ class SidePane {
     }
 
     this.mode = PaneMode.SIDE_PEEK;
+    this._lastContent = null;
+    this._lastFooter = null;
 
     if (this.onCloseCallback && !opts.silent) {
       const cb = this.onCloseCallback;

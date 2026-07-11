@@ -2408,10 +2408,19 @@ const Users = {
       style: isSidePeek ? 'display: flex; flex-direction: column; gap: var(--spacing-sm); padding: 0;' : ''
     });
 
+    const avatarEl = el('div', { class: 'admin-review-avatar' });
+    if (submitter && submitter.avatarUrl) {
+      avatarEl.style.backgroundImage = `url('${submitter.avatarUrl}')`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+    } else {
+      avatarEl.textContent = submitterInitials;
+    }
+
     // 1. Card Header Row (Avatar, Meta Text, Status Badge)
     const cardHeader = el('div', { class: 'admin-review-card-header' }, [
       el('div', { class: 'admin-review-submitter-info' }, [
-        el('div', { class: 'admin-review-avatar', text: submitterInitials }),
+        avatarEl,
         el('div', { class: 'admin-review-meta-text' }, [
           el('strong', { text: submitterName }),
           ` proposed a new ${singularName} · ${formatDate(pc.submittedAt)}`
