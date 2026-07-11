@@ -15722,54 +15722,180 @@ html.loading-active #loading-screen:not(.hidden) {
   width: 100%;
 }
 
-.data-table--selectable th.dt-checkbox-col,
-.data-table--selectable td.dt-checkbox-col {
-  width: 40px;
-  min-width: 40px;
-  padding: var(--spacing-sm) var(--spacing-sm);
+/* Container wrapper */
+.data-table-view.jira-backlog-container {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--color-surface);
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+}
+
+/* Table overrides */
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: none;
+  margin: 0;
+}
+
+table.data-table thead tr {
+  background: var(--color-bg-light, #fafafa);
+  border-bottom: 1px solid var(--color-border);
+}
+
+table.data-table th {
+  padding: 10px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-light, #fafafa);
+  text-align: left;
+}
+
+table.data-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s ease;
+}
+
+table.data-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+table.data-table tbody tr:hover {
+  background: var(--color-bg-light, #fafafa);
+}
+
+table.data-table tbody tr.selected {
+  background: color-mix(in oklab, var(--color-primary), transparent 94%);
+}
+
+table.data-table td {
+  padding: 10px 16px;
+  font-size: 0.84rem;
+  color: var(--color-text);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border);
+}
+
+table.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Key Column (First data column after checkbox) */
+table.data-table td.dt-key-col {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  width: 75px;
+}
+
+/* Title/Name Column (Second data column) */
+table.data-table td.dt-title-col {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Icon style matching Jira backlog icon */
+table.data-table td.dt-icon-cell {
+  width: 24px;
+  min-width: 24px;
+  padding-right: 0 !important;
+  padding-left: 10px !important;
+  color: var(--color-primary);
+  vertical-align: middle;
+}
+
+table.data-table td.dt-icon-cell svg {
+  display: block;
+}
+
+/* Checkbox Column */
+table.data-table th.dt-checkbox-col,
+table.data-table td.dt-checkbox-col {
+  width: 28px;
+  min-width: 28px;
+  padding: 10px 10px;
   text-align: center;
 }
 
-.data-table--selectable td.dt-checkbox-col input[type="checkbox"] {
+table.data-table td.dt-checkbox-col input[type="checkbox"],
+table.data-table th.dt-checkbox-col input[type="checkbox"] {
   cursor: pointer;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   accent-color: var(--color-primary);
+  display: block;
+  margin: 0 auto;
 }
 
-.dt-select-all {
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-primary);
-  opacity: 0.4;
-  transition: opacity 0.15s;
+/* Hide checkbox by default, reveal on hover or when checked */
+table.data-table--selectable tbody tr .dt-row-checkbox {
+  opacity: 0;
+  transition: opacity 0.1s ease;
 }
 
-thead:hover .dt-select-all,
-.dt-select-all:checked,
-.dt-select-all.indeterminate {
+table.data-table--selectable tbody tr:hover .dt-row-checkbox,
+table.data-table--selectable tbody tr .dt-row-checkbox:checked {
   opacity: 1;
 }
 
-/* Row hover cursor when clickable */
-.data-table--selectable tbody tr[data-clickable="true"],
-.data-table tbody tr[data-clickable="true"] {
-  cursor: pointer;
+/* Actions Column hover reveal and styling */
+table.data-table td.dt-actions-col {
+  position: sticky;
+  right: 16px;
+  background: var(--color-surface);
+  z-index: 2;
+  padding-left: 8px;
+  padding-right: 8px;
+  text-align: right;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
 }
 
-/* Hover-reveal: row checkboxes and actions buttons are hidden by default
-   and appear when the row is hovered (or when a checkbox is checked). */
-.data-table--selectable tbody tr .dt-row-checkbox,
-.data-table--selectable tbody tr .dt-actions-col button {
+table.data-table tr:hover td.dt-actions-col,
+table.data-table tr.selected td.dt-actions-col {
+  background: var(--color-bg-light, #fafafa);
+}
+
+table.data-table th.dt-actions-col {
+  position: sticky;
+  right: 16px;
+  background: var(--color-bg-light, #fafafa);
+  z-index: 3;
+  padding-left: 8px;
+  padding-right: 8px;
+  text-align: right;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
+}
+
+table.data-table td.dt-actions-col button {
   opacity: 0;
   transition: opacity 0.15s;
 }
 
-.data-table--selectable tbody tr:hover .dt-row-checkbox,
-.data-table--selectable tbody tr:hover .dt-actions-col button,
-.data-table--selectable tbody tr .dt-row-checkbox:checked {
+table.data-table tr:hover td.dt-actions-col button {
   opacity: 1;
+}
+
+/* Align cell alignments */
+table.data-table td.dt-cell--left,
+table.data-table th.dt-cell--left {
+  text-align: left;
+}
+
+table.data-table td.dt-cell--center,
+table.data-table th.dt-cell--center {
+  text-align: center;
+}
+
+table.data-table td.dt-cell--right,
+table.data-table th.dt-cell--right {
+  text-align: right;
 }
 
 /* Title cell with stacked badges */
