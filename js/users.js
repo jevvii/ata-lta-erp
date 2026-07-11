@@ -585,6 +585,8 @@ const Users = {
     };
 
     let searchQuery = '';
+    let currentSort = App.restoreSort('audit') || 'newest';
+
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'audit',
       searchConfig: {
@@ -595,6 +597,16 @@ const Users = {
       activeFilters,
       onFilterChange: () => {
         saveCurrentFilters();
+        triggerRefresh();
+      },
+      sortOptions: [
+        { key: 'newest', label: 'Newest first' },
+        { key: 'oldest', label: 'Oldest first' }
+      ],
+      currentSort,
+      onSortChange: (newSort) => {
+        currentSort = newSort;
+        App.saveSort('audit', newSort);
         triggerRefresh();
       }
     });
@@ -609,14 +621,14 @@ const Users = {
     wrapper.appendChild(content);
 
     const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, activeFilters, searchQuery);
+      this.refreshAuditLog(tableContainer, activeFilters, searchQuery, currentSort);
     };
 
     triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, activeFilters, searchQuery) {
+  refreshAuditLog(container, activeFilters, searchQuery, sortOrder) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
     const hasLogs = logs.length > 0;
@@ -665,8 +677,13 @@ const Users = {
       });
     }
 
-    // Sort newest first
-    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Sort order (defaults to newest)
+    const sort = sortOrder || 'newest';
+    if (sort === 'oldest') {
+      logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    } else {
+      logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
 
     const hasActiveFilters = (activeFilters && Object.values(activeFilters).some(s => s && s.size > 0)) || !!searchQuery;
 
