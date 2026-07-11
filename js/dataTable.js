@@ -41,7 +41,7 @@
         rowClass
       } = options;
 
-      const wrapper = el('div', { class: 'data-table-view' });
+      const wrapper = el('div', { class: 'jira-backlog-container jira-backlog-container--columns data-table-view' });
 
       if (items.length === 0) {
         if (emptyState) {
@@ -69,8 +69,14 @@
         headerRow.appendChild(thChk);
       }
 
-      columns.forEach(col => {
-        const th = el('th', { class: col.headerClass || '' });
+      // Icon column header
+      const thIcon = el('th', { class: 'dt-icon-col', style: 'width: 24px; min-width: 24px; padding: 0;' });
+      headerRow.appendChild(thIcon);
+
+      columns.forEach((col, colIdx) => {
+        const alignClass = col.align ? ' dt-cell--' + col.align : '';
+        const roleClass = colIdx === 0 ? ' dt-key-col' : (colIdx === 1 ? ' dt-title-col' : '');
+        const th = el('th', { class: (col.headerClass || '') + alignClass + roleClass });
         th.textContent = col.label || '';
         if (col.align) th.style.textAlign = col.align;
         if (col.width) th.style.width = col.width;
@@ -147,7 +153,7 @@
 
         bulkClose.addEventListener('click', () => {
           selectedIds.clear();
-          rowRefs.forEach(r => { r.chk.checked = false; });
+          rowRefs.forEach(r => { r.chk.checked = false; r.tr.classList.remove('selected'); });
           updateBulkBar();
         });
       }
@@ -168,14 +174,38 @@
           rowRefs.push({ chk, id, tr });
 
           chk.addEventListener('change', () => {
-            if (chk.checked) selectedIds.add(id);
-            else selectedIds.delete(id);
+            if (chk.checked) {
+              selectedIds.add(id);
+              tr.classList.add('selected');
+            } else {
+              selectedIds.delete(id);
+              tr.classList.remove('selected');
+            }
             updateBulkBar();
           });
         }
 
-        columns.forEach(col => {
-          const td = el('td', { class: col.class || '' });
+        // Icon column cell
+        const strId = String(id);
+        let iconHtml = '';
+        if (strId.startsWith('WR')) {
+          iconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>';
+        } else if (strId.startsWith('INV')) {
+          iconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+        } else if (strId.startsWith('DV') || strId.startsWith('DISB')) {
+          iconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
+        } else if (strId.startsWith('TR')) {
+          iconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+        } else {
+          iconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        }
+        const tdIcon = el('td', { class: 'dt-icon-cell', html: iconHtml });
+        tr.appendChild(tdIcon);
+
+        columns.forEach((col, colIdx) => {
+          const alignClass = col.align ? ' dt-cell--' + col.align : '';
+          const roleClass = colIdx === 0 ? ' dt-key-col' : (colIdx === 1 ? ' dt-title-col' : '');
+          const td = el('td', { class: (col.class || '') + alignClass + roleClass });
           if (col.align) td.style.textAlign = col.align;
           const rendered = col.render ? col.render(item) : (item[col.key] ?? '');
           if (isNode(rendered)) {
@@ -190,7 +220,7 @@
           tr.style.cursor = 'pointer';
           tr.dataset.clickable = 'true';
           tr.addEventListener('click', (e) => {
-            if (e.target.closest('button, a, input, select, .no-row-click, label')) return;
+            if (e.target.closest('button, a, input, select, .no-row-click, label, .dt-actions-col')) return;
             onRowClick(item, e);
           });
         }
@@ -207,8 +237,13 @@
         selectAllCheckbox.addEventListener('change', () => {
           rowRefs.forEach(r => {
             r.chk.checked = selectAllCheckbox.checked;
-            if (r.chk.checked) selectedIds.add(r.id);
-            else selectedIds.delete(r.id);
+            if (r.chk.checked) {
+              selectedIds.add(r.id);
+              r.tr.classList.add('selected');
+            } else {
+              selectedIds.delete(r.id);
+              r.tr.classList.remove('selected');
+            }
           });
           updateBulkBar();
         });
