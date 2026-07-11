@@ -10584,10 +10584,10 @@ tbody tr * {
 .side-pane.side-pane--center-peek {
   left: 50%;
   right: auto;
-  top: 7vh;
-  transform: translate(-50%, -20px);
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
   width: min(720px, 92vw);
-  height: auto;
+  height: 86vh;
   max-height: 86vh;
   min-height: 200px;
   border-radius: 12px;
@@ -10600,7 +10600,7 @@ tbody tr * {
   overflow: hidden;
 }
 .side-pane.side-pane--center-peek.open {
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -50%) scale(1);
   opacity: 1;
   pointer-events: auto;
 }

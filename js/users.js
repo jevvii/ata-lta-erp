@@ -57,6 +57,111 @@ const Users = {
       }
     }
 
+    const viewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({
+      viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
+    }) : 'side-peek';
+    const isFullPage = (viewMode === 'full-page' || viewMode === 'new-tab') && this.sidePeekId;
+
+    if (isFullPage) {
+      if (this.view === 'myRequests') {
+        const r = DB.getById('operationsRequests', this.sidePeekId);
+        if (r) {
+          const actions = [];
+          if (r.status === 'pending') {
+            actions.push({
+              text: 'Cancel Request',
+              class: 'btn btn-danger btn-sm',
+              onClick: () => {
+                Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => {
+                  DB.delete('operationsRequests', r.id);
+                  location.hash = '#admin';
+                }, 'danger');
+              }
+            });
+          }
+          actions.push({
+            text: '← Back to List',
+            class: 'btn btn-secondary btn-sm',
+            onClick: () => { location.hash = '#admin'; }
+          });
+
+          container.appendChild(buildFormBreadcrumb({
+            baseLabel: 'My Submissions',
+            baseHash: '#admin',
+            currentText: `Request Details: ${this._requestTypeLabel(r.type)}`,
+            actions
+          }));
+
+          const detailContent = this.renderRequestDetailContent(r);
+          container.appendChild(detailContent);
+          return container;
+        }
+      } else {
+        const pc = PendingChanges.getById(this.sidePeekId);
+        if (pc) {
+          const isMyPending = this.view === 'myPending';
+          const baseLabel = isMyPending ? 'My Submissions' : 'Admin';
+          const isNew = !pc.parentRecordId;
+          const currentText = pc.title || (isNew ? 'New Submission' : 'Edit Submission');
+          
+          const canApprove = PendingChanges.canApproveChange(pc);
+          const isSubmitter = pc.submittedBy === Auth.user.id;
+          
+          const actions = [];
+          if (canApprove) {
+            actions.push({
+              text: 'Approve Change',
+              class: 'btn btn-success btn-sm',
+              onClick: () => {
+                Workflow.showConfirm('Confirm Approval', 'Are you sure you want to approve this change?', () => {
+                  PendingChanges.approve(pc.id);
+                  location.hash = '#admin';
+                }, 'success');
+              }
+            });
+            actions.push({
+              text: 'Reject',
+              class: 'btn btn-danger btn-sm',
+              onClick: () => {
+                const reason = prompt('Enter rejection reason:');
+                if (reason !== null) {
+                  PendingChanges.reject(pc.id, reason);
+                  location.hash = '#admin';
+                }
+              }
+            });
+          } else if (isSubmitter && pc.status === 'pending') {
+            actions.push({
+              text: 'Withdraw Submission',
+              class: 'btn btn-secondary btn-sm',
+              onClick: () => {
+                Workflow.showConfirm('Confirm Withdrawal', 'Are you sure you want to withdraw this submission?', () => {
+                  PendingChanges.delete(pc.id);
+                  location.hash = '#admin';
+                }, 'danger');
+              }
+            });
+          }
+          actions.push({
+            text: '← Back to List',
+            class: 'btn btn-secondary btn-sm',
+            onClick: () => { location.hash = '#admin'; }
+          });
+
+          container.appendChild(buildFormBreadcrumb({
+            baseLabel,
+            baseHash: '#admin',
+            currentText,
+            actions
+          }));
+
+          const detailContent = this.renderPendingDetail(pc.id, false);
+          container.appendChild(detailContent);
+          return container;
+        }
+      }
+    }
+
     // Internal Admin tabs use the same module-tab-link style as other pages
     container.appendChild(this.renderTabNav());
 
@@ -172,15 +277,22 @@ const Users = {
 
   init() {
     if (this.sidePeekId) {
-      if (this.view === 'pending' || this.view === 'myPending') {
-        const pc = PendingChanges.getById(this.sidePeekId);
-        if (pc) {
-          this.openPendingDetailSidePeek(pc);
-        }
-      } else if (this.view === 'myRequests') {
-        const r = DB.getById('operationsRequests', this.sidePeekId);
-        if (r) {
-          this.openRequestDetailSidePeek(r);
+      const viewMode = window.SidePaneInstance ? window.SidePaneInstance.resolveMode({
+        viewContext: (this.view === 'myRequests') ? 'request-detail' : 'pending-detail'
+      }) : 'side-peek';
+      const isFullPage = (viewMode === 'full-page' || viewMode === 'new-tab');
+
+      if (!isFullPage) {
+        if (this.view === 'pending' || this.view === 'myPending') {
+          const pc = PendingChanges.getById(this.sidePeekId);
+          if (pc) {
+            this.openPendingDetailSidePeek(pc);
+          }
+        } else if (this.view === 'myRequests') {
+          const r = DB.getById('operationsRequests', this.sidePeekId);
+          if (r) {
+            this.openRequestDetailSidePeek(r);
+          }
         }
       }
     } else {
@@ -194,6 +306,8 @@ const Users = {
   },
 
   openPendingDetailSidePeek(pc) {
+    const isMyPending = this.view === 'myPending';
+    const fullPageRoute = isMyPending ? `#admin/myPending/${pc.id}` : `#admin/pending/${pc.id}`;
     const title = `Pending Change: ${pc.title || 'Review'}`;
     const content = this.renderPendingDetail(pc.id, true);
     window.SidePaneInstance.open({
@@ -201,6 +315,8 @@ const Users = {
       content,
       viewContext: 'pending-detail',
       recordId: pc.id,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       onClose: () => {
         const hash = location.hash;
         if (hash.startsWith('#admin/pending/') || hash.startsWith('#admin/myPending/')) {
@@ -210,7 +326,7 @@ const Users = {
     });
   },
 
-  openRequestDetailSidePeek(r) {
+  renderRequestDetailContent(r) {
     const self = this;
     const wr = DB.getById('workRequests', r.workRequestId);
     const client = DB.getById('clients', r.clientId);
@@ -331,8 +447,14 @@ const Users = {
       wrapper.appendChild(rejectBox);
     }
 
+    return wrapper;
+  },
+
+  openRequestDetailSidePeek(r) {
+    const wrapper = this.renderRequestDetailContent(r);
+
     if (r.status === 'pending') {
-      const footerActions = el('div', { style: 'display: flex; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 20px; margin-top: 24px;' });
+      const footerActions = el('div', { class: 'side-pane-form-footer' });
       const cancelBtn = el('button', { class: 'btn btn-danger', text: 'Cancel Request' });
       cancelBtn.addEventListener('click', () => {
         Workflow.showConfirm('Cancel Request', 'Are you sure you want to cancel this request?', () => {
@@ -349,11 +471,14 @@ const Users = {
     }
 
     const title = `Request Details: ${this._requestTypeLabel(r.type)}`;
+    const fullPageRoute = `#admin/myRequests/${r.id}`;
     window.SidePaneInstance.open({
       title,
       content: wrapper,
       viewContext: 'request-detail',
       recordId: r.id,
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       onClose: () => {
         const hash = location.hash;
         if (hash.startsWith('#admin/myRequests/')) {
