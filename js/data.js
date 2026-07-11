@@ -2017,6 +2017,11 @@ const DB = {
     if (table === 'workRequests') {
       delete cleanRecord.isPendingApproval;
     }
+    const trackedTables = ['workRequests', 'invoices', 'disbursements', 'transmittals'];
+    if (trackedTables.includes(table) && typeof cleanRecord.boardOrder !== 'number') {
+      const maxOrder = Math.max(0, ...all.map(r => r.boardOrder || 0));
+      cleanRecord.boardOrder = maxOrder + 1000;
+    }
     all.push(cleanRecord);
     this.save(table, all);
   },

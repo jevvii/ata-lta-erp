@@ -1874,7 +1874,10 @@ function createJiraFilterToolbar(config) {
     groupByOptions,
     currentGroupBy,
     onGroupByChange,
-    searchConfig
+    searchConfig,
+    sortOptions,
+    currentSort,
+    onSortChange
   } = config;
 
   const container = el('div', { class: 'jira-toolbar-sticky-container filters-bar' });
@@ -2276,6 +2279,59 @@ function createJiraFilterToolbar(config) {
     toolbar.appendChild(groupWrap);
   }
 
+  // Sorting Dropdown
+  if (sortOptions && onSortChange) {
+    let activeSortKey = currentSort || 'newest';
+    const sortWrap = el('div', { class: 'jira-sort-wrap' });
+    const sortIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18H3M21 14H3M18 10H3M21 6H3"/></svg>';
+    const sortCaretSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    const sortTrigger = el('button', { type: 'button', class: 'jira-group-trigger jira-sort-trigger' });
+
+    const renderSortTrigger = () => {
+      const selected = sortOptions.find(opt => opt.key === activeSortKey);
+      const label = selected ? 'Sort: ' + selected.label : 'Sort';
+      sortTrigger.classList.toggle('active', activeSortKey !== 'newest');
+      sortTrigger.innerHTML = sortIconSvg + ' <span>' + escapeHtml(label) + '</span> ' + sortCaretSvg;
+    };
+    renderSortTrigger();
+
+    const sortDropdown = el('div', { class: 'jira-dropdown jira-group-dropdown jira-sort-dropdown hidden' });
+    const renderSortDropdown = () => {
+      sortDropdown.innerHTML = '';
+      const body = el('div', { class: 'jira-dropdown-body' });
+      sortOptions.forEach(opt => {
+        const active = activeSortKey === opt.key;
+        const btn = el('button', {
+          type: 'button',
+          class: 'jira-group-option jira-sort-option' + (active ? ' active' : ''),
+          html: escapeHtml(opt.label) + (active ? ' <span class="checkmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '')
+        });
+        btn.addEventListener('click', () => {
+          sortDropdown.classList.add('hidden');
+          activeSortKey = opt.key;
+          onSortChange(opt.key);
+          renderSortTrigger();
+          renderSortDropdown();
+        });
+        body.appendChild(btn);
+      });
+      sortDropdown.appendChild(body);
+    };
+    renderSortDropdown();
+
+    sortTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown, .jira-sort-dropdown').forEach(d => {
+        if (d !== sortDropdown) d.classList.add('hidden');
+      });
+      sortDropdown.classList.toggle('hidden');
+    });
+
+    sortWrap.appendChild(sortTrigger);
+    sortWrap.appendChild(sortDropdown);
+    toolbar.appendChild(sortWrap);
+  }
+
   // Attach global Shift+F shortcut and outside-click listeners once.
   attachJiraGlobalShortcuts();
 
@@ -2316,6 +2372,7 @@ function attachJiraGlobalShortcuts() {
       if (
         e.target.closest('.jira-group-wrap') ||
         e.target.closest('.jira-filter-wrap') ||
+        e.target.closest('.jira-sort-wrap') ||
         e.target.closest('.mdp-overlay') ||
         e.target.closest('.mdp-dialog') ||
         e.target.closest('.mdp-wrapper') ||
@@ -2323,7 +2380,7 @@ function attachJiraGlobalShortcuts() {
       ) {
         return;
       }
-      document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown').forEach(d => d.classList.add('hidden'));
+      document.querySelectorAll('.jira-group-dropdown, .jira-filter-dropdown, .jira-sort-dropdown').forEach(d => d.classList.add('hidden'));
     });
   }
 }
@@ -3250,4 +3307,20 @@ const JiraBacklogList = {
     return container;
   }
 };
+
+function getChronologicalSequenceMap(table) {
+  const items = DB.getAll(table) || [];
+  items.sort((a, b) => {
+    const ta = new Date(a.createdAt || a.sentAt || a.submittedAt || a.requestedAt || a.issueDate || a.timestamp || 0).getTime();
+    const tb = new Date(b.createdAt || b.sentAt || b.submittedAt || b.requestedAt || b.issueDate || b.timestamp || 0).getTime();
+    if (ta !== tb) return ta - tb;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+  const map = new Map();
+  items.forEach((item, index) => {
+    map.set(item.id, index + 1);
+  });
+  return map;
+}
+
 

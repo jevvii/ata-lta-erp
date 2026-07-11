@@ -656,7 +656,10 @@ const Users = {
     const items = users.map((u, idx) => {
       const depts = Array.isArray(u.departments) ? u.departments : [];
       const deptText = depts.length
-        ? depts.map(d => '<span class="user-dept-badge">' + escapeHtml(d) + '</span>').join('')
+        ? depts.map(d => {
+            const cleanDept = d.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return `<span class="user-dept-badge user-dept-badge--${cleanDept}">${escapeHtml(d)}</span>`;
+          }).join('')
         : '<span class="text-muted">No departments</span>';
       return {
         id: u.id,
@@ -1057,6 +1060,8 @@ const Users = {
     };
 
     let searchQuery = '';
+    let currentSort = App.restoreSort('audit') || 'newest';
+
     const toolbarContainer = createJiraFilterToolbar({
       moduleName: 'audit',
       searchConfig: {
@@ -1067,6 +1072,16 @@ const Users = {
       activeFilters,
       onFilterChange: () => {
         saveCurrentFilters();
+        triggerRefresh();
+      },
+      sortOptions: [
+        { key: 'newest', label: 'Newest first' },
+        { key: 'oldest', label: 'Oldest first' }
+      ],
+      currentSort,
+      onSortChange: (newSort) => {
+        currentSort = newSort;
+        App.saveSort('audit', newSort);
         triggerRefresh();
       }
     });
@@ -1081,17 +1096,25 @@ const Users = {
     wrapper.appendChild(content);
 
     const triggerRefresh = () => {
-      this.refreshAuditLog(tableContainer, activeFilters, searchQuery);
+      this.refreshAuditLog(tableContainer, activeFilters, searchQuery, currentSort);
     };
 
     triggerRefresh();
     return wrapper;
   },
 
-  refreshAuditLog(container, activeFilters, searchQuery) {
+  refreshAuditLog(container, activeFilters, searchQuery, sortOrder) {
     this.clearNode(container);
     let logs = DB.getAll('auditLog');
     const hasLogs = logs.length > 0;
+
+    // Create a chronological map of logs to determine their creation order sequence number
+    const allLogs = DB.getAll('auditLog');
+    allLogs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const logSequenceMap = new Map();
+    allLogs.forEach((l, i) => {
+      logSequenceMap.set(l.id, i + 1);
+    });
 
     if (activeFilters && activeFilters.user && activeFilters.user.size > 0) {
       logs = logs.filter(l => activeFilters.user.has(l.userName || (DB.getById('users', l.userId)?.name)));
@@ -1137,8 +1160,13 @@ const Users = {
       });
     }
 
-    // Sort newest first
-    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Sort order (defaults to newest)
+    const sort = sortOrder || 'newest';
+    if (sort === 'oldest') {
+      logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    } else {
+      logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
 
     const hasActiveFilters = (activeFilters && Object.values(activeFilters).some(s => s && s.size > 0)) || !!searchQuery;
 
@@ -1200,9 +1228,10 @@ const Users = {
       const avatarIcon = `<div class="backlog-avatar${user?.avatarUrl ? ' backlog-avatar--image' : ''}" style="${avatarStyle}">${avatarContent}</div>`;
       const ts = new Date(l.timestamp);
 
+      const seqNum = logSequenceMap.get(l.id) || (idx + 1);
       return {
         id: l.id || idx,
-        keyText: 'AUD-' + String(idx + 1).padStart(2, '0'),
+        keyText: 'AUD-' + String(seqNum).padStart(2, '0'),
         name: l.details || '—',
         iconHtml: avatarIcon,
         tags: [
@@ -2001,7 +2030,7 @@ const Users = {
       tdType.appendChild(el('span', {
         class: `badge ${badgeInfo.className}`,
         text: badgeInfo.text,
-        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 12px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       tr.appendChild(tdType);
       
@@ -2055,7 +2084,7 @@ const Users = {
       leftPart.appendChild(el('span', {
         class: `badge ${badgeInfo.className}`,
         text: badgeInfo.text,
-        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; display: inline-block; min-width: 90px; text-align: center;'
+        style: 'font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 12px; display: inline-block; min-width: 90px; text-align: center;'
       }));
       
       const textInfo = el('div');
@@ -2667,7 +2696,7 @@ const Users = {
       const priorityVal = el('span', { 
         class: `badge ${priorityClass}`, 
         text: priority,
-        style: 'font-size: 11px; padding: 2px 8px; border-radius: 4px;'
+        style: 'font-size: 11px; padding: 2px 8px; border-radius: 12px;'
       });
       propertyGrid.appendChild(createPropertyRow('Priority', Icons.priority, priorityVal));
 
@@ -2778,7 +2807,7 @@ const Users = {
         `Line Items`
       ]));
 
-      const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px;' });
+      const liTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px;' });
       const liThead = el('thead');
       const liThr = el('tr');
       ['Type', 'Description', 'Amount'].forEach(h => liThr.appendChild(el('th', { text: h, style: 'text-align: left; padding: 8px;' })));

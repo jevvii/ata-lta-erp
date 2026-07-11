@@ -372,7 +372,7 @@ const Disbursement = {
     const def = icons['Other Digital'];
     const cfg = icons[method] || def;
     const wrap = el('span', {
-      style: `display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px;`
+      style: `display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius: 12px; font-size:0.75rem; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px;`
     });
     const svgWrap = document.createElement('span');
     svgWrap.innerHTML = cfg.svg;
@@ -819,6 +819,7 @@ const Disbursement = {
     };
 
     // Normalize boardOrder within each visible column (skip pending-change proxies).
+    const sortedItems = [];
     boardPhases.forEach(phase => {
       const colItems = items.filter(d => phase.statuses.includes(d.status) && !d.pendingChangeId);
       colItems.sort((a, b) => {
@@ -836,6 +837,8 @@ const Disbursement = {
           DB.update('disbursements', d.id, { boardOrder: newOrder });
         }
       });
+      const colPendingItems = items.filter(d => phase.statuses.includes(d.status) && d.pendingChangeId);
+      sortedItems.push(...colItems, ...colPendingItems);
     });
 
     const makeColumns = () => boardPhases.map(phase => {
@@ -850,7 +853,7 @@ const Disbursement = {
       return col;
     });
 
-    let cardNumber = 1;
+    const seqMap = getChronologicalSequenceMap('disbursements');
 
     const renderCard = (d) => {
       const emp = DB.getById('users', self.getEmployeeId(d));
@@ -894,7 +897,7 @@ const Disbursement = {
       if (d.fromTemplate) descParts.push('Recurring');
 
       const card = buildCompactBoardCard({
-        key: 'DIS-' + cardNumber++,
+        key: 'DIS-' + (seqMap.get(d.id) || 1),
         progress,
         statusColor: statusColors[d.status] || '#cbd5e1',
         title: d.category,
@@ -967,7 +970,10 @@ const Disbursement = {
 
     const boardDrag = {
       enabled: true,
-      canDrag: d => canEdit && !d.pendingChangeId,
+      canDrag: d => {
+        const canManage = canEdit || Auth.can('disbursement:approve') || Auth.can('disbursement:mark_released') || Auth.isManagerial();
+        return canManage && !d.pendingChangeId;
+      },
       canDrop: ({ item, targetStatus }) => {
         if (item.status === targetStatus) return true;
         // Map pre-approval statuses to the canonical Pending step.
@@ -1042,10 +1048,9 @@ const Disbursement = {
 
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
-      cardNumber = 1;
       renderGroupedKanbanBoard({
         container,
-        items,
+        items: sortedItems,
         columns: makeColumns(),
         toolbarContainer,
         groupBy,
@@ -1058,11 +1063,9 @@ const Disbursement = {
       return;
     }
 
-    cardNumber = 1;
-
     KanbanBoard.render({
       container,
-      items,
+      items: sortedItems,
       columns: makeColumns(),
       renderCard,
       cardMenuItems,
@@ -1575,7 +1578,7 @@ const Disbursement = {
       const linkedWr = DB.getById('workRequests', d.linkedWorkRequestId);
       if (linkedWr) {
         const linkCard = el('div', {
-          style: 'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);border-radius:8px;padding:12px 16px;margin-bottom:var(--spacing-md);font-size:0.8125rem;'
+          style: 'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);border-radius: 12px;padding:12px 16px;margin-bottom:var(--spacing-md);font-size:0.8125rem;'
         });
         const linkHeader = el('div', {
           style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#1e40af;font-weight:600;'
@@ -1660,7 +1663,7 @@ const Disbursement = {
       const pd = d.paymentDetails;
       const handler = d.paymentHandledBy ? DB.getById('users', d.paymentHandledBy) : null;
       
-      const pCard = el('div', { class: 'card', style: 'margin-bottom:12px; padding:16px; border:1px solid #e2e8f0; border-radius:8px;' });
+      const pCard = el('div', { class: 'card', style: 'margin-bottom:12px; padding:16px; border:1px solid #e2e8f0; border-radius: 12px;' });
 
       // Header row
       const header = el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;' });
@@ -1988,11 +1991,11 @@ const Disbursement = {
       .doc-title { font-size: 18pt; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #0f172a; margin: 0; }
       
       .two-col { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
-      .col-left { flex: 1.2; border: 1.5px solid #1e293b; padding: 12px; border-radius: 2px; background: #fff; }
+      .col-left { flex: 1.2; border: 1.5px solid #1e293b; padding: 12px; border-radius: 12px; background: #fff; }
       .col-left h3 { font-size: 8.5pt; text-transform: uppercase; color: #64748b; margin: 0 0 6px 0; font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
       .col-left p { margin: 2px 0; font-size: 10pt; }
       
-      .col-right { flex: 0.8; display: flex; flex-direction: column; justify-content: center; font-size: 9.5pt; border: 1.5px dashed #cbd5e1; padding: 12px; border-radius: 2px; }
+      .col-right { flex: 0.8; display: flex; flex-direction: column; justify-content: center; font-size: 9.5pt; border: 1.5px dashed #cbd5e1; padding: 12px; border-radius: 12px; }
       .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
       .meta-row:last-child { margin-bottom: 0; }
       .meta-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }
@@ -2008,12 +2011,12 @@ const Disbursement = {
       .amount-words-box strong { color: #0f172a; text-transform: uppercase; font-size: 8pt; display: block; margin-bottom: 4px; letter-spacing: 0.5px; }
       .amount-val-box { flex: 0.8; display: flex; justify-content: flex-end; align-items: center; font-weight: 700; font-size: 11pt; color: #0f172a; }
       .total-label { margin-right: 12px; font-size: 8.5pt; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; }
-      .total-amount-box { display: flex; border: 1.5px solid #1e293b; border-radius: 2px; }
+      .total-amount-box { display: flex; border: 1.5px solid #1e293b; border-radius: 12px; }
       .total-currency { padding: 6px 12px; background: #f1f5f9; border-right: 1.5px solid #1e293b; font-size: 10pt; }
       .total-val { padding: 6px 18px; font-size: 11.5pt; min-width: 120px; text-align: right; font-family: monospace; }
       
       .bottom-layout { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 30px; gap: 24px; }
-      .payment-details-box { flex: 1.2; border: 1.5px solid #1e293b; padding: 12px; border-radius: 2px; font-size: 9pt; background: #fff; }
+      .payment-details-box { flex: 1.2; border: 1.5px solid #1e293b; padding: 12px; border-radius: 12px; font-size: 9pt; background: #fff; }
       .payment-details-box h4 { margin: 0 0 8px 0; font-size: 8.5pt; text-transform: uppercase; color: #475569; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-weight: 700; letter-spacing: 0.5px; }
       .payment-details-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
       .payment-details-grid .lbl { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 7.5pt; }
@@ -2199,11 +2202,11 @@ const Disbursement = {
       .page-break { page-break-before: always; }
       
       .two-col { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
-      .col-left { flex: 1.2; border: 1.5px solid #1e293b; padding: 12px; border-radius: 2px; background: #fff; }
+      .col-left { flex: 1.2; border: 1.5px solid #1e293b; padding: 12px; border-radius: 12px; background: #fff; }
       .col-left h3 { font-size: 8.5pt; text-transform: uppercase; color: #64748b; margin: 0 0 6px 0; font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
       .col-left p { margin: 2px 0; font-size: 10pt; }
       
-      .col-right { flex: 0.8; display: flex; flex-direction: column; justify-content: center; font-size: 9.5pt; border: 1.5px dashed #cbd5e1; padding: 12px; border-radius: 2px; }
+      .col-right { flex: 0.8; display: flex; flex-direction: column; justify-content: center; font-size: 9.5pt; border: 1.5px dashed #cbd5e1; padding: 12px; border-radius: 12px; }
       .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
       .meta-row:last-child { margin-bottom: 0; }
       .meta-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }
@@ -2219,10 +2222,10 @@ const Disbursement = {
       .num { text-align: right; }
       
       .grid-2 { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
-      .box { border: 1.5px solid #1e293b; padding: 10px; border-radius: 2px; background: #fff; }
+      .box { border: 1.5px solid #1e293b; padding: 10px; border-radius: 12px; background: #fff; }
       .amount-words { font-size: 8.5pt; color: #475569; line-height: 1.4; margin-top: 4px; text-transform: uppercase; }
       
-      .payment-status-box { border: 1.5px solid #cbd5e1; border-radius: 2px; background: #f8fafc; padding: 10px; margin-top: 8px; color: #1e293b; font-size: 9pt; }
+      .payment-status-box { border: 1.5px solid #cbd5e1; border-radius: 12px; background: #f8fafc; padding: 10px; margin-top: 8px; color: #1e293b; font-size: 9pt; }
       
       .approval-row { display: flex; justify-content: space-between; margin-top: 40px; gap: 20px; }
       .approval-box { flex: 1; text-align: center; }
@@ -2269,7 +2272,7 @@ const Disbursement = {
                   <div style="font-weight:700; font-size:1.15rem; color:#0f172a; line-height:1.2; font-family: monospace;">${formatPHP(d.amount)}</div>
                   <div style="font-size:7.5pt; color:#64748b; margin-top:2px;">Released on ${formatDate(pd.date || d.releasedAt)}</div>
                 </div>
-                <span style="display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius:12px; font-size:7.5pt; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px; border: 1px solid ${cfg.color}33;">
+                <span style="display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius: 12px; font-size:7.5pt; font-weight:700; color:${cfg.color}; background:${cfg.bg}; letter-spacing:0.3px; border: 1px solid ${cfg.color}33;">
                   ${cfg.label}
                 </span>
               </div>

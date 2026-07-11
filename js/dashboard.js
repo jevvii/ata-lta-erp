@@ -194,7 +194,7 @@ const Dashboard = {
 
     const banner = el('div', {
       class: 'alert-banner',
-      style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); color: var(--color-text); padding: 12px 16px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);'
+      style: 'background: var(--color-bg-muted); border: 1px solid var(--color-warning); color: var(--color-text); padding: 12px 16px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);'
     });
     
     const left = el('div', { style: 'display: flex; align-items: center; gap: 12px;' });
