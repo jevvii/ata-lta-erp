@@ -780,6 +780,7 @@ const Disbursement = {
     };
 
     // Normalize boardOrder within each visible column (skip pending-change proxies).
+    const sortedItems = [];
     boardPhases.forEach(phase => {
       const colItems = items.filter(d => phase.statuses.includes(d.status) && !d.pendingChangeId);
       colItems.sort((a, b) => {
@@ -797,6 +798,8 @@ const Disbursement = {
           DB.update('disbursements', d.id, { boardOrder: newOrder });
         }
       });
+      const colPendingItems = items.filter(d => phase.statuses.includes(d.status) && d.pendingChangeId);
+      sortedItems.push(...colItems, ...colPendingItems);
     });
 
     const makeColumns = () => boardPhases.map(phase => {
@@ -928,7 +931,10 @@ const Disbursement = {
 
     const boardDrag = {
       enabled: true,
-      canDrag: d => canEdit && !d.pendingChangeId,
+      canDrag: d => {
+        const canManage = canEdit || Auth.can('disbursement:approve') || Auth.can('disbursement:mark_released') || Auth.isManagerial();
+        return canManage && !d.pendingChangeId;
+      },
       canDrop: ({ item, targetStatus }) => {
         if (item.status === targetStatus) return true;
         // Map pre-approval statuses to the canonical Pending step.
@@ -1005,7 +1011,7 @@ const Disbursement = {
       toolbarContainer?.classList.add('grouped-board-active');
       renderGroupedKanbanBoard({
         container,
-        items,
+        items: sortedItems,
         columns: makeColumns(),
         toolbarContainer,
         groupBy,
@@ -1020,7 +1026,7 @@ const Disbursement = {
 
     KanbanBoard.render({
       container,
-      items,
+      items: sortedItems,
       columns: makeColumns(),
       renderCard,
       cardMenuItems,

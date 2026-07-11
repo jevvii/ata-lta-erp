@@ -659,6 +659,7 @@ const Billing = {
     };
 
     // Normalize boardOrder within each visible column.
+    const sortedInvs = [];
     boardPhases.forEach(phase => {
       const colInvs = invoices.filter(inv => phase.statuses.includes(inv.status) && !inv.pendingChangeId);
       colInvs.sort((a, b) => {
@@ -676,6 +677,8 @@ const Billing = {
           DB.update('invoices', inv.id, { boardOrder: newOrder });
         }
       });
+      const colPendingInvs = invoices.filter(inv => phase.statuses.includes(inv.status) && inv.pendingChangeId);
+      sortedInvs.push(...colInvs, ...colPendingInvs);
     });
 
     const makeColumns = () => boardPhases.map(phase => {
@@ -769,7 +772,10 @@ const Billing = {
 
     const boardDrag = {
       enabled: true,
-      canDrag: inv => canEdit && !inv.pendingChangeId,
+      canDrag: inv => {
+        const canManage = canEdit || Auth.can('billing:approve') || Auth.can('billing:mark_paid') || Auth.can('billing:release') || Auth.isManagerial();
+        return canManage && !inv.pendingChangeId;
+      },
       canDrop: ({ item, targetStatus }) => {
         if (item.status === targetStatus) return true;
         const flow = ['Draft', 'Pending', 'Approved', 'Sent', 'Partially Paid', 'Paid'];
@@ -874,7 +880,7 @@ const Billing = {
       toolbarContainer?.classList.add('grouped-board-active');
       renderGroupedKanbanBoard({
         container,
-        items: invoices,
+        items: sortedInvs,
         columns: makeColumns(),
         toolbarContainer,
         groupBy,
@@ -889,7 +895,7 @@ const Billing = {
 
     KanbanBoard.render({
       container,
-      items: invoices,
+      items: sortedInvs,
       columns: makeColumns(),
       renderCard,
       cardMenuItems,

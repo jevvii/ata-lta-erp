@@ -629,6 +629,7 @@ const Transmittal = {
       'Acknowledged': '#10b981'
     };
 
+    const sortedItems = [];
     boardPhases.forEach(phase => {
       const colItems = items.filter(t => phase.statuses.includes(t.status) && !t.pendingChangeId);
       colItems.sort((a, b) => {
@@ -646,6 +647,8 @@ const Transmittal = {
           DB.update('transmittals', t.id, { boardOrder: newOrder });
         }
       });
+      const colPendingItems = items.filter(t => phase.statuses.includes(t.status) && t.pendingChangeId);
+      sortedItems.push(...colItems, ...colPendingItems);
     });
 
     const makeColumns = () => boardPhases.map(phase => ({
@@ -756,7 +759,10 @@ const Transmittal = {
 
     const boardDrag = {
       enabled: true,
-      canDrag: t => canEdit && !t.pendingChangeId,
+      canDrag: t => {
+        const canManage = canEdit || Auth.isManagerial() || Auth.can('transmittal:mark') || Auth.can('transmittal:create');
+        return canManage && !t.pendingChangeId;
+      },
       canDrop: ({ item, targetStatus }) => {
         if (item.status === targetStatus) return true;
         // Only Admin/managerial users can advance statuses on the board
@@ -805,7 +811,7 @@ const Transmittal = {
       toolbarContainer?.classList.add('grouped-board-active');
       renderGroupedKanbanBoard({
         container,
-        items,
+        items: sortedItems,
         columns: makeColumns(),
         toolbarContainer,
         groupBy,
@@ -820,7 +826,7 @@ const Transmittal = {
 
     KanbanBoard.render({
       container,
-      items,
+      items: sortedItems,
       columns: makeColumns(),
       renderCard,
       cardMenuItems,
