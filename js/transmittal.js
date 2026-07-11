@@ -30,21 +30,26 @@ const Transmittal = {
             const editBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Edit', style: 'margin-right:8px;' });
             editBtn.addEventListener('click', () => { this.showForm(t.id); });
             actions.appendChild(editBtn);
-            const sendBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Mark as Sent', style: 'margin-right:8px;' });
+            const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('transmittal:release');
+            const sendBtn = el('button', { class: 'btn btn-primary btn-sm', text: canReleaseDirectly ? 'Mark as Sent' : 'Submit for Release Approval', style: 'margin-right:8px;' });
             sendBtn.addEventListener('click', () => {
-              Workflow.showConfirm('Confirm Sent', 'Are you sure you want to mark this transmittal as sent?', () => {
-                const markData = {
-                  status: 'Sent',
-                  sentAt: new Date().toISOString(),
-                  sentBy: Auth.user.id
-                };
-                if (Auth.user.role === 'Admin') {
-                  // Admin marks are applied immediately
-                  DB.update('transmittals', t.id, markData);
+              const title = canReleaseDirectly ? 'Confirm Sent' : 'Confirm Release Request';
+              const msg = canReleaseDirectly ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?';
+              Workflow.showConfirm(title, msg, () => {
+                if (canReleaseDirectly) {
+                  DB.update('transmittals', t.id, {
+                    status: 'Sent',
+                    sentAt: new Date().toISOString(),
+                    sentBy: Auth.user.id,
+                    updatedAt: new Date().toISOString()
+                  });
                 } else {
-                  // Manager/Documentation: pending Admin approval
-                  const record = Object.assign({}, t, markData, { id: t.id });
-                  PendingChanges.submit('transmittals', record, false);
+                  DB.update('transmittals', t.id, {
+                    status: 'Release Pending Approval',
+                    releaseRequestedAt: new Date().toISOString(),
+                    releaseRequestedBy: Auth.user.id,
+                    updatedAt: new Date().toISOString()
+                  });
                 }
                 App.handleRoute();
               }, 'success');
@@ -56,6 +61,10 @@ const Transmittal = {
               this.showAcknowledgeDialog(t.id);
             });
             actions.appendChild(ackBtn);
+          } else if (t.status === 'Acknowledged' && !t.archived) {
+            const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-right:8px;' });
+            archiveBtn.addEventListener('click', () => this.archiveTransmittal(t.id));
+            actions.appendChild(archiveBtn);
           }
         }
 
@@ -68,7 +77,23 @@ const Transmittal = {
       actions.appendChild(backBtn);
       titleBar.appendChild(actions);
       container.appendChild(titleBar);
-    } else if (this.view === 'list') {
+    } else if (this.view === 'form') {
+      container.classList.add('transmittal-tab-page');
+      if (!Auth.can('transmittal:create')) {
+        this.view = 'list';
+      } else {
+        const isNew = !this.detailId;
+        const existing = isNew ? null : DB.getById('transmittals', this.detailId);
+        container.appendChild(buildFormBreadcrumb({
+          baseLabel: 'Transmittal',
+          baseHash: '#transmittal',
+          currentText: isNew ? 'New Transmittal' : (existing?.trackingNumber || 'Edit Transmittal'),
+          actions: [
+            { text: '← Back to List', class: 'btn btn-secondary btn-sm', onClick: () => { location.hash = '#transmittal'; } }
+          ]
+        }));
+      }
+    } else if (['list', 'archive'].includes(this.view)) {
       container.classList.add('transmittal-tab-page');
       const titleBar = el('div', { class: 'page-title-bar-v2' });
       titleBar.appendChild(el('h1', { text: 'Transmittal' }));
@@ -77,15 +102,9 @@ const Transmittal = {
     }
 
     if (this.view === 'list') container.appendChild(this.renderList());
-    else if (this.view === 'form') {
-      if (!Auth.can('transmittal:create')) {
-        this.view = 'list';
-        container.appendChild(this.renderList());
-      } else {
-        container.appendChild(this.renderForm());
-      }
-    }
+    else if (this.view === 'form') container.appendChild(this.renderForm());
     else if (this.view === 'detail') container.appendChild(this.renderDetail());
+    else if (this.view === 'archive') container.appendChild(this.renderArchive());
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -100,30 +119,38 @@ const Transmittal = {
   },
 
   renderTabNav() {
-    const tabNav = el('div', { class: 'module-tab-nav' });
-
     const entity = Auth.activeEntity;
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
     const count = DB.getWhere('transmittals', t => {
-      const tEnt = (t.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(tEnt);
-      }
-      return tEnt === entity.toUpperCase();
+      if (!entFilter(t.entity)) return false;
+      return t.status !== 'Cancelled' && !(t.status === 'Acknowledged' && t.archived);
+    }).length;
+
+    const archiveCount = DB.getWhere('transmittals', t => {
+      if (!entFilter(t.entity)) return false;
+      if (t.status === 'Cancelled') return true;
+      if (t.status === 'Acknowledged' && t.archived) return true;
+      return false;
+    }).length + DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'transmittal' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!Auth.isManagerial() && r.requestedBy !== Auth.user.id) return false;
+      return true;
     }).length;
 
     const tabs = [
-      { key: 'list', label: 'Transmittals', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: count }
+      { key: 'list', label: 'Transmittals', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', count: count },
+      { key: 'archive', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
-    tabs.forEach(tab => {
-      const btn = el('button', { class: 'module-tab-link active' });
-      btn.appendChild(parseHTML(tab.icon));
-      btn.appendChild(document.createTextNode(' ' + tab.label));
-      if (tab.count !== undefined) {
-        btn.appendChild(document.createTextNode(' '));
-        btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
-      }
-      tabNav.appendChild(btn);
+    const tabNav = renderModuleTabNav(tabs, this.view, (key) => {
+      this.view = key;
+      App.handleRoute();
     });
 
     const canCreate = Auth.can('transmittal:create');
@@ -193,12 +220,72 @@ const Transmittal = {
   // Helpers
   // ============================================================
   statusBadge(status) {
+    const role = Auth.user?.role;
+    const label = this.getTransmittalDisplayStatus(status, role);
     const map = {
       'Draft': 'badge badge-ghost',
       'Sent': 'badge badge-info',
       'Acknowledged': 'badge badge-success'
     };
-    return el('span', { class: map[status] || 'badge', text: status });
+    return el('span', { class: map[status] || 'badge', text: label });
+  },
+
+  getTransmittalDisplayStatus(status, role) {
+    return status;
+  },
+
+  getBoardColumns() {
+    const departments = Auth.user?.departments || [];
+    const isAdmin = Auth.user?.role === 'Admin';
+    const isOperations = departments.includes('Operations');
+    const isDocumentation = departments.includes('Documentation');
+    const isManagement = departments.includes('Management');
+    const canCreate = Auth.can('transmittal:create');
+    const draftColor = '#94a3b8';
+    const sentColor = '#3b82f6';
+    const ackColor = '#10b981';
+
+    const draftCol = {
+      key: 'Draft',
+      label: isOperations ? 'Requested' : 'Draft',
+      targetStatus: 'Draft',
+      statuses: ['Draft'],
+      color: isOperations ? '#f59e0b' : draftColor,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    };
+    if (!isOperations && canCreate) {
+      draftCol.addButton = { label: 'Add Transmittal', onClick: () => this.showForm() };
+    }
+
+    const sentCol = {
+      key: 'Sent',
+      label: 'Sent',
+      targetStatus: 'Sent',
+      statuses: ['Sent'],
+      color: sentColor,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    };
+
+    const ackCol = {
+      key: 'Acknowledged',
+      label: 'Acknowledged',
+      targetStatus: 'Acknowledged',
+      statuses: ['Acknowledged'],
+      color: ackColor,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    };
+
+    // Admin: same as now (Draft | Sent | Acknowledged)
+    if (isAdmin) return [draftCol, sentCol, ackCol];
+
+    // Documentation and Management: Draft | Sent | Acknowledged
+    if (isDocumentation || isManagement) return [draftCol, sentCol, ackCol];
+
+    // Operations: Requested | Sent | Acknowledged
+    if (isOperations) return [draftCol, sentCol, ackCol];
+
+    // Others (Accounting, HR, etc.): Sent | Acknowledged
+    return [sentCol, ackCol];
   },
 
   generateTrackingNumber(entity) {
@@ -228,6 +315,7 @@ const Transmittal = {
   // List View
   // ============================================================
   renderList() {
+    const self = this;
     const entity = Auth.activeEntity;
 
     const wrapper = el('div');
@@ -236,200 +324,197 @@ const Transmittal = {
 
 
 
-    // Pending operations requests banner
-    if (Auth.can('transmittal:create')) {
-      const pendingReqs = DB.getWhere('operationsRequests', r => r.status === 'pending' && r.type === 'transmittal');
-      if (pendingReqs.length > 0) {
-        const banner = el('div', { class: 'pending-requests-banner', style: 'background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #ffc107;border-radius:var(--radius-md);padding:var(--spacing-md);margin-bottom:var(--spacing-md);' });
-        const bannerTitle = el('div', { style: 'font-weight:600;color:#e65100;margin-bottom:var(--spacing-sm);font-size:0.95rem;' });
-        bannerTitle.textContent = `⚠ ${pendingReqs.length} Pending Transmittal Request${pendingReqs.length > 1 ? 's' : ''} from Operations`;
-        banner.appendChild(bannerTitle);
-        pendingReqs.forEach(req => {
-          const row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-xs) 0;border-bottom:1px solid #ffe082;' });
-          const client = DB.getById('clients', req.clientId);
-          const wr = DB.getById('workRequests', req.workRequestId);
-          const info = el('span', { style: 'font-size:0.875rem;color:#333;' });
-          info.textContent = `${client ? client.name : 'Unknown Client'} – ${wr ? wr.title : 'Unknown WR'} (requested by ${req.requestedBy || 'N/A'})`;
-          row.appendChild(info);
-          const fulfillBtn = el('button', { class: 'btn btn-primary', text: 'Fulfill', style: 'padding:2px 12px;font-size:0.8rem;' });
-          fulfillBtn.addEventListener('click', () => { Transmittal.prefilledWrId = req.workRequestId; Transmittal.prefilledClientId = req.clientId; Transmittal.prefilledRequestId = req.id; location.hash = '#transmittal/form'; });
-          row.appendChild(fulfillBtn);
-          banner.appendChild(row);
-        });
-        wrapper.appendChild(banner);
-      }
-    }
+    // Jira Filter Toolbar & Active Filters State
+    const activeFilters = {
+      workRequest: new Set(),
+      client: new Set(),
+      employee: new Set(),
+      status: new Set(),
+      date: new Set()
+    };
 
-    const wrFilter = el('select', { class: 'form-select', style: 'max-width:200px' });
-    wrFilter.appendChild(el('option', { value: '', text: 'All Work Requests' }));
-    DB.getWhere('workRequests', wr => {
-      const wrEnt = (wr.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt);
-      }
-      return wrEnt === entity.toUpperCase();
-    }).forEach(wr => {
-      wrFilter.appendChild(el('option', { value: wr.id, text: wr.title }));
-    });
-    filters.appendChild(wrapFilterFieldWithClear(wrFilter));
+    this.searchQuery = '';
 
-    const clientOptions = [{ value: '', text: 'All Clients' }];
-    DB.getWhere('clients', c => {
-      const clientEnt = (c.entity || '').toUpperCase();
-      if (entity === 'ALL') {
-        return Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt);
-      }
-      return clientEnt === entity.toUpperCase();
-    }).forEach(c => {
-      clientOptions.push({ value: c.id, text: c.name });
-    });
-    const clientFilter = createSearchableDropdown({ placeholder: 'All Clients', options: clientOptions, maxWidth: '200px' });
-    filters.appendChild(clientFilter);
-
-    const empOptions = [{ value: '', text: 'All Employees' }];
-    DB.getWhere('users', u => {
-      const userEnts = (u.entities || []).map(e => e.toUpperCase());
-      if (entity === 'ALL') {
-        return userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e));
-      }
-      return userEnts.includes(entity.toUpperCase());
-    }).forEach(u => {
-      empOptions.push({ value: u.id, text: u.name });
-    });
-    (DB.getAll('tasks') || []).forEach(t => {
-      const name = (t.assigneeName || '').trim();
-      if (name && !empOptions.some(opt => opt.value === name || opt.text === name)) {
-        empOptions.push({ value: name, text: name });
-      }
-    });
-    const empFilter = createSearchableDropdown({ placeholder: 'All Employees', options: empOptions, maxWidth: '200px' });
-    filters.appendChild(empFilter);
-
-    const statusFilter = el('select', { class: 'form-select', style: 'max-width:150px' });
-    statusFilter.appendChild(el('option', { value: '', text: 'All Statuses' }));
-    ['Draft', 'Sent', 'Acknowledged'].forEach(s => statusFilter.appendChild(el('option', { value: s, text: s })));
-    filters.appendChild(wrapFilterFieldWithClear(statusFilter));
-
-    const dateFrom = el('input', { type: 'date', class: 'form-select' });
-    const dateTo = el('input', { type: 'date', class: 'form-select' });
-    filters.appendChild(el('span', { text: 'From:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateFrom));
-    filters.appendChild(el('span', { text: 'To:', style: 'font-size:0.75rem;color:var(--color-text-muted);' }));
-    filters.appendChild(wrapFilterFieldWithClear(dateTo));
-
-    const clearBtn = el('button', {
-      class: 'btn btn-secondary btn-sm',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.5"></path></svg>Clear'
-    });
-    clearBtn.addEventListener('click', () => {
-      wrFilter.value = '';
-      clientFilter.value = '';
-      empFilter.value = '';
-      statusFilter.value = '';
-      dateFrom.value = '';
-      dateTo.value = '';
-      App.clearSavedFilters('transmittals');
-      updateFilters();
-    });
-    filters.appendChild(clearBtn);
-
-    // Restore saved filters
     const savedFilters = App.restoreFilters('transmittals');
     if (savedFilters) {
-      if (savedFilters.workRequest) wrFilter.value = savedFilters.workRequest;
-      if (savedFilters.client) clientFilter.value = savedFilters.client;
-      if (savedFilters.employee) empFilter.value = savedFilters.employee;
-      if (savedFilters.status) statusFilter.value = savedFilters.status;
-      if (savedFilters.dateFrom) dateFrom.value = savedFilters.dateFrom;
-      if (savedFilters.dateTo) dateTo.value = savedFilters.dateTo;
+      if (Array.isArray(savedFilters.workRequest)) savedFilters.workRequest.forEach(v => activeFilters.workRequest.add(v));
+      else if (savedFilters.workRequest) activeFilters.workRequest.add(savedFilters.workRequest);
+      if (Array.isArray(savedFilters.client)) savedFilters.client.forEach(v => activeFilters.client.add(v));
+      else if (savedFilters.client) activeFilters.client.add(savedFilters.client);
+      if (Array.isArray(savedFilters.employee)) savedFilters.employee.forEach(v => activeFilters.employee.add(v));
+      else if (savedFilters.employee) activeFilters.employee.add(savedFilters.employee);
+      if (Array.isArray(savedFilters.status)) savedFilters.status.forEach(v => activeFilters.status.add(v));
+      else if (savedFilters.status) activeFilters.status.add(savedFilters.status);
+      if (Array.isArray(savedFilters.date)) savedFilters.date.forEach(v => activeFilters.date.add(v));
     }
 
     const saveCurrentFilters = () => {
       App.saveFilters('transmittals', {
-        workRequest: wrFilter.value,
-        client: clientFilter.value,
-        employee: empFilter.value,
-        status: statusFilter.value,
-        dateFrom: dateFrom.value,
-        dateTo: dateTo.value
+        workRequest: Array.from(activeFilters.workRequest),
+        client: Array.from(activeFilters.client),
+        employee: Array.from(activeFilters.employee),
+        status: Array.from(activeFilters.status),
+        date: Array.from(activeFilters.date)
       });
     };
 
-    // View mode toggle
-    const vmToggle = el('div', { class: 'view-mode-toggle' });
-    const viewIcons = { 'Table': ViewIcons.table, 'Board': ViewIcons.board, 'List': ViewIcons.list };
-    [['Table', 'table'], ['Board', 'board'], ['List', 'list']].forEach(([label, mode]) => {
-      const btn = el('button', { html: (viewIcons[label] || '') + ' ' + label, class: this.listViewMode === mode ? 'active' : '' });
-      btn.addEventListener('click', () => {
-        saveCurrentFilters();
-        App.setPreferredViewMode('transmittals', mode);
-        App.handleRoute();
+    const getWorkRequestOptions = () => DB.getWhere('workRequests', wr => {
+      const wrEnt = (wr.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(wrEnt) : wrEnt === entity.toUpperCase();
+    }).map(wr => ({ value: wr.id, label: wr.title }));
+
+    const getClientOptions = () => DB.getWhere('clients', c => {
+      const clientEnt = (c.entity || '').toUpperCase();
+      return entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(clientEnt) : clientEnt === entity.toUpperCase();
+    }).map(c => ({ value: c.id, label: c.name }));
+
+    const getEmployeeOptions = () => {
+      const set = new Set();
+      DB.getWhere('users', u => {
+        const userEnts = (u.entities || []).map(e => e.toUpperCase());
+        return entity === 'ALL' ? userEnts.some(e => Auth.user.entities.map(ae => ae.toUpperCase()).includes(e)) : userEnts.includes(entity.toUpperCase());
+      }).forEach(u => set.add(u.name));
+      (DB.getAll('tasks') || []).forEach(t => {
+        const name = (t.assigneeName || '').trim();
+        if (name) set.add(name);
       });
-      vmToggle.appendChild(btn);
+      return Array.from(set).map(n => ({ value: n, label: n }));
+    };
+
+    const getStatusOptions = () => [
+      { value: 'Draft', label: 'Draft' },
+      { value: 'Sent', label: 'Sent' },
+      { value: 'Acknowledged', label: 'Acknowledged' }
+    ];
+
+    const getDueDateOptions = () => [
+      { value: 'Overdue', label: 'Overdue' },
+      { value: 'Due Today', label: 'Due Today' },
+      { value: 'Due This Week', label: 'Due This Week' },
+      { value: 'Due This Month', label: 'Due This Month' },
+      { value: 'Due Later', label: 'Due Later' }
+    ];
+
+    const categories = {
+      workRequest: { label: 'Work Request', getOptions: getWorkRequestOptions },
+      client: { label: 'Client', getOptions: getClientOptions },
+      employee: { label: 'Employee', getOptions: getEmployeeOptions },
+      status: { label: 'Status', getOptions: getStatusOptions },
+      date: { label: 'Date', hasDatePicker: true, getOptions: getDueDateOptions }
+    };
+
+    let groupBy = App.restoreGroupBy('transmittals') || 'none';
+    const groupOptions = [
+      { key: 'none', label: 'None' },
+      { key: 'client', label: 'Client', getName: t => self.getClientName(t.clientId) },
+      { key: 'employee', label: 'Employee', getName: t => {
+        const creator = t.createdBy ? DB.getById('users', t.createdBy) : null;
+        const sender = t.sentBy ? DB.getById('users', t.sentBy) : null;
+        return creator?.name || sender?.name || 'Unassigned';
+      }},
+      { key: 'workRequest', label: 'Work Request', getName: t => self.getWorkRequestTitle(t.workRequestId) }
+    ];
+
+    const toolbarContainer = createJiraFilterToolbar({
+      moduleName: 'transmittals',
+      searchConfig: {
+        placeholder: 'Search transmittal...',
+        onSearch: (q) => { this.searchQuery = q; updateFilters(); }
+      },
+      categories,
+      activeFilters,
+      onFilterChange: () => {
+        saveCurrentFilters();
+        updateFilters();
+      },
+      viewMode: this.listViewMode || 'table',
+      onViewModeChange: (newMode) => {
+        this.listViewMode = newMode;
+        App.setPreferredViewMode('transmittals', newMode);
+        saveCurrentFilters();
+        updateFilters();
+      },
+      groupByOptions: groupOptions,
+      currentGroupBy: groupBy,
+      onGroupByChange: (newGroupBy) => {
+        groupBy = newGroupBy;
+        App.saveGroupBy('transmittals', groupBy);
+        updateFilters();
+      }
     });
 
-    stickyContainer.appendChild(filters);
-    stickyContainer.appendChild(vmToggle);
+    stickyContainer.appendChild(toolbarContainer);
     wrapper.appendChild(stickyContainer);
 
     const listContainer = el('div');
     wrapper.appendChild(listContainer);
 
-    const updateFilters = () => this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
-    [wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo].forEach(f => f.addEventListener('change', () => { saveCurrentFilters(); updateFilters(); }));
-    [empFilter, clientFilter].forEach(el => el.addEventListener('input', () => { saveCurrentFilters(); updateFilters(); }));
+    const updateFilters = () => this.refreshList(listContainer, activeFilters, this.listViewMode || 'table', groupBy, groupOptions, stickyContainer);
+    updateFilters();
 
-    this.refreshList(listContainer, wrFilter.value, clientFilter.value, empFilter.value, statusFilter.value, dateFrom.value, dateTo.value, empFilter.searchText, clientFilter.searchText);
     return wrapper;
   },
 
-  refreshList(container, wrFilter, clientFilter, empFilter, statusFilter, dateFrom, dateTo, empSearchText, clientSearchText) {
+  refreshList(container, activeFilters, viewMode, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
     while (container.firstChild) container.removeChild(container.firstChild);
     const entity = Auth.activeEntity;
 
     let items = DB.getWhere('transmittals', t => (entity === 'ALL' ? Auth.user.entities.includes(t.entity) : t.entity === entity));
+    items = items.filter(t => t.status !== 'Cancelled' && !(t.status === 'Acknowledged' && t.archived));
+    const hasItems = items.length > 0;
 
-    if (wrFilter) items = items.filter(t => t.workRequestId === wrFilter);
-    if (clientFilter || (clientSearchText && clientSearchText.trim() !== '')) {
-      const selectedClient = clientFilter ? DB.getById('clients', clientFilter) : null;
-      if (selectedClient && selectedClient.name === clientSearchText) {
-        items = items.filter(t => t.clientId === clientFilter);
-      } else if (clientSearchText && clientSearchText.trim() !== '') {
-        const query = clientSearchText.trim().toLowerCase();
-        items = items.filter(t => {
-          const client = DB.getById('clients', t.clientId);
-          return client && client.name.toLowerCase().includes(query);
-        });
-      }
+    if (activeFilters.workRequest && activeFilters.workRequest.size > 0) {
+      items = items.filter(t => activeFilters.workRequest.has(t.workRequestId));
     }
-
-    if (empSearchText && empSearchText.trim() !== '') {
-      const query = empSearchText.trim().toLowerCase();
+    if (activeFilters.client && activeFilters.client.size > 0) {
+      items = items.filter(t => activeFilters.client.has(t.clientId));
+    }
+    if (activeFilters.employee && activeFilters.employee.size > 0) {
       items = items.filter(t => {
         const creator = t.createdBy ? DB.getById('users', t.createdBy) : null;
         const sender = t.sentBy ? DB.getById('users', t.sentBy) : null;
         const acknowledger = t.acknowledgedBy ? DB.getById('users', t.acknowledgedBy) : null;
-        return (creator && creator.name.toLowerCase().includes(query)) ||
-               (sender && sender.name.toLowerCase().includes(query)) ||
-               (acknowledger && acknowledger.name.toLowerCase().includes(query));
-      });
-    } else if (empFilter) {
-      items = items.filter(t => t.createdBy === empFilter || t.sentBy === empFilter || t.acknowledgedBy === empFilter);
-    }
-    if (statusFilter) items = items.filter(t => t.status === statusFilter);
-    if (dateFrom) {
-      const fromTime = new Date(dateFrom).getTime();
-      items = items.filter(t => {
-        const d = t.sentAt || t.createdAt || '';
-        return d && new Date(d).getTime() >= fromTime;
+        return (creator && activeFilters.employee.has(creator.name)) ||
+               (sender && activeFilters.employee.has(sender.name)) ||
+               (acknowledger && activeFilters.employee.has(acknowledger.name));
       });
     }
-    if (dateTo) {
-      const toTime = new Date(dateTo);
-      toTime.setHours(23, 59, 59, 999);
+    if (activeFilters.status && activeFilters.status.size > 0) {
+      items = items.filter(t => activeFilters.status.has(t.status));
+    }
+    if (activeFilters.date && activeFilters.date.size > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (now.getDay() === 0 ? 0 : 7 - now.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+
       items = items.filter(t => {
-        const d = t.sentAt || t.createdAt || '';
-        return d && new Date(d).getTime() <= toTime.getTime();
+        const dStr = (t.transmittalDate || t.sentAt || t.createdAt || '').slice(0, 10);
+        if (!dStr) return false;
+        if (activeFilters.date.has(`DATE:${dStr}`)) return true;
+        let bucket = 'Due Later';
+        if (dStr < todayStr) bucket = 'Overdue';
+        else if (dStr === todayStr) bucket = 'Due Today';
+        else if (dStr <= endOfWeekStr) bucket = 'Due This Week';
+        else if (dStr <= endOfMonthStr) bucket = 'Due This Month';
+        return activeFilters.date.has(bucket);
+      });
+    }
+
+    // Text search filter
+    if (this.searchQuery) {
+      items = items.filter(t => {
+        const client = t.clientId ? DB.getById('clients', t.clientId) : null;
+        const hay = [
+          t.transmittalNumber || '',
+          t.title || t.subject || '',
+          client?.name || '',
+          t.status || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(this.searchQuery);
       });
     }
 
@@ -439,148 +524,332 @@ const Transmittal = {
       return new Date(db) - new Date(da);
     });
 
+    const hasActiveFilters = Object.values(activeFilters).some(s => s && s.size > 0);
+
     if (items.length === 0) {
-      container.appendChild(el('p', { text: 'No transmittals found.', class: 'empty-state' }));
+      if (hasActiveFilters && hasItems) {
+        container.appendChild(renderFilterEmptyState(
+          'No transmittals match your filters',
+          null,
+          [{ text: 'Clear filters', className: 'btn btn-primary btn-sm', onClick: () => { App.clearSavedFilters('transmittals'); App.handleRoute(); } }]
+        ));
+      } else {
+        container.appendChild(renderEmptyState('No transmittals found', null, { variant: 'zero-state' }));
+      }
       return;
     }
 
     if (this.listViewMode === 'table') {
       this.renderTableView(container, items);
     } else if (this.listViewMode === 'board') {
-      this.renderBoardView(container, items);
+      this.renderBoardView(container, items, groupBy, groupOptions, toolbarContainer);
     } else {
       this.renderCompactListView(container, items);
     }
   },
 
   renderTableView(container, items) {
-    const table = el('table', { class: 'data-table' });
-    const thead = el('thead');
-    const thr = el('tr');
-    ['Tracking #', 'Work Request', 'Client', 'Status', 'Items', 'Actions'].forEach(h => thr.appendChild(el('th', { text: h })));
-    thead.appendChild(thr);
-    table.appendChild(thead);
-
-    const tbody = el('tbody');
-    items.forEach(t => {
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: t.trackingNumber }));
-      tr.appendChild(el('td', { text: this.getWorkRequestTitle(t.workRequestId) }));
-      tr.appendChild(el('td', { text: this.getClientName(t.clientId) }));
-      const tdStatus = el('td');
-      tdStatus.appendChild(this.statusBadge(t.status));
-      tr.appendChild(tdStatus);
-      tr.appendChild(el('td', { text: String((t.items || []).length) }));
-      const tdAct = el('td');
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#transmittal/detail/' + t.id; });
-      tdAct.appendChild(viewBtn);
+    const buildActions = (t) => {
+      const wrapper = el('div', { style: 'display: inline-flex; gap: 4px; align-items: center;' });
       if (this.canEditTransmittal(t)) {
         const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
-        tdAct.appendChild(editBtn);
+        wrapper.appendChild(editBtn);
       }
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+
+      if (t.status === 'Acknowledged' && !t.archived) {
+        const archiveBtn = el('button', { class: 'btn btn-primary btn-sm', text: 'Archive', style: 'margin-left:4px;' });
+        archiveBtn.addEventListener('click', (e) => { e.stopPropagation(); this.archiveTransmittal(t.id); });
+        wrapper.appendChild(archiveBtn);
+      }
+
+      return wrapper;
+    };
+
+    const columns = [
+      {
+        key: 'trackingNumber',
+        label: 'Tracking #',
+        width: '30%',
+        render: (t) => {
+          const cell = el('div', { class: 'dt-title-cell' });
+          cell.appendChild(el('span', { class: 'dt-title-link', text: t.trackingNumber || '—' }));
+          return cell;
+        }
+      },
+      { key: 'workRequestId', label: 'Work Request', render: (t) => this.getWorkRequestTitle(t.workRequestId) },
+      { key: 'clientId', label: 'Client', render: (t) => this.getClientName(t.clientId) },
+      { key: 'status', label: 'Status', render: (t) => this.statusBadge(t.status), width: '130px' },
+      { key: 'items', label: 'Items', render: (t) => String((t.items || []).length), width: '70px', align: 'center' },
+      { key: 'actions', label: 'Actions', render: (t) => buildActions(t), class: 'dt-actions-col', width: '180px' }
+    ];
+
+    const tableView = DataTable.render({
+      items,
+      columns,
+      selectable: true,
+      bulkActions: (ids) => {
+        const rows = ids.map(id => DB.getById('transmittals', id)).filter(Boolean);
+        const canArchive = rows.filter(t => t.status === 'Acknowledged' && !t.archived).length;
+        if (canArchive === 0) return [];
+        return [{
+          text: `Archive (${canArchive})`,
+          className: 'btn btn-primary btn-sm',
+          onClick: (sel) => this.bulkArchiveTransmittals(sel)
+        }];
+      },
+      rowId: (t) => t.id,
+      onRowClick: (t) => { location.hash = '#transmittal/detail/' + t.id; }
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    container.appendChild(tableView);
   },
 
-  renderBoardView(container, items) {
+  renderBoardView(container, items, groupBy = 'none', groupOptions = [], toolbarContainer = null) {
+    toolbarContainer?.classList.remove('grouped-board-active');
     if (items.length === 0) {
-      container.appendChild(el('p', { text: 'No transmittals found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyStateV2({
+        variant: 'zero-state',
+        icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        title: 'No transmittals found',
+        body: 'Create a transmittal to start tracking document delivery.'
+      }));
       return;
     }
-    const board = el('div', { class: 'board-v2' });
-    const statuses = ['Draft', 'Sent', 'Acknowledged'];
+
+    const canCreate = Auth.can('transmittal:create');
+    const canEdit = Auth.can('transmittal:edit');
+    const canMark = Auth.can('transmittal:mark');
+    const self = this;
+
+    const boardPhases = self.getBoardColumns();
     const statusColors = {
       'Draft': '#94a3b8',
       'Sent': '#3b82f6',
       'Acknowledged': '#10b981'
     };
 
-    statuses.forEach(st => {
-      const colColor = statusColors[st] || '#cbd5e1';
-      const colItems = items.filter(t => t.status === st);
-      const col = el('div', { class: 'board-column-v2' });
-      col.style.setProperty('--column-phase-color', colColor);
-
-      const header = el('div', { class: 'board-column-header-v2' });
-      const titleWrap = el('div', { class: 'board-column-title' });
-      titleWrap.appendChild(el('span', { class: 'board-column-dot', style: 'background:' + colColor + ';' }));
-      titleWrap.appendChild(document.createTextNode(st));
-      titleWrap.appendChild(el('span', { class: 'board-column-count', text: String(colItems.length) }));
-      header.appendChild(titleWrap);
-      col.appendChild(header);
-
-      const cardContainer = el('div', { class: 'board-cards-scroll' });
-      if (colItems.length === 0) {
-        cardContainer.appendChild(el('div', { class: 'empty-state', text: 'No transmittals' }));
-      }
-
-      colItems.forEach(t => {
-        const clientName = this.getClientName(t.clientId);
-        const itemCount = (t.items || []).length;
-
-        const card = el('div', { class: 'board-card-v2' });
-        card.style.borderLeftColor = colColor;
-        card.addEventListener('click', () => { location.hash = '#transmittal/detail/' + t.id; });
-
-        // Top: Status path and Date
-        const topRow = el('div', { class: 'card-v2-top' });
-        topRow.appendChild(el('span', { class: 'card-v2-category', text: `${t.status} >` }));
-        const date = t.sentAt || t.createdAt;
-        topRow.appendChild(el('span', { class: 'card-v2-date', text: formatDate(date) }));
-        card.appendChild(topRow);
-
-        // Title Row
-        const titleRow = el('div', { class: 'card-v2-title-row' });
-        titleRow.appendChild(el('div', { class: 'card-v2-title', text: t.trackingNumber }));
-        card.appendChild(titleRow);
-
-        // Subtitle: Client and Item Count
-        card.appendChild(el('div', { text: `${clientName} • ${itemCount} items`, style: 'font-size:0.875rem;color:#64748b;margin-bottom:12px;' }));
-
-        // Meta: Details
-        const metaRow = el('div', { class: 'card-v2-meta' });
-        const wr = DB.getById('workRequests', t.workRequestId);
-        if (wr) {
-          metaRow.appendChild(el('div', { class: 'card-v2-meta-text', text: wr.title, style: 'font-weight:600;color:#1e293b;font-size:0.75rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }));
-        }
-        card.appendChild(metaRow);
-
-        if (this.canEditTransmittal(t)) {
-          const cardActions = el('div', { style: 'display:flex;justify-content:flex-end;margin-top:8px;' });
-          const editBtn = el('button', { class: 'btn btn-secondary btn-xs', text: 'Edit' });
-          editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
-          cardActions.appendChild(editBtn);
-          card.appendChild(cardActions);
-        }
-        cardContainer.appendChild(card);
+    boardPhases.forEach(phase => {
+      const colItems = items.filter(t => phase.statuses.includes(t.status) && !t.pendingChangeId);
+      colItems.sort((a, b) => {
+        const oa = typeof a.boardOrder === 'number' ? a.boardOrder : null;
+        const ob = typeof b.boardOrder === 'number' ? b.boardOrder : null;
+        if (oa !== null && ob !== null) return oa - ob;
+        if (oa !== null) return -1;
+        if (ob !== null) return 1;
+        return new Date(a.createdAt || a.sentAt || 0) - new Date(b.createdAt || b.sentAt || 0);
       });
-      col.appendChild(cardContainer);
-      board.appendChild(col);
+      colItems.forEach((t, idx) => {
+        const newOrder = (idx + 1) * 1000;
+        if (t.boardOrder !== newOrder) {
+          t.boardOrder = newOrder;
+          DB.update('transmittals', t.id, { boardOrder: newOrder });
+        }
+      });
     });
-    container.appendChild(board);
+
+    const makeColumns = () => boardPhases.map(phase => ({
+      key: phase.key,
+      label: phase.label,
+      targetStatus: phase.targetStatus,
+      color: phase.color,
+      addButton: phase.addButton,
+      emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
+    }));
+
+    let cardNumber = 1;
+
+    const renderCard = (t) => {
+      const clientName = self.getClientName(t.clientId);
+      const itemCount = (t.items || []).length;
+      const date = t.sentAt || t.createdAt;
+
+      const displayStatus = self.getTransmittalDisplayStatus(t.status, Auth.user?.role);
+      const statusPriorityClass = {
+        'Draft': 'card-v2-priority-normal',
+        'Sent': 'card-v2-priority-medium',
+        'Acknowledged': 'card-v2-priority-low'
+      }[t.status] || 'card-v2-priority-normal';
+
+      const progressMap = { 'Draft': 0, 'Sent': 50, 'Acknowledged': 100 };
+      const progress = progressMap[t.status] || 0;
+
+      const wr = DB.getById('workRequests', t.workRequestId);
+      const detail = wr ? wr.title : '';
+
+      return buildCompactBoardCard({
+        key: 'TX-' + cardNumber++,
+        progress,
+        statusColor: statusColors[t.status] || '#cbd5e1',
+        title: t.trackingNumber,
+        description: clientName,
+        detail: `${itemCount} item${itemCount === 1 ? '' : 's'}` + (detail ? ` • ${detail}` : ''),
+        date: date ? formatDate(date) : '',
+        priority: displayStatus,
+        priorityClass: statusPriorityClass,
+        onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+      });
+    };
+
+    const cardMenuItems = (t) => {
+      const menu = [{
+        label: 'View Details',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+        onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+      }];
+      if (self.canEditTransmittal(t)) {
+        menu.push({
+          label: 'Edit',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+          onClick: () => self.showForm(t.id)
+        });
+      }
+      if (canMark && t.status === 'Draft' && !t.pendingChangeId) {
+        const canReleaseDirectly = Auth.user?.role === 'Admin' || Auth.isManagerial() || Auth.can('transmittal:release');
+        menu.push({
+          label: canReleaseDirectly ? 'Mark as Sent' : 'Submit for Release Approval',
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+          onClick: () => Workflow.showConfirm(
+            canReleaseDirectly ? 'Confirm Sent' : 'Confirm Release Request',
+            canReleaseDirectly ? 'Are you sure you want to mark this transmittal as sent?' : 'Submit this transmittal for Admin release approval?',
+            () => {
+              if (canReleaseDirectly) {
+                DB.update('transmittals', t.id, {
+                  status: 'Sent',
+                  sentAt: new Date().toISOString(),
+                  sentBy: Auth.user.id,
+                  updatedAt: new Date().toISOString()
+                });
+              } else {
+                DB.update('transmittals', t.id, {
+                  status: 'Release Pending Approval',
+                  releaseRequestedAt: new Date().toISOString(),
+                  releaseRequestedBy: Auth.user.id,
+                  updatedAt: new Date().toISOString()
+                });
+              }
+              App.handleRoute();
+            },
+            'success'
+          )
+        });
+      }
+      if (canMark && t.status === 'Sent') {
+        menu.push({
+          label: 'Acknowledge Receipt',
+          className: 'primary',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+          onClick: () => self.showAcknowledgeDialog(t.id)
+        });
+      }
+      if (t.status === 'Acknowledged' && !t.archived) {
+        menu.push({
+          label: 'Archive',
+          className: 'primary',
+          icon: ArchivePage.icons.archive,
+          onClick: () => self.archiveTransmittal(t.id)
+        });
+      }
+      return menu;
+    };
+
+    const boardDrag = {
+      enabled: true,
+      canDrag: t => canEdit && !t.pendingChangeId,
+      canDrop: ({ item, targetStatus }) => {
+        if (item.status === targetStatus) return true;
+        // Only Admin/managerial users can advance statuses on the board
+        const canAdvance = Auth.user?.role === 'Admin' || Auth.isManagerial();
+        if (!canAdvance) return false;
+        const flow = ['Draft', 'Sent', 'Acknowledged'];
+        const currentIdx = flow.indexOf(item.status);
+        const targetIdx = flow.indexOf(targetStatus);
+        if (currentIdx === -1 || targetIdx === -1) return false;
+        return targetIdx >= currentIdx;
+      },
+      orderField: 'boardOrder',
+      onDrop({ item, targetStatus, newOrder, fromStatus }) {
+        if (fromStatus === targetStatus) {
+          DB.update('transmittals', item.id, { boardOrder: newOrder });
+          App.handleRoute();
+          return;
+        }
+
+        // Block if pending admin approval
+        if (item.pendingChangeId) {
+          Workflow.showMessage('Pending Approval', 'This transmittal is pending administrative approval and cannot be moved.', 'warning');
+          return;
+        }
+
+        const label = item.trackingNumber || item.id;
+
+        // Admin release/acknowledge flows
+        const applyMove = () => {
+          const changes = { boardOrder: newOrder, status: targetStatus, updatedAt: new Date().toISOString() };
+          if (targetStatus === 'Sent') changes.sentAt = new Date().toISOString();
+          if (targetStatus === 'Acknowledged') changes.acknowledgedAt = new Date().toISOString();
+          DB.update('transmittals', item.id, changes);
+          App.handleRoute();
+        };
+
+        const msgs = {
+          'Sent': `Mark transmittal "${label}" as Sent? This indicates the documents have been dispatched.`,
+          'Acknowledged': `Mark transmittal "${label}" as Acknowledged by the recipient?`
+        };
+        Workflow.showConfirm('Confirm Status Change', msgs[targetStatus], applyMove, 'success');
+      }
+    };
+
+    if (groupBy !== 'none') {
+      toolbarContainer?.classList.add('grouped-board-active');
+      cardNumber = 1;
+      renderGroupedKanbanBoard({
+        container,
+        items,
+        columns: makeColumns(),
+        toolbarContainer,
+        groupBy,
+        groupOptions,
+        renderCard,
+        cardMenuItems,
+        storageKey: 'erp_transmittals_grouped_collapsed',
+        drag: boardDrag
+      });
+      return;
+    }
+
+    cardNumber = 1;
+
+    KanbanBoard.render({
+      container,
+      items,
+      columns: makeColumns(),
+      renderCard,
+      cardMenuItems,
+      drag: boardDrag
+    });
   },
 
   renderCompactListView(container, items) {
     const list = el('div', { class: 'list-view' });
     items.forEach(t => {
-      const item = el('div', { class: 'list-item' });
+      const item = el('div', { class: 'list-item', style: 'cursor: pointer;' });
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('button, a, input, select')) return;
+        location.hash = '#transmittal/detail/' + t.id;
+      });
       const left = el('div');
       left.appendChild(el('div', { class: 'list-item-title', text: t.trackingNumber }));
       left.appendChild(el('div', { class: 'list-item-meta', text: this.getClientName(t.clientId) + ' • ' + this.getWorkRequestTitle(t.workRequestId) + ' • ' + String((t.items || []).length) + ' items' }));
       item.appendChild(left);
-      const viewBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'View' });
-      viewBtn.addEventListener('click', () => { location.hash = '#transmittal/detail/' + t.id; });
-      item.appendChild(viewBtn);
+      const actionWrap = el('div', { style: 'display:flex;gap:4px;align-items:center;flex-shrink:0;' });
       if (this.canEditTransmittal(t)) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit', style: 'margin-left:4px;' });
+        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
         editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showForm(t.id); });
-        item.appendChild(editBtn);
+        actionWrap.appendChild(editBtn);
       }
+      item.appendChild(actionWrap);
       list.appendChild(item);
     });
     container.appendChild(list);
@@ -594,12 +863,16 @@ const Transmittal = {
     this.detailId = txId;
     const isNew = !txId;
     const existing = isNew ? null : DB.getById('transmittals', txId);
+    const fullPageRoute = isNew ? '#transmittal/form/new' : `#transmittal/form/${txId}`;
 
     openFormPanel({
       icon: '📨',
       title: isNew ? 'Create Transmittal' : `Edit Transmittal — ${existing?.trackingNumber || ''}`.trim(),
       formContent: this.renderForm(),
       formId: 'transmittal-form',
+      viewContext: 'transmittal-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Create Transmittal' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'transmittal-form' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => closeFormPanelAndRoute('#transmittal') }
@@ -617,104 +890,124 @@ const Transmittal = {
 
     const container = el('div');
 
-    // Form header bar
     const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: isNew ? 'Create Transmittal' : 'Edit Transmittal' }));
     const headerActions = el('div', { class: 'form-actions-top' });
-    const saveTopBtn = el('button', { type: 'button', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
-    saveTopBtn.addEventListener('click', () => { this.submitForm(form); });
-    headerActions.appendChild(saveTopBtn);
+    const saveBtnTop = el('button', { type: 'submit', form: 'transmittal-form', class: 'btn btn-primary', text: isNew ? 'Create Transmittal' : 'Save Changes' });
+    headerActions.appendChild(saveBtnTop);
     const cancelBtn = el('button', { type: 'button', class: 'btn btn-secondary', text: 'Cancel' });
-    cancelBtn.addEventListener('click', () => { location.hash = '#transmittal'; });
+    cancelBtn.addEventListener('click', () => closeFormPanelAndRoute('#transmittal'));
     headerActions.appendChild(cancelBtn);
     headerBar.appendChild(headerActions);
     container.appendChild(headerBar);
 
-    const form = el('form', { id: 'transmittal-form', class: 'form-stacked' });
+    const form = el('form', { id: 'transmittal-form', class: 'form-stacked notion-form' });
 
-    // Work Request
-    const wrGroup = el('div', { class: 'form-group' });
-    wrGroup.appendChild(el('label', { text: 'Work Request *' }));
-    const wrSel = el('select', { name: 'workRequestId', required: true });
-    wrSel.appendChild(el('option', { value: '', text: '— Select Work Request —' }));
-    DB.getWhere('workRequests', wr => wr.entity === entity).forEach(wr => {
-      const opt = el('option', { value: wr.id, text: wr.title });
-      if (existing && existing.workRequestId === wr.id) opt.selected = true;
-      else if (!existing && this.prefilledWrId && this.prefilledWrId === wr.id) opt.selected = true;
-      wrSel.appendChild(opt);
+    // ── Top property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
+
+    // Client
+    const clientGroup = el('div', { class: 'notion-prop' });
+    clientGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Client *' }));
+    const clientSel = el('select', { name: 'clientId', required: true, class: 'notion-prop-select' });
+    clientSel.appendChild(el('option', { value: '', text: '— Select —' }));
+    DB.getWhere('clients', c => c.entity === entity).forEach(c => {
+      const opt = el('option', { value: c.id, text: c.name });
+      if (existing && existing.clientId === c.id) opt.selected = true;
+      else if (!existing && this.prefilledClientId && this.prefilledClientId === c.id) opt.selected = true;
+      clientSel.appendChild(opt);
     });
+    clientGroup.appendChild(clientSel);
+    propsGrid.appendChild(clientGroup);
+
+    // Work Request (filtered by selected client)
+    const wrGroup = el('div', { class: 'notion-prop' });
+    wrGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Work Request *' }));
+    const wrSel = el('select', { name: 'workRequestId', required: true, class: 'notion-prop-select' });
+    wrSel.appendChild(el('option', { value: '', text: '— Select —' }));
     wrGroup.appendChild(wrSel);
-    form.appendChild(wrGroup);
-
-    // Client display (auto-populated from WR)
-    const clientGroup = el('div', { class: 'form-group' });
-    clientGroup.appendChild(el('label', { text: 'Client' }));
-    const prefilledClient = this.prefilledClientId ? this.getClientName(this.prefilledClientId) : '';
-    const clientDisplay = el('input', { type: 'text', name: 'clientDisplay', disabled: true, value: existing ? this.getClientName(existing.clientId) : prefilledClient });
-    clientGroup.appendChild(clientDisplay);
-    const clientIdInput = el('input', { type: 'hidden', name: 'clientId', value: existing ? existing.clientId : (this.prefilledClientId || '') });
-    clientGroup.appendChild(clientIdInput);
-    form.appendChild(clientGroup);
-
-    wrSel.addEventListener('change', () => {
-      const wr = DB.getById('workRequests', wrSel.value);
-      if (wr) {
-        clientDisplay.value = this.getClientName(wr.clientId);
-        clientIdInput.value = wr.clientId;
-      } else {
-        clientDisplay.value = '';
-        clientIdInput.value = '';
-      }
-    });
+    propsGrid.appendChild(wrGroup);
 
     // Tracking Number
-    const tnGroup = el('div', { class: 'form-group' });
-    tnGroup.appendChild(el('label', { text: 'Tracking Number' }));
-    const tnWrap = el('div', { style: 'display:flex; gap: var(--spacing-sm); align-items:center;' });
-    const tnInput = el('input', { type: 'text', name: 'trackingNumber', readonly: true, value: existing ? existing.trackingNumber : '' });
+    const tnGroup = el('div', { class: 'notion-prop' });
+    tnGroup.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h3M4 17v3h3M20 7V4h-3M20 17v3h-3M9 9h6v6H9z"/></svg> Tracking Number' }));
+    const tnWrap = el('div', { class: 'notion-input-with-btn' });
+    const tnInput = el('input', { type: 'text', name: 'trackingNumber', class: 'notion-prop-input', readonly: true, value: existing ? existing.trackingNumber : '' });
     tnInput.style.flex = '1';
     tnWrap.appendChild(tnInput);
     const genBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Generate' });
-    genBtn.addEventListener('click', () => {
-      tnInput.value = this.generateTrackingNumber(entity);
-    });
+    genBtn.addEventListener('click', () => { tnInput.value = this.generateTrackingNumber(entity); });
     tnWrap.appendChild(genBtn);
     tnGroup.appendChild(tnWrap);
-    form.appendChild(tnGroup);
+    propsGrid.appendChild(tnGroup);
 
-    // Itemized document list
-    const itemsSection = el('div', { class: 'form-group' });
-    itemsSection.appendChild(el('label', { text: 'Items *' }));
-    const itemsTable = el('table', { class: 'data-table', style: 'margin-bottom: var(--spacing-sm);' });
-    const itemsThead = el('thead');
-    const itemsThr = el('tr');
-    ['Document Type', 'Description', ''].forEach(h => itemsThr.appendChild(el('th', { text: h })));
-    itemsThead.appendChild(itemsThr);
-    itemsTable.appendChild(itemsThead);
-    const itemsTbody = el('tbody');
-    itemsTbody.id = 'transmittal-items-tbody';
-    itemsTable.appendChild(itemsTbody);
-    itemsSection.appendChild(itemsTable);
+    form.appendChild(propsGrid);
 
-    const addRowBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Item' });
-    addRowBtn.addEventListener('click', () => this.addItemRow(itemsTbody));
+    const populateWRs = (extraWrIds = new Set()) => {
+      const selectedClientId = clientSel.value;
+      const currentWR = wrSel.value;
+      while (wrSel.firstChild) wrSel.removeChild(wrSel.firstChild);
+      wrSel.appendChild(el('option', { value: '', text: '— Select —' }));
+      let matchedCurrent = false;
+      DB.getWhere('workRequests', wr => {
+        if (wr.entity !== entity) return false;
+        return extraWrIds.has(wr.id) || !selectedClientId || wr.clientId === selectedClientId;
+      }).forEach(wr => {
+        const opt = el('option', { value: wr.id, text: wr.title });
+        if (wr.id === currentWR) { opt.selected = true; matchedCurrent = true; }
+        wrSel.appendChild(opt);
+      });
+      if (!matchedCurrent) wrSel.value = '';
+    };
+
+    clientSel.addEventListener('change', () => populateWRs());
+
+    wrSel.addEventListener('change', () => {
+      const wr = DB.getById('workRequests', wrSel.value);
+      if (wr?.clientId && clientSel.value !== wr.clientId) {
+        clientSel.value = wr.clientId;
+        const extra = new Set(wr.id ? [wr.id] : []);
+        populateWRs(extra);
+        wrSel.value = wr.id;
+      }
+    });
+
+    // Initial population
+    const initialWRId = existing?.workRequestId || this.prefilledWrId || '';
+    const initialClientId = existing?.clientId || this.prefilledClientId || '';
+    if (initialClientId) clientSel.value = initialClientId;
+    const initialExtra = new Set(initialWRId ? [initialWRId] : []);
+    populateWRs(initialExtra);
+    if (initialWRId) wrSel.value = initialWRId;
+
+    // Itemized document list — Notion-style editable list
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Transmittal Items' }));
+    const itemsSection = el('div', { class: 'notion-line-items' });
+    const itemsList = el('div', { class: 'notion-line-item-list', id: 'transmittal-items-list' });
+    itemsSection.appendChild(itemsList);
+
+    const addRowBtn = el('button', {
+      type: 'button',
+      class: 'notion-add-line-item',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add item'
+    });
+    addRowBtn.addEventListener('click', () => this.addItemRow(itemsList));
     itemsSection.appendChild(addRowBtn);
     form.appendChild(itemsSection);
 
     // Pre-populate rows for existing
     if (existing && existing.items && existing.items.length > 0) {
-      existing.items.forEach(item => this.addItemRow(itemsTbody, item.description, item.documentType));
+      existing.items.forEach(item => this.addItemRow(itemsList, item.description, item.documentType));
     } else {
-      this.addItemRow(itemsTbody);
+      this.addItemRow(itemsList);
     }
 
-    // Notes
-    const notesGroup = el('div', { class: 'form-group' });
-    notesGroup.appendChild(el('label', { text: 'Notes' }));
-    const notesTextarea = el('textarea', { name: 'notes', rows: 3 });
+    // Notes — Notion free-form section
+    const notesSection = el('div', { class: 'notion-freeform' });
+    notesSection.appendChild(el('label', { class: 'notion-section-label', text: 'Notes' }));
+    const notesTextarea = el('textarea', { name: 'notes', class: 'notion-freeform-textarea', rows: 3, placeholder: 'Add any extra details...' });
     notesTextarea.textContent = existing ? (existing.notes || '') : '';
-    notesGroup.appendChild(notesTextarea);
-    form.appendChild(notesGroup);
+    notesSection.appendChild(notesTextarea);
+    form.appendChild(notesSection);
 
     form.addEventListener('submit', (e) => { e.preventDefault(); this.submitForm(form); });
 
@@ -722,48 +1015,55 @@ const Transmittal = {
     return container;
   },
 
-  addItemRow(tbody, description = '', documentType = '') {
-    const tr = el('tr');
+  addItemRow(container, description = '', documentType = '') {
+    const row = el('div', { class: 'notion-line-item-row' });
 
-    const typeTd = el('td');
-    const typeSel = el('select', { class: 'item-doc-type', required: true });
-    typeSel.appendChild(el('option', { value: '', text: '— Select Type —' }));
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
+    const typeSel = el('select', { class: 'item-doc-type notion-line-item-type', required: true });
+    typeSel.appendChild(el('option', { value: '', text: '— Type —' }));
     ['Original Scan', 'Generated Copy', 'Government Receipt', 'Final Deliverable', 'Other'].forEach(t => {
       const opt = el('option', { value: t, text: t });
       if (documentType === t) opt.selected = true;
       typeSel.appendChild(opt);
     });
-    typeTd.appendChild(typeSel);
-    tr.appendChild(typeTd);
+    row.appendChild(typeSel);
 
-    const descTd = el('td');
-    const descInput = el('input', { type: 'text', class: 'item-description', required: true, value: description, placeholder: 'Description' });
-    descTd.appendChild(descInput);
-    tr.appendChild(descTd);
+    const descInput = el('input', { type: 'text', class: 'item-description notion-line-item-desc', required: true, value: description, placeholder: 'Description' });
+    row.appendChild(descInput);
 
-    const actTd = el('td');
-    const remBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: 'Remove' });
+    const remBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     remBtn.addEventListener('click', () => {
-      if (tbody.querySelectorAll('tr').length > 1) {
-        tbody.removeChild(tr);
+      if (container.querySelectorAll('.notion-line-item-row').length > 1) {
+        row.remove();
       }
     });
-    actTd.appendChild(remBtn);
-    tr.appendChild(actTd);
+    row.appendChild(remBtn);
 
-    tbody.appendChild(tr);
+    container.appendChild(row);
   },
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     const entity = Auth.activeEntity;
     const data = Object.fromEntries(new FormData(form).entries());
     const isNew = !this.detailId;
-    const tbody = document.getElementById('transmittal-items-tbody');
+    const itemsList = document.getElementById('transmittal-items-list');
 
     const items = [];
-    tbody.querySelectorAll('tr').forEach(row => {
+    itemsList.querySelectorAll('.notion-line-item-row').forEach(row => {
       const desc = row.querySelector('.item-description')?.value.trim();
       const type = row.querySelector('.item-doc-type')?.value;
       if (desc && type) {
@@ -851,7 +1151,8 @@ const Transmittal = {
       message: 'Transmittal has been ' + (isNew ? 'created' : 'updated') + ' successfully.',
       type: 'success'
     };
-    closeFormPanelAndRoute('#transmittal', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#transmittal';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   // ============================================================
@@ -865,7 +1166,7 @@ const Transmittal = {
       return wrEnt === entity.toUpperCase();
     });
 
-    const wrapper = el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' });
+    const wrapper = el('div', { class: 'form-stacked', style: 'display: flex; flex-direction: column;' });
     const selectGroup = el('div', { class: 'form-group' });
     selectGroup.appendChild(el('label', { text: 'Select Work Request *' }));
     const wrSelect = el('select', { class: 'form-select', style: 'width:100%;' });
@@ -983,7 +1284,7 @@ const Transmittal = {
         acknowledgedBy: Auth.user.id,
         receivedByName: fd.get('receivedBy')
       };
-      if (Auth.user.role === 'Admin') {
+      if (Auth.canBypassReview('transmittals')) {
         // Admin acknowledgments are applied immediately
         DB.update('transmittals', t.id, ackData);
       } else {
@@ -1071,7 +1372,7 @@ const Transmittal = {
       }
     }
 
-    const letter = el('div', { class: 'transmittal-letter', style: 'background:#fff; color:#000; font-family:Arial, sans-serif; padding:20px; border:1px solid #ccc; max-width:700px; margin:0 auto; box-sizing:border-box;' });
+    const letter = el('div', { class: 'transmittal-letter', style: 'background:var(--color-surface); color:var(--color-text); font-family:Arial, sans-serif; padding:20px; border:1px solid var(--color-border); max-width:700px; margin:0 auto; box-sizing:border-box;' });
 
     // Styles local to the preview to ensure styling matches
     const styleEl = el('style', { textContent: `
@@ -1626,5 +1927,150 @@ const Transmittal = {
 
     win.focus();
     setTimeout(() => win.print(), 300);
+  },
+
+  archiveTransmittal(id) {
+    const t = DB.getById('transmittals', id);
+    if (!t || t.status !== 'Acknowledged' || t.archived) return;
+    DB.update('transmittals', id, { archived: true, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Archived', 'Transmittal has been archived.', 'success');
+    App.handleRoute();
+  },
+
+  bulkArchiveTransmittals(ids) {
+    const eligible = (ids || [])
+      .map(id => DB.getById('transmittals', id))
+      .filter(t => t && t.status === 'Acknowledged' && !t.archived);
+
+    if (eligible.length === 0) {
+      Workflow.showMessage('No eligible records', 'Only Acknowledged transmittals can be archived.', 'info');
+      return;
+    }
+
+    Workflow.showConfirm('Bulk Archive',
+      `Are you sure you want to archive ${eligible.length} acknowledged transmittal(s)?`,
+      () => {
+        const now = new Date().toISOString();
+        eligible.forEach(t => DB.update('transmittals', t.id, { archived: true, updatedAt: now }));
+        Workflow.showMessage('Archived', `${eligible.length} transmittal(s) archived.`, 'success');
+        App.handleRoute();
+      },
+      'warning'
+    );
+  },
+
+  unarchiveTransmittal(id) {
+    const t = DB.getById('transmittals', id);
+    if (!t || t.status !== 'Acknowledged' || !t.archived) return;
+    DB.update('transmittals', id, { archived: false, updatedAt: new Date().toISOString() });
+    Workflow.showMessage('Restored', 'Transmittal has been restored to the active list.', 'success');
+    App.handleRoute();
+  },
+
+  permanentDeleteTransmittal(id) {
+    const t = DB.getById('transmittals', id);
+    if (!t) return;
+    if (Auth.user?.role !== 'Admin' && !Auth.isManagerial() && !Auth.can('transmittal:delete')) {
+      Workflow.showMessage('Permission Denied', 'Only authorized users can permanently delete transmittals.', 'danger');
+      return;
+    }
+    Workflow.showConfirm('Permanently Delete Transmittal',
+      `Are you sure you want to permanently delete transmittal "${t.trackingNumber}"? This action cannot be undone.`,
+      () => {
+        DB.delete('transmittals', id);
+        App.handleRoute();
+        Workflow.showMessage('Deleted', 'Transmittal has been permanently deleted.', 'success');
+      },
+      'danger'
+    );
+  },
+
+  renderArchive() {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isManagerial = Auth.isManagerial();
+
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    const acknowledged = DB.getWhere('transmittals', t => entFilter(t.entity) && t.status === 'Acknowledged' && t.archived === true);
+    const cancelled = DB.getWhere('transmittals', t => entFilter(t.entity) && t.status === 'Cancelled');
+
+    const rejectedTransmittalRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'transmittal' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const buildItem = (t, category) => {
+      const wrTitle = this.getWorkRequestTitle(t.workRequestId);
+      return {
+        id: t.id,
+        category,
+        title: t.trackingNumber || '(no tracking)',
+        meta: [
+          { icon: ArchivePage.icons.client, text: this.getClientName(t.clientId) },
+          { icon: ArchivePage.icons.status, text: wrTitle },
+          { icon: ArchivePage.icons.date, text: formatDate(t.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#transmittal/detail/' + t.id; }
+          },
+          ...(category === 'accomplished' ? [{
+            label: 'Unarchive',
+            icon: ArchivePage.icons.unarchive,
+            className: 'primary',
+            onClick: () => self.unarchiveTransmittal(t.id)
+          }] : []),
+          ...(isManagerial || Auth.can('transmittal:delete') ? [{
+            label: 'Delete Permanently',
+            icon: ArchivePage.icons.delete,
+            className: 'danger',
+            onClick: () => self.permanentDeleteTransmittal(t.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = r => {
+      const data = r || {};
+      const wrTitle = this.getWorkRequestTitle(r.workRequestId);
+      return {
+        id: r.id,
+        category: 'rejected',
+        title: `Transmittal Request ${wrTitle ? '— ' + wrTitle : ''}`,
+        meta: [
+          { icon: ArchivePage.icons.client, text: this.getClientName(r.clientId) },
+          { icon: ArchivePage.icons.date, text: formatDate(r.reviewedAt || r.updatedAt || r.requestedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${r.rejectionReason || 'Rejected'}` }
+        ],
+        actions: [
+          ...(r.workRequestId ? [{
+            label: 'View Related WR',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#operations/detail/' + r.workRequestId; }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'transmittal',
+      categoryLabels: { accomplished: 'Acknowledged', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: acknowledged.map(t => buildItem(t, 'accomplished')),
+        cancelled: cancelled.map(t => buildItem(t, 'cancelled')),
+        rejected: rejectedTransmittalRequests.map(buildRejectedItem)
+      },
+      emptyText: 'Archive is empty.',
+      renderCallback: () => self.renderArchive()
+    });
   }
 };

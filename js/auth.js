@@ -48,6 +48,29 @@ const Auth = {
   /** Convenience: every valid role in the system. */
   ALL_ROLES: ['Admin', 'Manager', 'Accounting', 'Operations', 'Documentation', 'HR'],
 
+  /**
+   * Departments a user may be assigned to. Department assignment is the source
+   * of RBAC: a user's effective permissions are the union of the permission
+   * sets for every department they belong to.
+   */
+  DEPARTMENTS: ['Accounting', 'Operations', 'Documentation', 'HR', 'Management', 'Legal', 'Tax', 'Audit', 'Business Development'],
+
+  /**
+   * Permission set granted by each department. A user assigned to multiple
+   * departments receives the union of those permission sets.
+   */
+  DEPARTMENT_PERMISSIONS: {
+    'Accounting': ['clients:view','workflow:view','workflow:task_add','billing:view','billing:edit','disbursement:view','disbursement:create','disbursement:edit','dms:view','transmittal:view'],
+    'Operations': ['clients:view','workflow:view','workflow:task_add','workflow:task_upload','billing:view','billing:request','disbursement:view','disbursement:request','dms:view','transmittal:view','transmittal:request'],
+    'Documentation': ['clients:view','workflow:view','workflow:task_add','billing:view','disbursement:view','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:create','transmittal:edit','transmittal:mark'],
+    'HR': ['clients:view','workflow:view','billing:view','disbursement:view','dms:view'],
+    'Management': ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:mark','bypass_review:tasks','approve_change:tasks','users:view','users:manage','audit:view_all'],
+    'Legal': ['clients:view','workflow:view','billing:view','disbursement:view','dms:view','transmittal:view'],
+    'Tax': ['clients:view','workflow:view','billing:view','billing:edit','disbursement:view','dms:view','transmittal:view'],
+    'Audit': ['clients:view','workflow:view','billing:view','disbursement:view','dms:view','transmittal:view'],
+    'Business Development': ['clients:view','workflow:view','billing:view','disbursement:view','transmittal:view']
+  },
+
   updateSessionClasses(hasSession) {
     if (hasSession) {
       document.documentElement.classList.add('has-session');
@@ -58,15 +81,22 @@ const Auth = {
     }
   },
 
+  // Session is stored in localStorage (not sessionStorage) so that forms opened via
+  // "New tab" view mode are still authenticated when the new tab loads.
+  _sessionKey: 'erp_session',
+
   login(email, password) {
     const users = DB.getAll('users');
     const user = users.find(u => u.email === email && u.password === password);
     if (!user) return false;
+    if (user.isActive === false) return 'disabled';
     this.user = user;
     // Normalize entity values to uppercase for consistency
     this.user.entities = this.user.entities.map(e => e.toUpperCase());
+    // Ensure the new multi-department field is always an array.
+    if (!Array.isArray(this.user.departments)) this.user.departments = [];
     this.activeEntity = this.user.entities.includes('ATA') ? 'ATA' : 'LTA';
-    sessionStorage.setItem('erp_session', JSON.stringify({ userId: user.id, activeEntity: this.activeEntity }));
+    localStorage.setItem(this._sessionKey, JSON.stringify({ userId: user.id, activeEntity: this.activeEntity }));
     this.updateSessionClasses(true);
     return true;
   },
@@ -74,23 +104,30 @@ const Auth = {
   logout() {
     this.user = null;
     this.activeEntity = null;
-    sessionStorage.removeItem('erp_session');
+    localStorage.removeItem(this._sessionKey);
+    try {
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('erp_filters_')) sessionStorage.removeItem(key);
+      });
+    } catch (e) {}
     this.updateSessionClasses(false);
   },
 
   restoreSession() {
-    const s = JSON.parse(sessionStorage.getItem('erp_session') || 'null');
+    const s = JSON.parse(localStorage.getItem(this._sessionKey) || 'null');
     if (!s) {
       this.updateSessionClasses(false);
       return false;
     }
     this.user = DB.getById('users', s.userId);
-    if (this.user) {
+    if (this.user && this.user.isActive !== false) {
       this.user.entities = this.user.entities.map(e => e.toUpperCase());
+      if (!Array.isArray(this.user.departments)) this.user.departments = [];
       this.activeEntity = s.activeEntity;
       this.updateSessionClasses(true);
       return true;
     } else {
+      this.user = null;
       this.updateSessionClasses(false);
       return false;
     }
@@ -99,30 +136,45 @@ const Auth = {
   can(action, entity) {
     if (!this.user) return false;
     entity = (entity || this.activeEntity || '').toUpperCase();
-    const role = this.user.role;
-    if (role === 'Admin') return true;
+    if (this.user.role === 'Admin') return true;
     if (!this.user.entities.includes(entity)) return false;
-    const perms = {
-      Manager: ['clients:view','workflow:view','workflow:edit','workflow:task_approve','billing:view','billing:request','billing:mark_paid','disbursement:view','disbursement:request','disbursement:mark_released','dms:view','dms:edit','dms:handover','reports:view','users:view','audit:view_all','transmittal:view','transmittal:mark'],
-      Accounting: ['clients:view','workflow:view','workflow:task_add','billing:view','billing:edit','disbursement:view','disbursement:create','disbursement:edit','dms:view','transmittal:view'],
-      Operations: ['clients:view','workflow:view','workflow:task_add','workflow:task_upload','billing:view','billing:request','disbursement:view','disbursement:request','dms:view','transmittal:view','transmittal:request'],
-      Documentation: ['clients:view','workflow:view','workflow:task_add','billing:view','disbursement:view','dms:view','dms:edit','dms:handover','transmittal:view','transmittal:create','transmittal:edit','transmittal:mark'],
-      // ⚠️ HR: UNCONFIRMED placeholder — minimal view-only across all modules
-      // pending business owner confirmation of actual HR permission requirements.
-      HR: ['clients:view','workflow:view','billing:view','disbursement:view','dms:view']
-    };
-    // Note: audit:view_all is shared by Admin and Manager (Admin always returns true).
-    return perms[role]?.includes(action) || false;
+
+    // RBAC is driven entirely by department assignment. The effective
+    // permission set is the union of the permission sets for each department
+    // the user belongs to.
+    const granted = new Set();
+    const departments = Array.isArray(this.user.departments) ? this.user.departments : [];
+    const effectiveDepts = [...departments];
+    if (this.user.role) {
+      const legacyDept = this.user.role === 'Manager' ? 'Management' : this.user.role;
+      if (this.DEPARTMENT_PERMISSIONS[legacyDept] && !effectiveDepts.includes(legacyDept)) {
+        effectiveDepts.push(legacyDept);
+      }
+    }
+    effectiveDepts.forEach(dept => {
+      (this.DEPARTMENT_PERMISSIONS[dept] || []).forEach(p => granted.add(p));
+    });
+
+    return granted.has(action);
+  },
+
+  canBypassReview(table) {
+    return this.can('bypass_review:' + table);
+  },
+
+  canApproveChange(table) {
+    return this.can('approve_change:' + table);
   },
 
   isManagerial() {
     const role = this.user?.role;
-    return role === 'Admin' || role === 'Manager';
+    const departments = this.user?.departments || [];
+    return role === 'Admin' || role === 'Manager' || departments.includes('Management');
   },
 
-  /** Returns true if the current user has a staff-level role. */
+  /** Returns true if the current user has a staff-level (non-managerial) role. */
   isStaff() {
-    return this.STAFF_ROLES.includes(this.user?.role);
+    return !this.isManagerial();
   },
 
   isSelfApprover(recordUserId) {
@@ -132,28 +184,72 @@ const Auth = {
   canViewWr(wr) {
     if (!this.user) return false;
     if (this.user.role === 'Admin') return true;
-    if (this.user.role === 'Manager') {
-      return wr && wr.assignedTo === this.user.id;
+    // Managerial users (Management department or legacy Manager role) can view
+    // work requests they own or are directly involved in.
+    if (this.isManagerial()) {
+      return wr && (wr.assignedTo === this.user.id || wr.submittedBy === this.user.id || wr.requestedBy === this.user.id);
     }
-    return true;
+    // Staff-level users can see owned/assigned work requests.
+    if (!wr) return false;
+    if (wr.submittedBy === this.user.id || wr.assignedTo === this.user.id || wr.requestedBy === this.user.id) return true;
+    
+    // Check tasks
+    const tasks = wr.tasks || (wr.isPendingApproval ? [] : DB.getWhere('tasks', t => t.workRequestId === wr.id));
+    const isAssigned = tasks.some(t => {
+      if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
+      if (t.assigneeName && t.assigneeName === this.user.name) return true;
+      if ((t.coAssignees || []).includes(this.user.name)) return true;
+      return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === this.user.name);
+    });
+    return isAssigned;
   },
+
+  /**
+   * canViewWr variant that accepts a pre-built task map to avoid N+1 DB lookups.
+   * taskMap: { [workRequestId]: Task[] }
+   */
+  canViewWrWithTasks(wr, taskMap) {
+    if (!this.user) return false;
+    if (this.user.role === 'Admin') return true;
+    if (this.isManagerial()) {
+      return wr && (wr.assignedTo === this.user.id || wr.submittedBy === this.user.id || wr.requestedBy === this.user.id);
+    }
+    if (!wr) return false;
+    if (wr.submittedBy === this.user.id || wr.assignedTo === this.user.id || wr.requestedBy === this.user.id) return true;
+    const tasks = wr.isPendingApproval ? (wr.tasks || []) : (taskMap[wr.id] || []);
+    return tasks.some(t => {
+      if (t.assigneeId === this.user.id || t.assignedTo === this.user.id) return true;
+      if (t.assigneeName && t.assigneeName === this.user.name) return true;
+      if ((t.coAssignees || []).includes(this.user.name)) return true;
+      return (t.checklist || []).some(item => item.assigneeName && item.assigneeName === this.user.name);
+    });
+  },
+
 
   canViewDisbursement(d) {
     if (!this.user) return false;
-    if (this.user.role === 'Admin') return true;
-    if (this.user.role === 'Manager') {
+    const departments = this.user.departments || [];
+    if (this.user.role === 'Admin' || departments.includes('Accounting')) return true;
+    // Managerial users can see linked disbursements when they can view the work request.
+    if (this.isManagerial()) {
       if (!d.linkedWorkRequestId) return false;
       const wr = DB.getById('workRequests', d.linkedWorkRequestId);
       return wr && this.canViewWr(wr);
     }
-    return true;
+    // Staff users can see WR-linked disbursements if they can view the WR,
+    // or non-linked disbursements they personally requested.
+    if (d.linkedWorkRequestId) {
+      const wr = DB.getById('workRequests', d.linkedWorkRequestId);
+      return wr && this.canViewWr(wr);
+    }
+    return d.requestedBy === this.user.id;
   },
 
   switchEntity(entity) {
     const upper = entity.toUpperCase();
     if (upper === 'ALL' || this.user?.entities.includes(upper)) {
       this.activeEntity = upper;
-      sessionStorage.setItem('erp_session', JSON.stringify({ userId: this.user.id, activeEntity: upper }));
+      localStorage.setItem(this._sessionKey, JSON.stringify({ userId: this.user.id, activeEntity: upper }));
     }
   },
 };

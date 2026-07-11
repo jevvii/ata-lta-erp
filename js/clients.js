@@ -3,6 +3,42 @@
  * List, search, create, edit clients scoped to active entity.
  */
 
+function formatJiraDate(dateStr) {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const date = d.getDate();
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${month} ${date}, ${year}, ${hours}:${minutes} ${ampm}`;
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+function getInitials(name) {
+  if (!name) return 'U';
+  return name.split(' ').map(n => n.charAt(0)).slice(0, 2).join('').toUpperCase();
+}
+
+function getUserColor(userId) {
+  if (!userId) return '#7a869a';
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = ['#0052cc', '#36b37e', '#ffab00', '#de350b', '#5243aa', '#00875a'];
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+}
+
 const Clients = {
   editingId: null,
   activeTab: 'active',
@@ -36,7 +72,7 @@ const Clients = {
     
     const search = el('input', {
       type: 'text',
-      placeholder: 'Search by taxpayer, trade name, or TIN...',
+      placeholder: 'Search client...',
       class: 'form-control search-input',
       style: 'width: 100%; padding-left: 36px; max-width: 320px;'
     });
@@ -47,29 +83,52 @@ const Clients = {
     stickyContainer.appendChild(filters);
     container.appendChild(stickyContainer);
 
+    const content = el('div', { class: 'page-content-section' });
+
     const listContainer = el('div', { class: 'list-container' + (this.activeTab === 'archived' ? ' hidden' : '') });
-    container.appendChild(listContainer);
+    content.appendChild(listContainer);
     if (this.activeTab === 'active') {
       this.renderList(listContainer, '');
     }
 
     const archiveContainer = el('div', { class: 'archive-container' + (this.activeTab === 'active' ? ' hidden' : '') });
-    container.appendChild(archiveContainer);
+    content.appendChild(archiveContainer);
     if (this.activeTab === 'archived') {
-      this.renderArchive(archiveContainer, '');
+      archiveContainer.appendChild(this.renderArchive(''));
     }
+
+    container.appendChild(content);
 
     search.addEventListener('input', debounce(() => {
       const q = search.value.trim();
       if (this.activeTab === 'active') {
         this.renderList(listContainer, q);
       } else {
-        this.renderArchive(archiveContainer, q);
+        this.clearNode(archiveContainer);
+        archiveContainer.appendChild(this.renderArchive(q));
       }
     }, 200));
 
     const formContainer = el('div', { class: 'form-container hidden' });
     container.appendChild(formContainer);
+
+    // Full-page form route: when editingId is set (e.g. from #clients/form/:id),
+    // render the form inline instead of the list/archive tab content.
+    if (this.editingId) {
+      while (container.firstChild) container.removeChild(container.firstChild);
+      container.classList.add('clients-tab-page');
+      const isNew = this.editingId === 'new';
+      const client = isNew ? null : DB.getById('clients', this.editingId);
+      container.appendChild(buildFormBreadcrumb({
+        baseLabel: 'Clients',
+        baseHash: '#clients',
+        currentText: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
+        actions: [
+          { text: '← Back to Clients', class: 'btn btn-secondary btn-sm', onClick: () => { this.editingId = null; location.hash = '#clients'; } }
+        ]
+      }));
+      container.appendChild(this.renderForm(el('div'), this.editingId));
+    }
 
     setTimeout(() => this.updateStickyOffsets(), 0);
     return container;
@@ -84,8 +143,6 @@ const Clients = {
   },
 
   renderTabNav() {
-    const tabNav = el('div', { class: 'module-tab-nav' });
-
     const entity = Auth.activeEntity;
     const activeCount = DB.getWhere('clients', c => {
       const cEnt = (c.entity || '').toUpperCase();
@@ -93,30 +150,47 @@ const Clients = {
       return matchesEntity && c.status !== 'Archived';
     }).length;
 
+    const isAdmin = Auth.user?.role === 'Admin';
+    const isManagerial = Auth.isManagerial();
+
     const archivedCount = DB.getWhere('clients', c => {
       const cEnt = (c.entity || '').toUpperCase();
       const matchesEntity = (entity === 'ALL' ? Auth.user.entities.map(ae => ae.toUpperCase()).includes(cEnt) : cEnt === entity.toUpperCase());
       return matchesEntity && c.status === 'Archived';
     }).length;
 
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    const rejectedClientChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity)) return false;
+      if (!isManagerial && pc.submittedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'client' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const rejectedCount = rejectedClientChanges.length + rejectedClientRequests.length;
+    const archiveCount = archivedCount + rejectedCount;
+
     const tabs = [
       { key: 'active', label: 'Active Clients', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', count: activeCount },
-      { key: 'archived', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archivedCount }
+      { key: 'archived', label: 'Archive', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>', count: archiveCount }
     ];
 
-    tabs.forEach(tab => {
-      const btn = el('button', { class: 'module-tab-link' + (this.activeTab === tab.key ? ' active' : '') });
-      btn.appendChild(parseHTML(tab.icon));
-      btn.appendChild(document.createTextNode(' ' + tab.label));
-      if (tab.count !== undefined) {
-        btn.appendChild(document.createTextNode(' '));
-        btn.appendChild(el('span', { class: 'module-badge-count', text: String(tab.count) }));
-      }
-      btn.addEventListener('click', () => {
-        this.activeTab = tab.key;
-        App.handleRoute();
-      });
-      tabNav.appendChild(btn);
+    const tabNav = renderModuleTabNav(tabs, this.activeTab, (key) => {
+      this.activeTab = key;
+      App.handleRoute();
     });
 
     if (Auth.can('clients:edit') && this.activeTab === 'active') {
@@ -159,80 +233,434 @@ const Clients = {
     const clients = this.getFilteredClients(query);
 
     if (clients.length === 0) {
-      container.appendChild(el('p', { text: 'No clients found.', class: 'empty-state' }));
+      container.appendChild(renderEmptyState('No clients found', null, { variant: 'zero-state' }));
       return;
     }
 
-    const table = el('table', { class: 'data-table' });
+    const isAdmin = Auth.user?.role === 'Admin';
+
+    // Floating Bulk Action Bar (Jira backlog style, only for admins)
+    let bulkBar = null, countInfo = null, actionsContainer = null, closeBtn = null;
+    if (isAdmin) {
+      bulkBar = el('div', { class: 'jira-backlog-bulk-bar hidden' });
+      countInfo = el('span', { class: 'jira-backlog-bulk-count', text: '0 selected' });
+      bulkBar.appendChild(countInfo);
+      const divider1 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider1);
+      actionsContainer = el('div', { class: 'jira-backlog-bulk-actions' });
+      bulkBar.appendChild(actionsContainer);
+      const divider2 = el('span', { class: 'jira-backlog-bulk-divider', text: '|' });
+      bulkBar.appendChild(divider2);
+      closeBtn = el('button', { class: 'jira-backlog-bulk-close', html: '&times;', title: 'Clear selection' });
+      bulkBar.appendChild(closeBtn);
+      container.appendChild(bulkBar);
+    }
+
+    // Table Container
+    const tableContainer = el('div', { class: 'jira-table-container' });
+    const table = el('table', { class: 'jira-table' });
+    tableContainer.appendChild(table);
+    container.appendChild(tableContainer);
+
+    // Thead
     const thead = el('thead');
     const headerRow = el('tr');
-    ['Taxpayer', 'TIN', 'Point of Contact', 'Trade Name', 'Address', 'Related Companies', 'Contact Details', 'Entity', 'Retainer', 'Actions'].forEach(h => {
-      headerRow.appendChild(el('th', { text: h }));
-    });
     thead.appendChild(headerRow);
     table.appendChild(thead);
 
-    const tbody = el('tbody');
-    clients.forEach(c => {
-      const pocUser = DB.getById('users', c.contactUserId);
-      const row = el('tr');
-      row.appendChild(el('td', { text: c.name }));
-      row.appendChild(el('td', { text: c.tin }));
-      row.appendChild(el('td', { text: pocUser?.name || c.contactPerson || '—' }));
-      row.appendChild(el('td', { text: c.tradeName || '—' }));
-      row.appendChild(el('td', { text: c.address || '—' }));
+    // Checkbox column header (only for admins)
+    let selectAllCheckbox = null;
+    if (isAdmin) {
+      selectAllCheckbox = el('input', {
+        type: 'checkbox',
+        style: 'cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;'
+      });
+      const thCheckbox = el('th', { style: 'width: 40px; text-align: center;' });
+      thCheckbox.appendChild(selectAllCheckbox);
+      headerRow.appendChild(thCheckbox);
+    }
 
-      // Related Companies
-      const rcList = (c.relatedCompanies || []).map(rc => {
+    // Work column header (labeled "Client")
+    const thWork = el('th', { class: 'jira-backlog-col-header', style: 'width: 260px;' });
+    const workHeaderDiv = el('div', { class: 'jira-th-work' });
+    workHeaderDiv.appendChild(el('span', { class: 'jira-header-chevron', text: '▶' }));
+    workHeaderDiv.appendChild(el('span', { text: 'Client' }));
+    thWork.appendChild(workHeaderDiv);
+    headerRow.appendChild(thWork);
+
+    // Client columns headers
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Entity', style: 'width: 80px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Retainer', style: 'width: 80px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'TIN', style: 'width: 140px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'RDO Code', style: 'width: 90px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Point of Contact', style: 'width: 160px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Trade Name', style: 'width: 140px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Address', style: 'width: 180px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Related Companies', style: 'width: 180px;' }));
+    headerRow.appendChild(el('th', { class: 'jira-backlog-col-header', text: 'Contact Details', style: 'width: 180px;' }));
+
+    // Trash bin header (only for admins)
+    if (isAdmin) {
+      const thTrash = el('th', { style: 'width: 45px; text-align: center;' });
+      const trashHeaderIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      trashHeaderIcon.setAttribute('viewBox', '0 0 24 24');
+      trashHeaderIcon.setAttribute('width', '14');
+      trashHeaderIcon.setAttribute('height', '14');
+      trashHeaderIcon.setAttribute('fill', 'none');
+      trashHeaderIcon.setAttribute('stroke', 'currentColor');
+      trashHeaderIcon.setAttribute('stroke-width', '2');
+      trashHeaderIcon.setAttribute('stroke-linecap', 'round');
+      trashHeaderIcon.setAttribute('stroke-linejoin', 'round');
+      trashHeaderIcon.innerHTML = '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>';
+      thTrash.appendChild(trashHeaderIcon);
+      headerRow.appendChild(thTrash);
+    }
+
+    // Tbody
+    const tbody = el('tbody');
+    table.appendChild(tbody);
+
+    const checkBoxes = [];
+    const rows = [];
+
+    const updateSelection = () => {
+      if (!isAdmin) return;
+      const selectedIds = [];
+      checkBoxes.forEach((chk, idx) => {
+        if (chk.checked) {
+          selectedIds.push(chk.dataset.id);
+          rows[idx].classList.add('selected');
+        } else {
+          rows[idx].classList.remove('selected');
+        }
+      });
+
+      if (selectedIds.length > 0 && bulkBar && actionsContainer) {
+        countInfo.textContent = `${selectedIds.length} selected`;
+        actionsContainer.innerHTML = '';
+        const btn = el('button', {
+          class: 'btn btn-outline-danger btn-sm',
+          text: 'Archive Selected'
+        });
+        btn.addEventListener('click', () => {
+          this.bulkArchiveClients(selectedIds);
+        });
+        actionsContainer.appendChild(btn);
+        bulkBar.classList.remove('hidden');
+      } else if (bulkBar) {
+        bulkBar.classList.add('hidden');
+      }
+
+      if (selectAllCheckbox) {
+        const allChecked = checkBoxes.length > 0 && checkBoxes.every(c => c.checked);
+        const someChecked = checkBoxes.some(c => c.checked);
+        selectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = someChecked && !allChecked;
+      }
+    };
+
+    if (isAdmin && selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', () => {
+        checkBoxes.forEach(c => {
+          c.checked = selectAllCheckbox.checked;
+        });
+        updateSelection();
+      });
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          checkBoxes.forEach(c => {
+            c.checked = false;
+          });
+          updateSelection();
+        });
+      }
+    }
+
+    // Close dropdowns on document click
+    const onDocClick = () => {
+      document.querySelectorAll('.jira-status-dropdown-menu').forEach(m => {
+        m.classList.add('hidden');
+      });
+    };
+    document.addEventListener('click', onDocClick);
+
+    // Render client rows
+    clients.forEach((client, idx) => {
+      const isRetainer = client.retainer || client.isRetainer;
+      const tr = el('tr', { class: 'jira-row', 'data-item-id': client.id });
+      rows.push(tr);
+
+      // 1. Checkbox (only for admins)
+      if (isAdmin) {
+        const tdChk = el('td', { style: 'text-align: center;' });
+        const chk = el('input', {
+          type: 'checkbox',
+          style: 'cursor: pointer; accent-color: var(--color-primary); width: 14px; height: 14px;',
+          'data-id': client.id
+        });
+        checkBoxes.push(chk);
+        chk.addEventListener('change', updateSelection);
+        tdChk.appendChild(chk);
+        tr.appendChild(tdChk);
+      }
+
+      // 2. Work (Client Key & Name)
+      const tdWork = el('td');
+      const workDiv = el('div', { class: 'jira-work-cell-content' });
+      tdWork.appendChild(workDiv);
+
+      const chevBtn = el('button', { class: 'jira-row-chevron-btn', text: '▶' });
+      workDiv.appendChild(chevBtn);
+
+      const typeIcon = el('span', {
+        class: isRetainer ? 'jira-epic-icon' : 'jira-task-icon',
+        text: isRetainer ? '⚡' : '✓'
+      });
+      workDiv.appendChild(typeIcon);
+
+      const keyVal = 'CL-' + String(idx + 1).padStart(2, '0');
+      const keyLink = el('a', { class: 'jira-key-link', href: '#clients', text: keyVal });
+      keyLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.showForm(client.id);
+      });
+      workDiv.appendChild(keyLink);
+
+      const nameText = el('span', { class: 'jira-name-text', text: client.name });
+      workDiv.appendChild(nameText);
+      tr.appendChild(tdWork);
+
+      // 3. Entity
+      const tdEntity = el('td');
+      const entityBadge = el('span', {
+        class: 'badge badge-' + (client.entity === 'ATA' ? 'info' : 'success'),
+        text: client.entity
+      });
+      tdEntity.appendChild(entityBadge);
+      tr.appendChild(tdEntity);
+
+      // 4. Retainer
+      const tdRetainer = el('td', { style: 'text-align: center;' });
+      if (isRetainer) {
+        const retainerIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        retainerIcon.setAttribute('width', '14');
+        retainerIcon.setAttribute('height', '14');
+        retainerIcon.setAttribute('viewBox', '0 0 24 24');
+        retainerIcon.setAttribute('fill', 'none');
+        retainerIcon.setAttribute('stroke', '#006644');
+        retainerIcon.setAttribute('stroke-width', '3');
+        retainerIcon.setAttribute('stroke-linecap', 'round');
+        retainerIcon.setAttribute('stroke-linejoin', 'round');
+        retainerIcon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+        tdRetainer.appendChild(retainerIcon);
+      }
+      tr.appendChild(tdRetainer);
+
+      // 5. TIN
+      const tdTin = el('td', { text: client.tin || '—' });
+      tr.appendChild(tdTin);
+
+      // 6. RDO Code
+      const tdRdo = el('td', { text: client.rdoCode || '—' });
+      tr.appendChild(tdRdo);
+
+      // 7. Point of Contact
+      const tdAssignee = el('td');
+      const pocUser = client.contactUserId ? DB.getById('users', client.contactUserId) : null;
+      if (pocUser) {
+        const avatarCell = el('div', { class: 'jira-avatar-cell' });
+        const initials = getInitials(pocUser.name);
+        const color = getUserColor(pocUser.id);
+        const avatarCircle = el('span', { class: 'jira-avatar-circle', text: initials, style: `background: ${color};` });
+        const nameSpan = el('span', { text: pocUser.name });
+        avatarCell.appendChild(avatarCircle);
+        avatarCell.appendChild(nameSpan);
+        tdAssignee.appendChild(avatarCell);
+      } else if (client.contactPerson) {
+        const avatarCell = el('div', { class: 'jira-avatar-cell' });
+        const initials = getInitials(client.contactPerson);
+        const avatarCircle = el('span', { class: 'jira-avatar-circle', text: initials, style: 'background: #7a869a;' });
+        const nameSpan = el('span', { text: client.contactPerson });
+        avatarCell.appendChild(avatarCircle);
+        avatarCell.appendChild(nameSpan);
+        tdAssignee.appendChild(avatarCell);
+      } else {
+        const avatarCell = el('div', { class: 'jira-avatar-cell' });
+        const avatarCircle = el('span', { class: 'jira-avatar-unassigned', text: '👤' });
+        const nameSpan = el('span', { text: 'Unassigned', style: 'color: var(--color-text-muted);' });
+        avatarCell.appendChild(avatarCircle);
+        avatarCell.appendChild(nameSpan);
+        tdAssignee.appendChild(avatarCell);
+      }
+      tr.appendChild(tdAssignee);
+
+      // 8. Trade Name
+      const tdTradeName = el('td', { text: client.tradeName || '—' });
+      tr.appendChild(tdTradeName);
+
+      // 9. Address
+      const tdAddress = el('td', { text: client.address || '—' });
+      tr.appendChild(tdAddress);
+
+      // 10. Related Companies
+      const rcList = (client.relatedCompanies || []).map(rc => {
+        const rcClient = DB.getById('clients', rc.clientId);
+        return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
+      }).join(', ') || '—';
+      const tdRc = el('td', { text: rcList });
+      tr.appendChild(tdRc);
+
+      // 11. Contact Details
+      const cdList = (client.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ') || '—';
+      const tdCd = el('td', { text: cdList });
+      tr.appendChild(tdCd);
+
+      // 12. Trash (Archive Action, only for admins)
+      if (isAdmin) {
+        const tdTrash = el('td', { style: 'text-align: center;' });
+        const trashBtn = el('button', { class: 'jira-trash-btn', title: 'Archive Client' });
+        const trashSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        trashSvg.setAttribute('viewBox', '0 0 24 24');
+        trashSvg.setAttribute('width', '14');
+        trashSvg.setAttribute('height', '14');
+        trashSvg.setAttribute('fill', 'none');
+        trashSvg.setAttribute('stroke', 'currentColor');
+        trashSvg.setAttribute('stroke-width', '2');
+        trashSvg.setAttribute('stroke-linecap', 'round');
+        trashSvg.setAttribute('stroke-linejoin', 'round');
+        trashSvg.innerHTML = '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>';
+        trashBtn.appendChild(trashSvg);
+        tdTrash.appendChild(trashBtn);
+        tr.appendChild(tdTrash);
+
+        trashBtn.addEventListener('click', () => {
+          this.archiveClientDirectly(client.id);
+        });
+      }
+
+      tbody.appendChild(tr);
+
+      // Accordion Row
+      const accordionRow = el('tr', { class: 'jira-accordion-tr hidden' });
+      const accordionTd = el('td', { colspan: isAdmin ? '12' : '10', class: 'jira-accordion-td' });
+      accordionRow.appendChild(accordionTd);
+      tbody.appendChild(accordionRow);
+
+      // Build accordion content
+      const detailsContainer = el('div', { class: 'jira-accordion-details-container' });
+      accordionTd.appendChild(detailsContainer);
+
+      // Left section (Client details)
+      const leftSec = el('div', { class: 'jira-accordion-details-section' });
+      leftSec.appendChild(el('div', { class: 'jira-accordion-details-title', text: 'Client Details' }));
+      const leftGrid = el('div', { class: 'jira-details-grid' });
+      leftSec.appendChild(leftGrid);
+
+      // Helper to add grid row
+      const addGridRow = (label, val) => {
+        leftGrid.appendChild(el('div', { class: 'jira-details-lbl', text: label }));
+        leftGrid.appendChild(el('div', { class: 'jira-details-val', text: val || '—' }));
+      };
+
+      addGridRow('Trade Name', client.tradeName);
+      addGridRow('TIN', client.tin);
+      addGridRow('RDO Code', client.rdoCode);
+      addGridRow('Entity', client.entity);
+      addGridRow('Business Address', client.address);
+
+      const relCos = (client.relatedCompanies || []).map(rc => {
         const rcClient = DB.getById('clients', rc.clientId);
         return (rcClient?.name || '—') + ' (' + rc.relationType + ')';
       }).join(', ');
-      row.appendChild(el('td', { text: rcList || '—' }));
+      addGridRow('Related Companies', relCos);
 
-      // Contact Details
-      const cdList = (c.contactDetails || []).map(cd => cd.type + ': ' + cd.value).join(', ');
-      row.appendChild(el('td', { text: cdList || '—' }));
+      const contactDets = (client.contactDetails || []).map(cd => cd.type + ': ' + cd.value + (cd.label ? ` (${cd.label})` : '')).join(', ');
+      addGridRow('Contact Details', contactDets);
 
-      const badge = el('span', { class: 'badge badge-' + (c.entity === 'ATA' ? 'info' : 'success'), text: c.entity });
-      const tdEntity = el('td');
-      tdEntity.appendChild(badge);
-      row.appendChild(tdEntity);
-      row.appendChild(el('td', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }));
-      const actions = el('td');
-      if (Auth.can('clients:edit')) {
-        const editBtn = el('button', { class: 'btn btn-secondary btn-sm', text: 'Edit' });
-        editBtn.addEventListener('click', () => this.showForm(c.id));
-        actions.appendChild(editBtn);
-      }
-      
-      if (Auth.can('clients:edit')) {
-        const archiveBtn = el('button', { 
-          class: 'btn btn-secondary btn-sm text-danger', 
-          text: 'Archive', 
-          style: 'margin-left: 8px;' 
+      detailsContainer.appendChild(leftSec);
+
+      // Right section (Work requests)
+      const rightSec = el('div', { class: 'jira-accordion-details-section' });
+      const clientWrs = DB.getWhere('workRequests', wr => wr.clientId === client.id);
+      rightSec.appendChild(el('div', { class: 'jira-accordion-details-title', text: `Work Requests (${clientWrs.length})` }));
+      detailsContainer.appendChild(rightSec);
+
+      if (clientWrs.length === 0) {
+        rightSec.appendChild(el('div', { style: 'color: var(--color-text-muted); font-size: 13px;', text: 'No work requests assigned.' }));
+      } else {
+        const childWrsList = el('div', { class: 'jira-details-list' });
+        clientWrs.forEach((wr, wrIdx) => {
+          const wrItem = el('div', { class: 'jira-details-list-item' });
+          const wrKey = 'WR-' + String(wrIdx + 1).padStart(2, '0');
+          const wrLink = el('a', { class: 'jira-details-list-item-key', href: `#operations/detail/${wr.id}`, text: wrKey });
+          const wrTitle = el('span', { class: 'jira-details-list-item-title', text: wr.title });
+          const wrStatus = el('span', { class: 'badge badge-info jira-details-list-item-status', text: wr.status });
+
+          wrItem.appendChild(wrLink);
+          wrItem.appendChild(wrTitle);
+          wrItem.appendChild(wrStatus);
+          childWrsList.appendChild(wrItem);
         });
-        archiveBtn.addEventListener('click', () => {
-          // Admin bypasses PendingChanges — intentional direct-role check (Gap 6)
-          if (Auth.user.role === 'Admin') {
-            this.archiveClientDirectly(c.id);
-          } else {
-            this.archiveClientRequest(c.id);
-          }
-        });
-        actions.appendChild(archiveBtn);
+        rightSec.appendChild(childWrsList);
       }
 
-      row.appendChild(actions);
-      tbody.appendChild(row);
+      // Chevron expand event
+      let expanded = false;
+      chevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        expanded = !expanded;
+        if (expanded) {
+          chevBtn.classList.add('expanded');
+          chevBtn.textContent = '▼';
+          accordionRow.classList.remove('hidden');
+        } else {
+          chevBtn.classList.remove('expanded');
+          chevBtn.textContent = '▶';
+          accordionRow.classList.add('hidden');
+        }
+      });
     });
-    table.appendChild(tbody);
-    container.appendChild(table);
+
+    // Footer
+    const footer = el('div', { class: 'jira-table-footer' });
+    container.appendChild(footer);
+
+    const footerLeft = el('button', { class: 'jira-footer-create-btn', html: '<span style="font-size:14px; font-weight:bold;">+</span> Create' });
+    footerLeft.addEventListener('click', () => {
+      this.showForm();
+    });
+    footer.appendChild(footerLeft);
+
+    const footerCenter = el('div', { class: 'jira-footer-center' });
+    const countText = `${clients.length} of ${clients.length}`;
+    footerCenter.appendChild(el('span', { text: countText }));
+
+    const refreshBtn = el('button', { class: 'jira-footer-refresh-btn', title: 'Refresh list' });
+    const refreshSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    refreshSvg.setAttribute('viewBox', '0 0 24 24');
+    refreshSvg.setAttribute('width', '14');
+    refreshSvg.setAttribute('height', '14');
+    refreshSvg.setAttribute('fill', 'none');
+    refreshSvg.setAttribute('stroke', 'currentColor');
+    refreshSvg.setAttribute('stroke-width', '2');
+    refreshSvg.setAttribute('stroke-linecap', 'round');
+    refreshSvg.setAttribute('stroke-linejoin', 'round');
+    refreshSvg.innerHTML = '<path d="M23 4v6h-6M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>';
+    refreshBtn.appendChild(refreshSvg);
+    footerCenter.appendChild(refreshBtn);
+    footer.appendChild(footerCenter);
+
+    refreshBtn.addEventListener('click', () => {
+      this.renderList(container, query);
+    });
   },
 
   showForm(clientId) {
     this.editingId = clientId || 'new';
     const isNew = this.editingId === 'new';
     const client = isNew ? null : DB.getById('clients', this.editingId);
+    const fullPageRoute = isNew ? '#clients/form/new' : `#clients/form/${clientId}`;
 
     const formContainer = el('div', { class: 'form-container' });
     this.renderForm(formContainer, this.editingId);
@@ -242,6 +670,9 @@ const Clients = {
       title: isNew ? 'Add Client' : (client?.name || 'Edit Client'),
       formContent: formContainer,
       formId: 'client-form',
+      viewContext: 'client-form',
+      fullPageRoute,
+      newTabRoute: fullPageRoute,
       actions: [
         { text: isNew ? 'Save Client' : 'Save Changes', class: 'btn btn-primary', type: 'submit', form: 'client-form', testId: 'client-save' },
         { text: 'Cancel', class: 'btn btn-secondary', onClick: () => this.showList(), testId: 'client-cancel' }
@@ -253,9 +684,9 @@ const Clients = {
     const client = clientId && clientId !== 'new' ? DB.getById('clients', clientId) : null;
     this.clearNode(container);
 
-    // Form header bar
+    // Form header bar (actions only; title is handled by the inline title input
+    // and by the full-page breadcrumb header)
     const headerBar = el('div', { class: 'form-header-bar' });
-    headerBar.appendChild(el('h2', { text: client ? 'Edit Client' : 'Add Client' }));
     const headerActions = el('div', { class: 'form-actions-top' });
     const saveBtnTop = el('button', { type: 'submit', form: 'client-form', class: 'btn btn-primary', text: client ? 'Save Changes' : 'Save Client' });
     headerActions.appendChild(saveBtnTop);
@@ -265,56 +696,80 @@ const Clients = {
     headerBar.appendChild(headerActions);
     container.appendChild(headerBar);
 
-    const form = el('form', { id: 'client-form', class: 'form-stacked' });
+    const form = el('form', { id: 'client-form', class: 'form-stacked notion-form' });
 
-    // Taxpayer name
-    const nameGroup = el('div', { class: 'form-group' });
-    nameGroup.appendChild(el('label', { text: 'Taxpayer *' }));
-    const nameInput = el('input', { type: 'text', name: 'name', required: true, value: client ? (client.name || '') : '' });
-    nameGroup.appendChild(nameInput);
-    form.appendChild(nameGroup);
+    // ── Identity free-form block ──
+    const identitySection = el('div', { class: 'notion-freeform notion-freeform--title' });
+    identitySection.appendChild(el('label', { class: 'notion-section-label', text: 'Client Name' }));
+    const nameInput = el('input', { type: 'text', name: 'name', class: 'notion-freeform-input notion-title-input', placeholder: 'Taxpayer / company name', required: true, value: client ? (client.name || '') : '' });
+    identitySection.appendChild(nameInput);
+    if (!client) {
+      setTimeout(() => { nameInput.focus(); nameInput.select(); }, 60);
+    }
+    form.appendChild(identitySection);
 
-    // TIN
-    const tinGroup = el('div', { class: 'form-group' });
-    tinGroup.appendChild(el('label', { text: 'TIN *' }));
-    const tinInput = el('input', { type: 'text', name: 'tin', required: true, placeholder: 'XXX-XXX-XXX-XXXX', value: client ? (client.tin || '') : '' });
-    tinGroup.appendChild(tinInput);
-    form.appendChild(tinGroup);
+    // ── Property grid ──
+    const propsGrid = el('div', { class: 'notion-property-grid' });
 
-    // Trade Name
-    const tradeGroup = el('div', { class: 'form-group' });
-    tradeGroup.appendChild(el('label', { text: 'Trade Name' }));
-    const tradeInput = el('input', { type: 'text', name: 'tradeName', value: client ? (client.tradeName || '') : '' });
-    tradeGroup.appendChild(tradeInput);
-    form.appendChild(tradeGroup);
-
-    // Business Address
-    const addrGroup = el('div', { class: 'form-group' });
-    addrGroup.appendChild(el('label', { text: 'Business Address' }));
-    const addrInput = el('input', { type: 'text', name: 'address', value: client ? (client.address || '') : '' });
-    addrGroup.appendChild(addrInput);
-    form.appendChild(addrGroup);
-
-    // Point of Contact (combobox)
-    const pocGroup = el('div', { class: 'form-group' });
-    pocGroup.appendChild(el('label', { text: 'Point of Contact' }));
-    
-    const pocInput = el('input', { 
-      type: 'text', 
-      name: 'pointOfContactInput', 
-      list: 'staff-list', 
-      placeholder: '— Select or type Staff —'
+    const tinProp = el('div', { class: 'notion-prop' });
+    tinProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> TIN' }));
+    const tinInput = el('input', { type: 'text', name: 'tin', class: 'notion-prop-input', placeholder: 'XXX-XXX-XXX-XXXXX', required: true, value: client ? (client.tin || '') : '' });
+    tinInput.addEventListener('input', (e) => {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value.length > 14) {
+        value = value.substring(0, 14);
+      }
+      let formatted = '';
+      if (value.length > 0) {
+        formatted += value.substring(0, 3);
+      }
+      if (value.length > 3) {
+        formatted += '-' + value.substring(3, 6);
+      }
+      if (value.length > 6) {
+        formatted += '-' + value.substring(6, 9);
+      }
+      if (value.length > 9) {
+        formatted += '-' + value.substring(9, 14);
+      }
+      e.target.value = formatted;
     });
-    const datalist = el('datalist', { id: 'staff-list' });
+    tinProp.appendChild(tinInput);
+    propsGrid.appendChild(tinProp);
 
-    const entityUsers = DB.getWhere('users', u => {
+    const tradeProp = el('div', { class: 'notion-prop' });
+    tradeProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20M2 6h20M2 10h20M2 14h20"/></svg> Trade Name' }));
+    tradeProp.appendChild(el('input', { type: 'text', name: 'tradeName', class: 'notion-prop-input', placeholder: 'e.g. DBA name', value: client ? (client.tradeName || '') : '' }));
+    propsGrid.appendChild(tradeProp);
+
+    const entityProp = el('div', { class: 'notion-prop' });
+    entityProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Entity' }));
+    const entitySel = el('select', { name: 'entity', class: 'notion-prop-select', required: true });
+    ['ATA', 'LTA'].forEach(e => {
+      const opt = el('option', { value: e, text: e });
+      if (client ? client.entity === e : Auth.activeEntity === e) opt.selected = true;
+      entitySel.appendChild(opt);
+    });
+    entityProp.appendChild(entitySel);
+    propsGrid.appendChild(entityProp);
+
+    const rdoProp = el('div', { class: 'notion-prop' });
+    rdoProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> RDO Code' }));
+    const rdoInput = el('input', { type: 'text', name: 'rdoCode', class: 'notion-prop-input', placeholder: 'e.g. 034A', maxlength: '4', value: client ? (client.rdoCode || '') : '' });
+    rdoInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    });
+    rdoProp.appendChild(rdoInput);
+    propsGrid.appendChild(rdoProp);
+
+    const pocProp = el('div', { class: 'notion-prop' });
+    pocProp.appendChild(el('label', { html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Point of Contact' }));
+    const pocInput = el('input', { type: 'text', name: 'pointOfContactInput', class: 'notion-prop-input', list: 'staff-list', placeholder: '— Select or type Staff —' });
+    const datalist = el('datalist', { id: 'staff-list' });
+    DB.getWhere('users', u => {
       const userEntities = (u.entities || []).map(e => e.toUpperCase());
       return Auth.ALL_ROLES.includes(u.role) && userEntities.includes(Auth.activeEntity);
-    });
-    entityUsers.forEach(u => {
-      datalist.appendChild(el('option', { value: u.name + ' (' + u.role + ')' }));
-    });
-    
+    }).forEach(u => { datalist.appendChild(el('option', { value: u.name + ' (' + u.role + ')' })); });
     if (client) {
       if (client.contactUserId) {
         const u = DB.getById('users', client.contactUserId);
@@ -323,59 +778,50 @@ const Clients = {
         pocInput.value = client.contactPerson;
       }
     }
-    
-    pocGroup.appendChild(pocInput);
-    pocGroup.appendChild(datalist);
-    form.appendChild(pocGroup);
+    pocProp.appendChild(pocInput);
+    pocProp.appendChild(datalist);
+    propsGrid.appendChild(pocProp);
 
-    // Contact Details (multi-entry)
-    const cdSection = el('div', { class: 'form-section' });
-    cdSection.appendChild(el('h3', { text: 'Contact Details' }));
-    const cdContainer = el('div', { id: 'contact-details-container' });
-    const contactDetails = client && Array.isArray(client.contactDetails) ? client.contactDetails : [];
-    contactDetails.forEach((cd, idx) => this.addContactDetailRow(cdContainer, cd, idx));
-    cdSection.appendChild(cdContainer);
-    const addCdBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Contact Detail' });
-    addCdBtn.addEventListener('click', () => this.addContactDetailRow(cdContainer, null, cdContainer.childElementCount));
-    cdSection.appendChild(addCdBtn);
-    form.appendChild(cdSection);
-
-    // Related Companies (multi-entry)
-    const rcSection = el('div', { class: 'form-section' });
-    rcSection.appendChild(el('h3', { text: 'Related Companies' }));
-    const rcContainer = el('div', { id: 'related-companies-container' });
-    const relatedCompanies = client && Array.isArray(client.relatedCompanies) ? client.relatedCompanies : [];
-    relatedCompanies.forEach((rc, idx) => this.addRelatedCompanyRow(rcContainer, rc, idx));
-    rcSection.appendChild(rcContainer);
-    const addRcBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '+ Add Related Company' });
-    addRcBtn.addEventListener('click', () => this.addRelatedCompanyRow(rcContainer, null, rcContainer.childElementCount));
-    rcSection.appendChild(addRcBtn);
-    form.appendChild(rcSection);
-
-    // Entity radio
-    const entityGroup = el('div', { class: 'form-group' });
-    entityGroup.appendChild(el('label', { text: 'Entity *' }));
-    const radioWrap = el('div', { class: 'radio-group' });
-    ['ATA', 'LTA'].forEach(e => {
-      const label = el('label', { class: 'radio-label' });
-      const radio = el('input', { type: 'radio', name: 'entity', value: e, required: true });
-      if (client ? client.entity === e : Auth.activeEntity === e) radio.checked = true;
-      label.appendChild(radio);
-      label.appendChild(document.createTextNode(' ' + e));
-      radioWrap.appendChild(label);
-    });
-    entityGroup.appendChild(radioWrap);
-    form.appendChild(entityGroup);
-
-    // Retainer checkbox
-    const retainerGroup = el('div', { class: 'form-group' });
+    const retainerProp = el('div', { class: 'notion-prop notion-prop-checkbox' });
     const retainerLabel = el('label', { class: 'checkbox-label' });
     const retainerCb = el('input', { type: 'checkbox', name: 'retainer' });
     if (client && (client.retainer || client.isRetainer)) retainerCb.checked = true;
     retainerLabel.appendChild(retainerCb);
-    retainerLabel.appendChild(document.createTextNode(' This client is on retainer'));
-    retainerGroup.appendChild(retainerLabel);
-    form.appendChild(retainerGroup);
+    retainerLabel.appendChild(document.createTextNode(' On retainer'));
+    retainerProp.appendChild(retainerLabel);
+    propsGrid.appendChild(retainerProp);
+
+    form.appendChild(propsGrid);
+
+    // Address free-form
+    const addrSection = el('div', { class: 'notion-freeform' });
+    addrSection.appendChild(el('label', { class: 'notion-section-label', text: 'Business Address' }));
+    addrSection.appendChild(el('input', { type: 'text', name: 'address', class: 'notion-freeform-input', placeholder: 'Enter business address', value: client ? (client.address || '') : '' }));
+    form.appendChild(addrSection);
+
+    // Contact Details (multi-entry) — Notion-style
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Contact Details' }));
+    const cdSection = el('div', { class: 'notion-line-items' });
+    const cdContainer = el('div', { id: 'contact-details-container' });
+    const contactDetails = client && Array.isArray(client.contactDetails) ? client.contactDetails : [];
+    contactDetails.forEach((cd, idx) => this.addContactDetailRow(cdContainer, cd, idx));
+    cdSection.appendChild(cdContainer);
+    const addCdBtn = el('button', { type: 'button', class: 'notion-add-line-item', text: '+ Add Contact Detail' });
+    addCdBtn.addEventListener('click', () => this.addContactDetailRow(cdContainer, null, cdContainer.childElementCount));
+    cdSection.appendChild(addCdBtn);
+    form.appendChild(cdSection);
+
+    // Related Companies (multi-entry) — Notion-style
+    form.appendChild(el('h3', { class: 'notion-section-heading', text: 'Related Companies' }));
+    const rcSection = el('div', { class: 'notion-line-items' });
+    const rcContainer = el('div', { id: 'related-companies-container' });
+    const relatedCompanies = client && Array.isArray(client.relatedCompanies) ? client.relatedCompanies : [];
+    relatedCompanies.forEach((rc, idx) => this.addRelatedCompanyRow(rcContainer, rc, idx));
+    rcSection.appendChild(rcContainer);
+    const addRcBtn = el('button', { type: 'button', class: 'notion-add-line-item', text: '+ Add Related Company' });
+    addRcBtn.addEventListener('click', () => this.addRelatedCompanyRow(rcContainer, null, rcContainer.childElementCount));
+    rcSection.appendChild(addRcBtn);
+    form.appendChild(rcSection);
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -383,17 +829,26 @@ const Clients = {
     });
 
     container.appendChild(form);
+    return container;
   },
 
   addContactDetailRow(container, data, idx) {
-    const row = el('div', { class: 'multi-entry-row' });
-    const typeSel = el('select', { class: 'form-select', name: 'cd-type-' + idx, style: 'flex: 0 0 120px;' });
+    const row = el('div', { class: 'notion-line-item-row notion-sub-row' });
+
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
+    const typeSel = el('select', { class: 'notion-line-item-type', name: 'cd-type-' + idx, style: 'flex: 0 0 100px;' });
     ['mobile', 'landline', 'email'].forEach(t => {
       typeSel.appendChild(el('option', { value: t, text: t.charAt(0).toUpperCase() + t.slice(1) }));
     });
     if (data && data.type) typeSel.value = data.type;
-    const valueInput = el('input', { type: 'text', placeholder: 'Value', name: 'cd-value-' + idx, value: data ? (data.value || '') : '' });
-    
+    const valueInput = el('input', { type: 'text', class: 'notion-line-item-desc', placeholder: 'Value', name: 'cd-value-' + idx, value: data ? (data.value || '') : '' });
+
     const updatePlaceholder = () => {
       if (typeSel.value === 'mobile') {
         valueInput.placeholder = 'e.g. 09123456789 (11 digits)';
@@ -405,23 +860,25 @@ const Clients = {
         valueInput.placeholder = 'e.g. user@theiremail.com';
         valueInput.removeAttribute('maxLength');
       }
-      // Re-trigger restriction on type change if value exists
-      if (valueInput.value) {
-        valueInput.dispatchEvent(new Event('input'));
-      }
+      if (valueInput.value) valueInput.dispatchEvent(new Event('input'));
     };
-    
+
     valueInput.addEventListener('input', (e) => {
       if (typeSel.value === 'mobile' || typeSel.value === 'landline') {
-        e.target.value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+        e.target.value = e.target.value.replace(/\D/g, '');
       }
     });
 
     typeSel.addEventListener('change', updatePlaceholder);
     updatePlaceholder();
 
-    const labelInput = el('input', { type: 'text', placeholder: 'Label (e.g. Work, Home)', name: 'cd-label-' + idx, value: data ? (data.label || '') : '' });
-    const removeBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Remove' });
+    const labelInput = el('input', { type: 'text', class: 'notion-line-item-desc', style: 'flex: 0 0 140px;', placeholder: 'Label', name: 'cd-label-' + idx, value: data ? (data.label || '') : '' });
+    const removeBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     removeBtn.addEventListener('click', () => row.remove());
     row.appendChild(typeSel);
     row.appendChild(valueInput);
@@ -431,21 +888,34 @@ const Clients = {
   },
 
   addRelatedCompanyRow(container, data, idx) {
-    const row = el('div', { class: 'multi-entry-row' });
+    const row = el('div', { class: 'notion-line-item-row notion-sub-row' });
+
+    const dragHandle = el('div', {
+      class: 'notion-line-item-drag',
+      title: 'Drag to reorder',
+      html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>'
+    });
+    row.appendChild(dragHandle);
+
     const entity = Auth.activeEntity;
-    const clientSel = el('select', { class: 'form-select', name: 'rc-client-' + idx });
+    const clientSel = el('select', { class: 'notion-line-item-type', name: 'rc-client-' + idx, style: 'flex: 1 1 auto; min-width: 160px;' });
     clientSel.appendChild(el('option', { value: '', text: '— Select Client —' }));
     DB.getWhere('clients', c => c.entity === entity).forEach(c => {
-      if (this.editingId && c.id === this.editingId) return; // skip self
+      if (this.editingId && c.id === this.editingId) return;
       clientSel.appendChild(el('option', { value: c.id, text: c.name }));
     });
     if (data && data.clientId) clientSel.value = data.clientId;
-    const relSel = el('select', { class: 'form-select', name: 'rc-relation-' + idx, style: 'flex: 0 0 160px;' });
+    const relSel = el('select', { class: 'notion-line-item-type', name: 'rc-relation-' + idx, style: 'flex: 0 0 150px;' });
     ['Parent', 'Subsidiary', 'Sister Company', 'Affiliate'].forEach(r => {
       relSel.appendChild(el('option', { value: r, text: r }));
     });
     if (data && data.relationType) relSel.value = data.relationType;
-    const removeBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Remove' });
+    const removeBtn = el('button', {
+      type: 'button',
+      class: 'notion-line-item-remove',
+      title: 'Remove',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    });
     removeBtn.addEventListener('click', () => row.remove());
     row.appendChild(clientSel);
     row.appendChild(relSel);
@@ -460,27 +930,33 @@ const Clients = {
 
   submitForm(form) {
     if (!validateRequiredFields(form)) return;
+    const isResubmitting = typeof PendingChanges !== 'undefined' && PendingChanges.editingPendingId;
 
     const data = Object.fromEntries(new FormData(form).entries());
 
-    if (!data.tin || !/^\d{3}-\d{3}-\d{3}-\d{4}$/.test(data.tin)) {
+    if (!data.tin || !/^\d{3}-\d{3}-\d{3}-\d{5}$/.test(data.tin)) {
       const tinField = form.querySelector('[name="tin"]');
-      showFieldError(tinField, 'TIN must be in format XXX-XXX-XXX-XXXX.');
+      showFieldError(tinField, 'TIN must be in format XXX-XXX-XXX-XXXXX.');
       return;
     }
 
-    const entityRadio = form.querySelector('input[name="entity"]:checked');
-    if (!entityRadio) {
-      showFieldError(form.querySelector('input[name="entity"]'), 'Entity is required.');
+    if (data.rdoCode && !/^[a-zA-Z0-9]{1,4}$/.test(data.rdoCode)) {
+      const rdoField = form.querySelector('[name="rdoCode"]');
+      showFieldError(rdoField, 'RDO Code must be up to 4 alphanumeric characters.');
       return;
     }
 
+    const entityRadio = form.querySelector('[name="entity"]:checked, select[name="entity"]');
+    if (!entityRadio || !entityRadio.value) {
+      showFieldError(entityRadio || form.querySelector('[name="entity"]'), 'Entity is required.');
+      return;
+    }
     // Collect contact details
     const contactDetails = [];
     let hasContactError = false;
     const cdContainer = document.getElementById('contact-details-container');
     if (cdContainer) {
-      cdContainer.querySelectorAll('.multi-entry-row').forEach(row => {
+      cdContainer.querySelectorAll('.notion-sub-row').forEach(row => {
         const valueInput = row.querySelector('input[name^="cd-value-"]');
         const labelInput = row.querySelector('input[name^="cd-label-"]');
         if (!valueInput || !labelInput) return;
@@ -520,7 +996,7 @@ const Clients = {
     const relatedCompanies = [];
     const rcContainer = document.getElementById('related-companies-container');
     if (rcContainer) {
-      rcContainer.querySelectorAll('.multi-entry-row').forEach(row => {
+      rcContainer.querySelectorAll('.notion-sub-row').forEach(row => {
         const clientId = row.querySelector('select[name^="rc-client-"]')?.value;
         const relationType = row.querySelector('select[name^="rc-relation-"]')?.value;
         if (clientId && relationType) {
@@ -545,15 +1021,17 @@ const Clients = {
     const record = {
       name: data.name.trim(),
       tin: data.tin.trim(),
+      rdoCode: data.rdoCode ? data.rdoCode.trim().toUpperCase() : '',
       address: data.address ? data.address.trim() : '',
       tradeName: data.tradeName ? data.tradeName.trim() : '',
       contactUserId,
-      entity: entityRadio.value,
+      entity: data.entity || (Auth.activeEntity !== 'ALL' ? Auth.activeEntity : 'ATA'),
       retainer: !!form.querySelector('input[name="retainer"]:checked'),
       contactDetails,
       relatedCompanies
     };
 
+    let result = { approved: true };
     if (this.editingId && this.editingId !== 'new') {
       record.id = this.editingId;
       const old = DB.getById('clients', this.editingId);
@@ -564,16 +1042,16 @@ const Clients = {
         record.email = old.email || '';
       }
       record.contactPerson = contactPerson;
-      PendingChanges.submit('clients', record, false);
+      result = PendingChanges.submit('clients', record, false);
     } else {
       record.id = generateId('c');
       record.createdAt = new Date().toISOString();
       record.contactPerson = contactPerson;
-      PendingChanges.submit('clients', record, true);
+      result = PendingChanges.submit('clients', record, true);
     }
 
     const isNew = !this.editingId || this.editingId === 'new';
-    const isApproved = Auth.user.role === 'Admin' || Auth.user.role === 'Manager';
+    const isApproved = Auth.user.role === 'Admin' || Auth.isManagerial();
     const msgConfig = {
       title: isNew ? 'Client Created' : 'Client Updated',
       message: isApproved 
@@ -581,10 +1059,15 @@ const Clients = {
         : `Client ${record.name} ${isNew ? 'creation' : 'update'} request has been submitted for Admin approval.`,
       type: 'success'
     };
-    closeFormPanelAndRoute('#clients', msgConfig);
+    const targetRoute = isResubmitting ? '#admin' : '#clients';
+    closeFormPanelAndRoute(targetRoute, msgConfig);
   },
 
   archiveClientDirectly(clientId) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
     if (!confirm('Are you sure you want to archive this client? This will cancel all related work requests and archive all associated documents.')) return;
     
     // 1. Update the client status to 'Archived'
@@ -611,6 +1094,10 @@ const Clients = {
   },
 
   archiveClientRequest(clientId) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
     // Check if there is already a pending change to archive this client
     const pending = DB.getWhere('pendingChanges', pc => 
       pc.table === 'clients' && 
@@ -651,6 +1138,124 @@ const Clients = {
     App.handleRoute();
   },
 
+  bulkArchiveClients(clientIds) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
+    if (!clientIds || clientIds.length === 0) return;
+    this.archiveClientsDirectly(clientIds);
+  },
+
+  archiveClientsDirectly(clientIds) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
+    if (!clientIds || clientIds.length === 0) return;
+    const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
+    if (!confirm(`Are you sure you want to archive ${label}? This will cancel all related work requests and archive all associated documents.`)) return;
+
+    let archivedCount = 0;
+    clientIds.forEach(clientId => {
+      const client = DB.getById('clients', clientId);
+      if (!client) return;
+      client.status = 'Archived';
+      client.updatedAt = new Date().toISOString();
+      DB.update('clients', clientId, client);
+
+      const wrs = DB.getWhere('workRequests', wr => wr.clientId === clientId);
+      wrs.forEach(wr => {
+        DB.update('workRequests', wr.id, { status: 'Cancelled', updatedAt: new Date().toISOString() });
+        const docs = DB.getWhere('documents', doc => doc.workRequestId === wr.id);
+        docs.forEach(doc => {
+          DB.update('documents', doc.id, { status: 'Archived', archived: true });
+        });
+      });
+      archivedCount++;
+    });
+
+    alert(archivedCount === 1 ? 'Client archived successfully.' : `${archivedCount} clients archived successfully.`);
+    App.handleRoute();
+  },
+
+  archiveClientsRequest(clientIds) {
+    if (Auth.user?.role !== 'Admin') {
+      alert('Permission denied. Only Admins can archive clients.');
+      return;
+    }
+    if (!clientIds || clientIds.length === 0) return;
+    const label = clientIds.length === 1 ? 'this client' : `these ${clientIds.length} clients`;
+    if (!confirm(`Are you sure you want to request archiving ${label}? This requires Admin approval.`)) return;
+
+    let requestedCount = 0;
+    clientIds.forEach(clientId => {
+      const pending = DB.getWhere('pendingChanges', pc =>
+        pc.table === 'clients' &&
+        pc.parentRecordId === clientId &&
+        pc.status === 'pending' &&
+        pc.proposedData &&
+        pc.proposedData.status === 'Archived'
+      );
+      if (pending.length > 0) return;
+
+      const client = DB.getById('clients', clientId);
+      if (!client) return;
+
+      const proposed = deepClone(client);
+      proposed.status = 'Archived';
+      proposed.updatedAt = new Date().toISOString();
+
+      const pc = {
+        id: generateId('pc'),
+        table: 'clients',
+        parentRecordId: clientId,
+        proposedData: proposed,
+        submittedBy: Auth.user.id,
+        submittedAt: new Date().toISOString(),
+        status: 'pending',
+        rejectionReason: '',
+        reviewedBy: '',
+        reviewedAt: ''
+      };
+      DB.insert('pendingChanges', pc);
+      requestedCount++;
+    });
+
+    if (requestedCount === 0) {
+      alert('Archive requests for the selected clients are already pending approval.');
+    } else {
+      alert(requestedCount === 1 ? 'Archive request submitted for Admin approval.' : `${requestedCount} archive requests submitted for Admin approval.`);
+    }
+    App.handleRoute();
+  },
+
+  unarchiveClient(id) {
+    const client = DB.getById('clients', id);
+    if (!client || client.status !== 'Archived') return;
+    DB.update('clients', id, { status: 'Active', archived: false, updatedAt: new Date().toISOString() });
+    App.handleRoute();
+  },
+
+  bulkUnarchiveClients(clientIds) {
+    if (!clientIds || clientIds.length === 0) return;
+    const validIds = clientIds.filter(id => {
+      const client = DB.getById('clients', id);
+      return client && client.status === 'Archived';
+    });
+    if (validIds.length === 0) return;
+
+    const label = validIds.length === 1 ? 'this client' : `these ${validIds.length} clients`;
+    if (!confirm(`Are you sure you want to restore ${label} to Active Clients?`)) return;
+
+    validIds.forEach(id => {
+      DB.update('clients', id, { status: 'Active', archived: false, updatedAt: new Date().toISOString() });
+    });
+
+    alert(validIds.length === 1 ? 'Client restored successfully.' : `${validIds.length} clients restored successfully.`);
+    App.handleRoute();
+  },
+
   getArchivedClients(query) {
     const entity = Auth.activeEntity;
     let clients = DB.getWhere('clients', c => {
@@ -670,117 +1275,121 @@ const Clients = {
     return clients;
   },
 
-  renderArchive(container, query) {
-    this.clearNode(container);
-    const archivedClients = this.getArchivedClients(query);
+  renderArchive(query = '') {
+    const entity = Auth.activeEntity;
+    const self = this;
+    const isManagerial = Auth.isManagerial();
 
-    if (archivedClients.length === 0) {
-      container.appendChild(el('p', { text: 'No archived clients found.', class: 'empty-state' }));
-      return;
+    const entFilter = ent => {
+      const uEnt = (ent || '').toUpperCase();
+      if (entity === 'ALL') return Auth.user.entities.map(ae => ae.toUpperCase()).includes(uEnt);
+      return uEnt === entity.toUpperCase();
+    };
+
+    let archived = DB.getWhere('clients', c => entFilter(c.entity) && c.status === 'Archived');
+    if (query) {
+      const q = query.toLowerCase();
+      archived = archived.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.tradeName || '').toLowerCase().includes(q) ||
+        (c.tin || '').toLowerCase().includes(q)
+      );
     }
 
-    const wrapper = el('div', { class: 'archive-list' });
-
-    archivedClients.forEach(c => {
-      const pocUser = DB.getById('users', c.contactUserId);
-      const panel = el('div', { class: 'accordion-panel collapsed', style: 'margin-bottom: var(--spacing-md); border-color: var(--color-border);' });
-      
-      // Accordion Header
-      const header = el('div', { class: 'accordion-header', style: 'display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;' });
-      
-      const titleWrap = el('div', {}, [
-        el('strong', { text: c.name, style: 'font-size: 1rem; color: var(--color-text);' }),
-        el('span', { text: ' (TIN: ' + c.tin + ')', style: 'color: var(--color-text-muted); font-size: 0.875rem; margin-left: 8px;' })
-      ]);
-      
-      header.appendChild(titleWrap);
-      panel.appendChild(header);
-
-      // Accordion Content
-      const content = el('div', { class: 'accordion-content', style: 'padding: 16px; background: #fafafa;' });
-
-      // Client info block
-      const infoBlock = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; font-size: 0.875rem;' }, [
-        el('div', {}, [ el('strong', { text: 'Trade Name: ' }), el('span', { text: c.tradeName || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Address: ' }), el('span', { text: c.address || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Point of Contact: ' }), el('span', { text: pocUser?.name || c.contactPerson || '—' }) ]),
-        el('div', {}, [ el('strong', { text: 'Retainer Client: ' }), el('span', { text: (c.retainer || c.isRetainer) ? 'Yes' : 'No' }) ])
-      ]);
-      content.appendChild(infoBlock);
-
-      // Fetch cancelled work requests
-      const wrs = DB.getWhere('workRequests', wr => wr.clientId === c.id);
-      
-      // Work Requests Sub-section
-      content.appendChild(el('h4', { text: 'Cancelled Work Requests', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: #374151;' }));
-      if (wrs.length === 0) {
-        content.appendChild(el('p', { text: 'No work requests found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
-      } else {
-        const wrTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem; margin-bottom: 16px;' }, [
-          el('thead', {}, [
-            el('tr', {}, [
-              el('th', { text: 'Title' }),
-              el('th', { text: 'Priority' }),
-              el('th', { text: 'Due Date' }),
-              el('th', { text: 'Status' })
-            ])
-          ])
-        ]);
-        const wrTbody = el('tbody');
-        wrs.forEach(wr => {
-          wrTbody.appendChild(el('tr', {}, [
-            el('td', { text: wr.title }),
-            el('td', { text: wr.priority }),
-            el('td', { text: wr.dueDate }),
-            el('td', {}, [ el('span', { class: 'badge badge-danger', text: wr.status }) ])
-          ]));
-        });
-        wrTable.appendChild(wrTbody);
-        content.appendChild(wrTable);
-      }
-
-      // Fetch archived documents
-      const wrIds = wrs.map(wr => wr.id);
-      const docs = DB.getWhere('documents', d => wrIds.includes(d.workRequestId) && (d.status === 'Archived' || d.archived === true));
-
-      // Documents Sub-section
-      content.appendChild(el('h4', { text: 'Archived Documents', style: 'margin: 16px 0 8px 0; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; font-size: 0.9rem; color: #374151;' }));
-      if (docs.length === 0) {
-        content.appendChild(el('p', { text: 'No archived documents found.', class: 'empty-state', style: 'font-size: 0.8125rem; color: var(--color-text-muted);' }));
-      } else {
-        const docTable = el('table', { class: 'data-table', style: 'width: 100%; font-size: 0.8125rem;' }, [
-          el('thead', {}, [
-            el('tr', {}, [
-              el('th', { text: 'File Name' }),
-              el('th', { text: 'Type' }),
-              el('th', { text: 'Category' }),
-              el('th', { text: 'Upload Date' })
-            ])
-          ])
-        ]);
-        const docTbody = el('tbody');
-        docs.forEach(d => {
-          docTbody.appendChild(el('tr', {}, [
-            el('td', { text: d.fileName }),
-            el('td', { text: d.document_type || '—' }),
-            el('td', { text: d.category || '—' }),
-            el('td', { text: new Date(d.uploadDate).toLocaleDateString() })
-          ]));
-        });
-        docTable.appendChild(docTbody);
-        content.appendChild(docTable);
-      }
-
-      panel.appendChild(content);
-
-      // Event listener to toggle panel collapse
-      header.addEventListener('click', () => {
-        panel.classList.toggle('collapsed');
-      });
-
-      wrapper.appendChild(panel);
+    const rejectedClientChanges = DB.getWhere('pendingChanges', pc => {
+      if (pc.table !== 'clients' || pc.status !== 'rejected') return false;
+      const data = pc.proposedData || {};
+      if (!entFilter(data.entity)) return false;
+      if (!isManagerial && pc.submittedBy !== Auth.user.id) return false;
+      return true;
     });
 
-    container.appendChild(wrapper);
+    const rejectedClientRequests = DB.getWhere('operationsRequests', r => {
+      if (r.type !== 'client' || r.status !== 'rejected') return false;
+      if (!entFilter(r.entity)) return false;
+      if (!isManagerial && r.requestedBy !== Auth.user.id) return false;
+      return true;
+    });
+
+    const canEdit = Auth.can('clients:edit');
+
+    const buildItem = (c, category) => {
+      const pocUser = DB.getById('users', c.contactUserId);
+      return {
+        id: c.id,
+        category,
+        title: c.name || '(untitled)',
+        description: `TIN: ${c.tin || '—'}`,
+        meta: [
+          { icon: ArchivePage.icons.client, text: pocUser?.name || c.contactPerson || '—' },
+          { icon: ArchivePage.icons.status, text: c.tradeName || '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(c.updatedAt) }
+        ],
+        actions: [
+          {
+            label: 'View',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#clients/form/' + c.id; }
+          },
+          ...(category === 'accomplished' && canEdit ? [{
+            label: 'Restore',
+            icon: ArchivePage.icons.restore,
+            className: 'primary',
+            onClick: () => self.unarchiveClient(c.id)
+          }] : [])
+        ]
+      };
+    };
+
+    const buildRejectedItem = record => {
+      const isOpReq = record.hasOwnProperty('requestedBy');
+      const data = isOpReq ? record : (record.proposedData || {});
+      const clientId = isOpReq ? record.clientId : data.id;
+      const client = clientId ? DB.getById('clients', clientId) : null;
+      const title = isOpReq
+        ? `Client Request ${client ? '— ' + (client.name || '') : ''}`
+        : `Client Change: ${data.name || '(untitled)'}`;
+      const reason = data.rejectionReason || record.rejectionReason || 'Rejected';
+      return {
+        id: record.id,
+        category: 'rejected',
+        title,
+        meta: [
+          { icon: ArchivePage.icons.client, text: client ? (client.name || '—') : '—' },
+          { icon: ArchivePage.icons.date, text: formatDate(record.reviewedAt || record.updatedAt || record.requestedAt) },
+          { icon: ArchivePage.icons.status, text: `Reason: ${reason}` }
+        ],
+        actions: [
+          ...(clientId ? [{
+            label: 'View Client',
+            icon: ArchivePage.icons.view,
+            onClick: () => { location.hash = '#clients/form/' + clientId; }
+          }] : [])
+        ]
+      };
+    };
+
+    return ArchivePage.render({
+      module: 'clients',
+      categoryLabels: { accomplished: 'Archived', cancelled: 'Cancelled', rejected: 'Rejected' },
+      categories: {
+        accomplished: archived.map(c => buildItem(c, 'accomplished')),
+        cancelled: [],
+        rejected: [
+          ...rejectedClientChanges.map(buildRejectedItem),
+          ...rejectedClientRequests.map(buildRejectedItem)
+        ]
+      },
+      emptyText: 'Archive is empty.',
+      bulkActions: (ids) => [
+        {
+          text: 'Restore Selected',
+          className: 'btn btn-primary btn-sm',
+          onClick: (selectedIds) => {
+            this.bulkUnarchiveClients(selectedIds);
+          }
+        }
+      ]
+    });
   }
 };
