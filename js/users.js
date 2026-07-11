@@ -633,6 +633,14 @@ const Users = {
     let logs = DB.getAll('auditLog');
     const hasLogs = logs.length > 0;
 
+    // Create a chronological map of logs to determine their creation order sequence number
+    const allLogs = DB.getAll('auditLog');
+    allLogs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const logSequenceMap = new Map();
+    allLogs.forEach((l, i) => {
+      logSequenceMap.set(l.id, i + 1);
+    });
+
     if (activeFilters && activeFilters.user && activeFilters.user.size > 0) {
       logs = logs.filter(l => activeFilters.user.has(l.userName || (DB.getById('users', l.userId)?.name)));
     }
@@ -745,9 +753,10 @@ const Users = {
       const avatarIcon = `<div class="backlog-avatar${user?.avatarUrl ? ' backlog-avatar--image' : ''}" style="${avatarStyle}">${avatarContent}</div>`;
       const ts = new Date(l.timestamp);
 
+      const seqNum = logSequenceMap.get(l.id) || (idx + 1);
       return {
         id: l.id || idx,
-        keyText: 'AUD-' + String(idx + 1).padStart(2, '0'),
+        keyText: 'AUD-' + String(seqNum).padStart(2, '0'),
         name: l.details || '—',
         iconHtml: avatarIcon,
         tags: [
