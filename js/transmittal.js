@@ -629,6 +629,7 @@ const Transmittal = {
       'Acknowledged': '#10b981'
     };
 
+    const sortedItems = [];
     boardPhases.forEach(phase => {
       const colItems = items.filter(t => phase.statuses.includes(t.status) && !t.pendingChangeId);
       colItems.sort((a, b) => {
@@ -646,6 +647,8 @@ const Transmittal = {
           DB.update('transmittals', t.id, { boardOrder: newOrder });
         }
       });
+      const colPendingItems = items.filter(t => phase.statuses.includes(t.status) && t.pendingChangeId);
+      sortedItems.push(...colItems, ...colPendingItems);
     });
 
     const makeColumns = () => boardPhases.map(phase => ({
@@ -657,7 +660,7 @@ const Transmittal = {
       emptyState: { variant: 'compact', title: 'No transmittals', body: '' }
     }));
 
-    let cardNumber = 1;
+    const seqMap = getChronologicalSequenceMap('transmittals');
 
     const renderCard = (t) => {
       const clientName = self.getClientName(t.clientId);
@@ -678,7 +681,7 @@ const Transmittal = {
       const detail = wr ? wr.title : '';
 
       return buildCompactBoardCard({
-        key: 'TX-' + cardNumber++,
+        key: 'TX-' + (seqMap.get(t.id) || 1),
         progress,
         statusColor: statusColors[t.status] || '#cbd5e1',
         title: t.trackingNumber,
@@ -756,7 +759,10 @@ const Transmittal = {
 
     const boardDrag = {
       enabled: true,
-      canDrag: t => canEdit && !t.pendingChangeId,
+      canDrag: t => {
+        const canManage = canEdit || Auth.isManagerial() || Auth.can('transmittal:mark') || Auth.can('transmittal:create');
+        return canManage && !t.pendingChangeId;
+      },
       canDrop: ({ item, targetStatus }) => {
         if (item.status === targetStatus) return true;
         // Only Admin/managerial users can advance statuses on the board
@@ -803,10 +809,9 @@ const Transmittal = {
 
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
-      cardNumber = 1;
       renderGroupedKanbanBoard({
         container,
-        items,
+        items: sortedItems,
         columns: makeColumns(),
         toolbarContainer,
         groupBy,
@@ -819,11 +824,9 @@ const Transmittal = {
       return;
     }
 
-    cardNumber = 1;
-
     KanbanBoard.render({
       container,
-      items,
+      items: sortedItems,
       columns: makeColumns(),
       renderCard,
       cardMenuItems,

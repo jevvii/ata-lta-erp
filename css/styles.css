@@ -13077,7 +13077,8 @@ html.loading-active #loading-screen:not(.hidden) {
   margin-right: 0;
 }
 
-.jira-toolbar .jira-group-wrap .jira-group-dropdown {
+.jira-toolbar .jira-group-wrap .jira-group-dropdown,
+.jira-toolbar .jira-sort-wrap .jira-sort-dropdown {
   left: auto;
   right: 0;
 }
@@ -13463,7 +13464,8 @@ html.loading-active #loading-screen:not(.hidden) {
 
 /* Ensure toolbar dropdown anchors are positioned correctly */
 .jira-toolbar .jira-group-wrap,
-.jira-toolbar .jira-filter-wrap {
+.jira-toolbar .jira-filter-wrap,
+.jira-toolbar .jira-sort-wrap {
   position: relative;
 }
 

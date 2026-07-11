@@ -780,6 +780,7 @@ const Disbursement = {
     };
 
     // Normalize boardOrder within each visible column (skip pending-change proxies).
+    const sortedItems = [];
     boardPhases.forEach(phase => {
       const colItems = items.filter(d => phase.statuses.includes(d.status) && !d.pendingChangeId);
       colItems.sort((a, b) => {
@@ -797,6 +798,8 @@ const Disbursement = {
           DB.update('disbursements', d.id, { boardOrder: newOrder });
         }
       });
+      const colPendingItems = items.filter(d => phase.statuses.includes(d.status) && d.pendingChangeId);
+      sortedItems.push(...colItems, ...colPendingItems);
     });
 
     const makeColumns = () => boardPhases.map(phase => {
@@ -811,7 +814,7 @@ const Disbursement = {
       return col;
     });
 
-    let cardNumber = 1;
+    const seqMap = getChronologicalSequenceMap('disbursements');
 
     const renderCard = (d) => {
       const emp = DB.getById('users', self.getEmployeeId(d));
@@ -855,7 +858,7 @@ const Disbursement = {
       if (d.fromTemplate) descParts.push('Recurring');
 
       const card = buildCompactBoardCard({
-        key: 'DIS-' + cardNumber++,
+        key: 'DIS-' + (seqMap.get(d.id) || 1),
         progress,
         statusColor: statusColors[d.status] || '#cbd5e1',
         title: d.category,
@@ -928,7 +931,10 @@ const Disbursement = {
 
     const boardDrag = {
       enabled: true,
-      canDrag: d => canEdit && !d.pendingChangeId,
+      canDrag: d => {
+        const canManage = canEdit || Auth.can('disbursement:approve') || Auth.can('disbursement:mark_released') || Auth.isManagerial();
+        return canManage && !d.pendingChangeId;
+      },
       canDrop: ({ item, targetStatus }) => {
         if (item.status === targetStatus) return true;
         // Map pre-approval statuses to the canonical Pending step.
@@ -1003,10 +1009,9 @@ const Disbursement = {
 
     if (groupBy !== 'none') {
       toolbarContainer?.classList.add('grouped-board-active');
-      cardNumber = 1;
       renderGroupedKanbanBoard({
         container,
-        items,
+        items: sortedItems,
         columns: makeColumns(),
         toolbarContainer,
         groupBy,
@@ -1019,11 +1024,9 @@ const Disbursement = {
       return;
     }
 
-    cardNumber = 1;
-
     KanbanBoard.render({
       container,
-      items,
+      items: sortedItems,
       columns: makeColumns(),
       renderCard,
       cardMenuItems,

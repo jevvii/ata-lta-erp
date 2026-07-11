@@ -606,6 +606,21 @@ const App = {
     try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
   },
 
+  saveSort(module, sort) {
+    const key = `erp_sort_${module}`;
+    try { sessionStorage.setItem(key, sort); } catch (e) { /* ignore */ }
+  },
+
+  restoreSort(module) {
+    const key = `erp_sort_${module}`;
+    try { return sessionStorage.getItem(key) || ''; } catch (e) { return ''; }
+  },
+
+  clearSort(module) {
+    const key = `erp_sort_${module}`;
+    try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
+  },
+
   updateStickyOffsets() {
     const activeModule = this.currentModule;
     if (!activeModule) return;
